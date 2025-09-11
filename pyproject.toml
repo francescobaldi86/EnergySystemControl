@@ -4,9 +4,6 @@ requires = [
     "pandas",
     "matplotlib",
     "numpy",
-    "xlsxwriter",
-    "yaml",
-    "amplpy",
     "dataclasses"
     ]
 build-backend = "setuptools.build_meta"
@@ -20,15 +17,15 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT AND (Apache-2.0 OR BSD-2-Clause)"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/francescobaldi86/OptiENEA"
-"Bug Tracker" = "https://github.com/francescobaldi86/OptiENEA/issues"
+"Homepage" = "https://github.com/francescobaldi86/EnergySystemControl"
+"Bug Tracker" = "https://github.com/francescobaldi86/EnergySystemControl/issues"
 
 [project.optional-dependencies]
 dev = ["flake8", "pytest"]
@@ -41,4 +38,4 @@ testpaths = [
 ]
 
 [tool.setuptools.packages.find]
-where = ["mypackage"]
+where = ["src"]

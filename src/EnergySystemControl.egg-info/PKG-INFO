@@ -1,0 +1,22 @@
+Metadata-Version: 2.4
+Name: EnergySystemControl
+Version: 0.1.0
+Summary: A package to model small energy systems and implement different types of control systems
+Author-email: Francesco Baldi <francesco.baldi86@gmail.com>
+License-Expression: MIT AND (Apache-2.0 OR BSD-2-Clause)
+Project-URL: Homepage, https://github.com/francescobaldi86/EnergySystemControl
+Project-URL: Bug Tracker, https://github.com/francescobaldi86/EnergySystemControl/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Provides-Extra: dev
+Requires-Dist: flake8; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Dynamic: license-file
+
+# Energy System Control Library
+
+## Introduction
+This is a library thought for modelling small energy systems and simulating them, with the specific aim of testing different control systems
