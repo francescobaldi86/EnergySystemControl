@@ -1,0 +1,44 @@
+[build-system]
+requires = [
+    "setuptools>=61.0",
+    "pandas",
+    "matplotlib",
+    "numpy",
+    "xlsxwriter",
+    "yaml",
+    "amplpy",
+    "dataclasses"
+    ]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "EnergySystemControl"
+version = "0.1.0"
+description = "A package to model small energy systems and implement different types of control systems"
+authors = [
+  { name="Francesco Baldi", email="francesco.baldi86@gmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/francescobaldi86/OptiENEA"
+"Bug Tracker" = "https://github.com/francescobaldi86/OptiENEA/issues"
+
+[project.optional-dependencies]
+dev = ["flake8", "pytest"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "test",
+]
+
+[tool.setuptools.packages.find]
+where = ["mypackage"]
