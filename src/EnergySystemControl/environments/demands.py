@@ -1,53 +1,63 @@
-from EnergySystemControl.environments.base_environment import Component
-from EnergySystemControl.helpers import read_timeseries_data_to_numpy, C2K, K2C
+from EnergySystemControl.environments.base_classes import Component, Node
+from EnergySystemControl.helpers import *
 import os
 import numpy as np
 import yaml
 
 
 class Demand(Component):
-    def __init__(self, name: str, node: str, project_path: str):
-        super().__init__(self, name, project_path)
+    def __init__(self, name: str, connections: list):
+        super().__init__(name, connections)
 
 
 class ThermalLoss(Demand):
-    def __init__(self, name: str, node: str, T_ambient: float, U_W_per_K: float, project_path: str):
-        super().__init__(name, node, project_path)
-        self.node = node
+    def __init__(self, name: str, node: str, T_ambient: float, U_W_per_K: float):
+        super().__init__(name, nodes = [node])
         self.T_amb = T_ambient
         self.U = U_W_per_K
 
-    def step(self, dt_s, nodes):
-        T_node = nodes[self.node].T
+    def step(self, dt_s):
+        T_node = self.connections.T
         Q_W = -self.U * (T_node - self.T_amb)  # negative if node hotter than ambient
         return {self.node: Q_W * dt_s}
     
 class HotWaterDemand(Demand):
-    def __init__(self, name: str, thermal_node: str, mass_node: str, reference_temperature: float, project_path: str):
-        super().__init__(name, project_path)
+    thermal_node: str
+    mass_node: str
+    def __init__(self, name: str, thermal_node: str, mass_node: str, reference_temperature: float):
+        super().__init__(name, [thermal_node, mass_node])
         self.thermal_node = thermal_node
         self.mass_node = mass_node
-        self.T_ref = reference_temperature
+        self.T_ref = C2K(reference_temperature)
 
-    def step(self, t_s, dt_s, nodes, T_cold_water):
+    def resample_data(self, time_step: float, sim_end: float):
+        # Resamples the raw data to the format required 
+        if hasattr(self, 'raw_data'):
+            target_freq = f"{round(time_step*60)}T"
+            self.data = resample_with_interpolation(self.raw_data, target_freq, sim_end, agg="sum")
+
+    def step(self, time_step: float, nodes: list, environmental_data: dict, action = None):
+        T_cold_water = environmental_data['Temperature cold water']
         T_hot_water = nodes[self.thermal_node].T 
-        temp = (np.interp(x=(t_s + dt_s) % self.data[0][-1], xp=self.data[0], fp=self.data[1]) -
-            np.interp(x=t_s % self.data[0][-1], xp=self.data[0], fp=self.data[1])) / dt_s  # This calculates the required power in kW
-        mdot_dhw_th = temp / 4.187 / (C2K(40) - T_cold_water)
+        temp = self.data[self.time_id] / time_step  # This calculates the required power in kW
+        if temp > 0.0:
+            pass
+        mdot_dhw_th = temp / 4.187 / (313.25 - T_cold_water)  # Theroetical hot water mass flow, in kg/s
         if T_hot_water > self.T_ref:
-            mdot = mdot_dhw_th * (C2K(40) - T_cold_water) / (T_hot_water - T_cold_water)
+            mdot = mdot_dhw_th * (313.25 - T_cold_water) / (T_hot_water - T_cold_water)  # Actual hot water mass flow, in kg/s
         else:
             mdot = mdot_dhw_th
-        Qdot = mdot_dhw_th * 4.187 * T_hot_water
-        return {self.thermal_node: Qdot * dt_s, self.mass_node: mdot * dt_s}
-    
+        Qdot = mdot * 4.187 * T_hot_water  # Enthalpy flow output, in kW
+        return {self.thermal_node: -Qdot * time_step*3600, self.mass_node: -mdot * time_step*3600}  # output in {kJ, kg} 
+
 
 class IEAHotWaterDemand(HotWaterDemand):
-    def __init__(self, name: str, node: str, reference_temperature: float, project_path: str, profile_name: str):
-        super().__init__(name, node, reference_temperature, project_path)
-        self.data = read_timeseries_data_to_numpy(f'{os.path.realpath(__file__)}\\..\\data\\DHW_profiles_IEA.csv', profile_name)
+    def __init__(self, name: str, thermal_node: str, mass_node:str, reference_temperature: float, profile_name: str):
+        super().__init__(name, thermal_node, mass_node, reference_temperature)
+        self.raw_data = pd.read_csv(os.path.join(os.path.dirname(os.path.realpath(__file__)),'..','data','DHW_profiles_IEA.csv'), sep = ";", decimal = '.', index_col = 0, header = 0, parse_dates = True)[profile_name]
+
 
 class CustomProfileHotWaterDemand(HotWaterDemand):
     def __init__(self, name: str, node: str, reference_temperature: float, project_path: str, filename:str):
-        super().__init__(name, node, reference_temperature, project_path)
-        self.data = read_timeseries_data_to_numpy(os.path.join(project_path, filename))
+        super().__init__(name, node, reference_temperature)
+        self.raw_data = pd.read_csv(os.path.join(project_path, filename,'..','data','DHW_profiles_IEA.csv'), sep = ";", decimal = '.', parse_dates = True)

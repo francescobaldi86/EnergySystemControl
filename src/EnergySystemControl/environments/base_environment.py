@@ -1,82 +1,75 @@
 from typing import Dict, List
+from collections import defaultdict
 import pandas as pd
+from EnergySystemControl.environments.base_classes import Component, Node
 from EnergySystemControl.environments.demands import *
 from EnergySystemControl.environments.producers import *
 from EnergySystemControl.environments.utilities import *
 from EnergySystemControl.environments.storage_units import *
 from EnergySystemControl.environments.nodes import *
+from EnergySystemControl.controllers.base_controller import *
 from EnergySystemControl.helpers import *
 
-    
-class Component:
-    name: str
-    project_path: str
-    time: float
-    """Base class for components. Subclasses implement step(dt_s, nodes)."""
-    def __init__(self, name: str, nodes: List[Node], project_path: str):
-        self.name = name
-        self.project_path = project_path
-        self.nodes = nodes
-        self.time = 0
 
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        Component.registry[cls.__name__] = cls
-
-    def step(self, time, time_step) -> Dict[str, float]:
-        """
-        Perform one time step.
-        Returns a dict node_name -> heat_added_in_J (positive adds energy to node).
-        """
-        self.time = time
-        self.time_step = time_step
 
 class Environment:
-    def __init__(self, nodes: Dict[str, Node], components: Dict[str, Component], controllers, dt_s: float):
+    def __init__(self, nodes: Dict[str, Node], components: Dict[str, Component], controllers: Dict[str, Controller]):
         self.nodes = nodes
         self.balance_nodes = {}
-        self.dynamic_modes = {}
+        self.dynamic_nodes = {}
         self.components = components
-        self.demand_type_components = {}
-        self.producer_type_components = {}
-        self.utility_type_components = {}
-        self.storage_type_components = {}
+        self.components_classified = defaultdict(list)
         self.controllers = controllers
-        self.dt_s = dt_s
-        # Data collection
-        self.time = []
-        self.history = {n: [] for n in nodes.keys()}
-        self.comp_history = {c.name: [] for c in components}
+        # Ordering data
+        self.classify_components()
+        self.create_storage_nodes()
         self.classify_nodes()
+        # Read environmental data
+        self.environmental_data = {}
+        # Data collection
+        self.history = {n: [] for n in self.dynamic_nodes.keys()}
+        self.comp_history = {c: [] for c in components}
 
     def add_component(self, component_name, component_type, **kwargs):
         if component_type not in Component.registry:
             raise ValueError(f"Unknown component type: {component_type}")
         cls = Component.registry[component_type]
-        self.components[component_type] = cls(**kwargs)
+        self.components[component_name] = cls(**kwargs)
         
 
     def classify_nodes(self):
         # Classify nodes based on whether they are balance or dynamic nodes
-        for name, node in self.nodes:
+        for name, node in self.nodes.items():
             if isinstance(node, BalanceNode):
                 self.balance_nodes[name] = node
             elif isinstance(node, DynamicNode):
-                self.dynamic_modes[name] = node
+                self.dynamic_nodes[name] = node
 
     def classify_components(self):
         # Classify components based on their type
-        for name, component in self.components:
+        for name, component in self.components.items():
             if isinstance(component, Demand):
-                self.demand_type_components[name] = component
+                self.components_classified['Demand'].append(component)
             elif isinstance(component, Producer):
-                self.producer_type_components[name] = component
+                self.components_classified['Producer'].append(component)
+            elif isinstance(component, BalancingUtility):
+                self.components_classified['BalancingUtility'].append(component)
             elif isinstance(component, Utility):
-                self.utility_type_components[name] = component
+                self.components_classified['Utility'].append(component)
             elif isinstance(component, StorageUnit):
-                self.storage_type_components[name] = component
+                self.components_classified['StorageUnit'].append(component)
 
-    def step(self, t_s: float):
+    def create_storage_nodes(self):
+        for component in self.components_classified['StorageUnit']:
+            self.nodes.update(component.create_storage_nodes())
+
+    def read_timeseries_data(self):
+        for _, component in self.components.items():
+            if callable(getattr(component, 'resample_data', None)):
+                component.resample_data(self.time_step, self.time_end)
+
+
+    def step(self):
         """
         Taking a step involves the four main actions, executed in sequence:
         1. Simulate "demand" type components (they do not depend on other components' behaviour)
@@ -85,60 +78,81 @@ class Environment:
         4. Simulate "utility" type components (they require the respective controllers to execute)
         5. Update node states
         """
-        self.simulate_demand()
-        self.simulate_production()
+        # Put to 0 the delta of the balance at each node
+        for _, node in self.nodes.items():
+            node.delta = 0.0
+        # Initialize control actions
+        self.control_actions = defaultdict(lambda: None)
+        # Simulate components
+        self.update_environmental_data()
+        self.simulate_components_of_type('Demand')
+        self.simulate_components_of_type('Producer')
         self.get_controller_actions()
-        self.simulate_utilities()
-        self.update_nodes()
-        self.time += self.time_step
-
-    def simulate_demand(self):
-        for component in self.demand_type_components:
-            temp = component.step()
-
-    def simulate_production(self):
-        for component in self.producer_type_components:
-            temp = component.step()
-
-    def get_controller_actions(self):
-        self.actions = []
-        for controller in self.controllers:
-            self.actions.append(controller.get_action())
-
-    def simulate_utilities(self):
-        for utility in self.utility_type_components:
-            utility.step(self.actions[utility])
-
-    def update_nodes(self):
-        # accumulate heat per node in this step
-        delta = {n: 0.0 for n in self.nodes}
-        # Ask each component for heat contributions (explicit)
-        for c in self.components:
-            contribs = c.step(self.dt_s, self.nodes)
-            # record component-level metric (e.g., total power)
-            # here we store sum of absolute heat (J) as simple metric
-            self.comp_history[c.name].append(sum(contribs.values())/self.dt_s if contribs else 0.0)
-            for node_name, dd in contribs.items():
-                if isinstance(self.nodes[node_name], DynamicNode):
-                    delta[node_name] += dd / self.nodes[node_name].inertia
-                elif isinstance(self.nodes[node_name], BalanceNode):
-                    delta[node_name] += dd
+        self.simulate_components_of_type('Utility')
+        self.simulate_components_of_type('StorageUnit')
+        self.simulate_components_of_type('BalancingUtility')
         # update node state variables
         for name, node in self.dynamic_nodes.items():
-            node.state_variable += delta[name]
+            node.state_variable += node.delta
             self.history[name].append(node.state_variable)
         for name, node in self.balance_nodes.items():
             if node.check_balance() == False:
                 raise(NodeImbalanceError, f'Node imbalance error for node {name} at time step {self.time:.2f}')
-        self.time.append(self.time)
 
-    def run(self, t0_s: float, t_end_s: float):
-        t = t0_s
-        while t < t_end_s - 1e-9:
-            self.step(t)
-            t += self.dt_s
+    def update_environmental_data(self):
+        self.environmental_data = {
+            'Temperature cold water': C2K(15),
+            'Temperature ambient': C2K(20)
+        }
+
+    def simulate_components_of_type(self, type: str):
+        components_to_simulate = self.components_classified[type]
+        for component in components_to_simulate:
+            component.time = self.time
+            component.time_id = self.time_id
+            contribs = component.step(self.time_step, self.nodes, self.environmental_data, self.control_actions[component.name])
+            self.update_node_delta(contribs)
+            self.comp_history[component.name].append(sum(contribs.values())/self.time_step if contribs else 0.0)
+
+    def get_controller_actions(self):
+        for _, controller in self.controllers.items():
+            controller.time = self.time
+            controller.time_id = self.time_id
+            obs = controller.get_obs(self)
+            self.control_actions[controller.controlled_component] = controller.get_action(obs)
+
+    def update_node_delta(self, contribs):
+        for node_name, dd in contribs.items():
+            if isinstance(self.nodes[node_name], DynamicNode):
+                self.nodes[node_name].delta += dd / self.nodes[node_name].inertia
+            elif isinstance(self.nodes[node_name], BalanceNode):
+                self.nodes[node_name].delta += dd
+
+    def previous_step_method(self):
+        # Ask each component for heat contributions (explicit)
+        for c in self.components:
+            contribs = c.step(self.time_step, self.nodes)
+            # record component-level metric (e.g., total power)
+            # here we store sum of absolute heat (J) as simple metric
+            
+            
+        
+
+    def run(self, time_start: float = 0.0, time_end: float = 8760.0, time_step: float = 0.5):
+        self.time_step = time_step
+        # Data collection
+        self.time_start = time_start
+        self.time_end = time_end
+        self.time = time_start
+        self.time_id = 0
+        self.time_vector = np.arange(self.time_start, self.time_end, self.time_step)
+        self.read_timeseries_data()
+        while self.time < self.time_end - 1e-9:
+            self.step()
+            self.time += self.time_step
+            self.time_id += 1
 
     def to_dataframe(self):
-        df_nodes = pd.DataFrame(self.history, index=pd.Index(self.time, name='time_s'))
-        df_comps = pd.DataFrame(self.comp_history, index=pd.Index(self.time, name='time_s'))
+        df_nodes = pd.DataFrame(self.history, index=pd.Index(self.time_vector, name='time_s'))
+        df_comps = pd.DataFrame(self.comp_history, index=pd.Index(self.time_vector, name='time_s'))
         return df_nodes, df_comps

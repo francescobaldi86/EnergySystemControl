@@ -1,17 +1,11 @@
 from dataclasses import dataclass
-
-class Node:
-    def __init__(self, name):
-        self.name = name
-
-    def balance(self, flows):
-        raise NotImplementedError
+from EnergySystemControl.environments.base_classes import Node
 
 
 class DynamicNode(Node):
-    def __init__(self, name, state_variable, inertia):
+    def __init__(self, name, inertia, starting_state: float = 0.0):
         super().__init__(name)
-        self.state_variable = state_variable
+        self.state_variable = starting_state
         self.inertia = inertia
 
     def update(self, inflows, outflows, dt):
@@ -23,12 +17,13 @@ class BalanceNode(Node):
     def __init__(self, name):
         super().__init__(name)
 
-    def check_balance(self, inflows, outflows, tol=1e-6):
-        net = sum(inflows) - sum(outflows)
-        return abs(net) < tol
+    def check_balance(self, tol=1e-6):
+        return abs(self.delta) < tol
     
 
 class ThermalNode(DynamicNode):
+    def __init__(self, name: str, inertia: float, T_0: float):
+        super().__init__(name, inertia=inertia, starting_state=T_0)
     @property
     def T(self): 
         return self.state_variable
@@ -38,16 +33,19 @@ class ThermalNode(DynamicNode):
 
 
 class ElectricalNode(BalanceNode):
+    def __init__(self, name):
+        super().__init__(name)
+
+class ElectricalStorageNode(DynamicNode):
     def __init__(self, ):
         super().__init__()
 
 
 class MassNode(DynamicNode):
     max_capacity: float
-    def __init__(self, name, max_capacity):
-        super().__init__(self, name)
+    def __init__(self, name, max_capacity, m_0: float):
+        super().__init__(name, inertia = 1)
         self.max_capacity = max_capacity
-        self.inertia = 1
     @property
     def m(self): 
         return self.state_variable

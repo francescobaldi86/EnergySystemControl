@@ -1,28 +1,64 @@
-from EnergySystemControl.environments.base_environment import Component
+from EnergySystemControl.environments.base_classes import Component, Node
+from EnergySystemControl.environments.nodes import *
+from EnergySystemControl.helpers import *
 from typing import Dict, List
 
 
 class Utility(Component):
-    def __init__(self, name: str, nodes: List[str], project_path: str):
-        super().__init__(self, name, project_path)
-
+    def __init__(self, name: str, nodes: List[str]):
+        super().__init__(name, nodes)
 
 class HeatSource(Utility):
-    def __init__(self, name: str, node: str, Q_W: float, project_path: str):
-        super().__init__(self, name, project_path)
-        self.node = node
-        self.Q_W = Q_W
+    def __init__(self, name: str, thermal_node: str, source_node: str, Qdot_max: float, efficiency: float):
+        super().__init__(name, [thermal_node, source_node])
+        self.Qdot_out = Qdot_max
+        self.efficiency = efficiency
 
-    def step(self, dt_s, nodes):
-        Q_J = self.Q_W * dt_s
-        return {self.node: Q_J}
+    def step(self, time_step: float, nodes: list, environmental_data: dict, action):
+        return {self.nodes[0]: self.Qdot_out * action * time_step * 3600, 
+                self.nodes[1]: self.Qdot_out * action / self.efficiency * time_step * 3600}
     
-class ElectricityGrid(Utility):
-    def __init__(self, name: str, node: str, Wdot_max: float, project_path: str):
-        super().__init__(self, name, project_path)
-        self.node = node
-        self.Wdot_max = Wdot_max
+class HeatPumpConstantEfficiency(HeatSource):
+    COP: float
+    def __init__(self, name: str, thermal_node: str, electrical_node: str, Qdot_max: float, COP = 3):
+        super().__init__(name = name, thermal_node = thermal_node, source_node = electrical_node, Qdot_max = Qdot_max, efficiency = COP)
+        self.COP = COP
 
-    def step(self, dt_s, nodes):
-        Q_J = self.Q_W * dt_s
-        return {self.node: Q_J}
+    def step(self, time_step: float, nodes: list, environmental_data: dict, action):
+        output = super().step(time_step, nodes, environmental_data, action)
+        if action not in {0.0, 1.0}:
+            raise OnOffComponent(f'The control input to the component {self.name} of type "HeatPumpConstantEfficiency" should be either 1 or 0. {action} was provided at time step {self.time}')
+        return output
+
+
+class BalancingUtility(Utility):
+    # Balancing utilities are only used because their task is to ensure the balance of the nodes they are connected to. 
+    def __init__(self, name: str, nodes: List[str]):
+        super().__init__(name, nodes)
+
+    def step(self, time_step: float, nodes: list, environmental_data: dict, action):
+        output = {}
+        for node in self.nodes:
+            output[node] = -nodes[node].delta
+        return output
+    
+class ColdWaterGrid(BalancingUtility):
+    # This is a balancing note specifically for cold water. It balances both a thermal and a mass noed
+    def step(self, time_step: float, nodes: list, environmental_data: dict, action):
+        output = {}
+        for node in self.nodes:
+            if isinstance(nodes[node], MassNode):
+                mass_node_name = node
+            elif isinstance(nodes[node], ThermalNode):
+                thermal_node_name = node
+        output[mass_node_name] = -nodes[mass_node_name].delta
+        output[thermal_node_name] = -nodes[mass_node_name].delta * 4.187 * environmental_data['Temperature cold water']  # Enthalpy content in kJ
+        return output
+    
+    
+
+
+
+
+class OnOffComponent(Exception):
+    pass
