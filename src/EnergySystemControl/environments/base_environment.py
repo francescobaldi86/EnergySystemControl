@@ -24,11 +24,6 @@ class Environment:
         self.classify_components()
         self.create_storage_nodes()
         self.classify_nodes()
-        # Read environmental data
-        self.environmental_data = {}
-        # Data collection
-        self.history = {n: [] for n in self.dynamic_nodes.keys()}
-        self.comp_history = {c: [] for c in components}
 
     def add_component(self, component_name, component_type, **kwargs):
         if component_type not in Component.registry:
@@ -112,7 +107,8 @@ class Environment:
             component.time_id = self.time_id
             contribs = component.step(self.time_step, self.nodes, self.environmental_data, self.control_actions[component.name])
             self.update_node_delta(contribs)
-            self.comp_history[component.name].append(sum(contribs.values())/self.time_step if contribs else 0.0)
+            for node in component.nodes:
+                self.comp_history[component.name][node].append(contribs[node] / self.time_step)  # Energy flows are saved in kW. Mass flows in kg/s
 
     def get_controller_actions(self):
         for _, controller in self.controllers.items():
@@ -139,10 +135,15 @@ class Environment:
         
 
     def run(self, time_start: float = 0.0, time_end: float = 8760.0, time_step: float = 0.5):
-        self.time_step = time_step
+        self.time_step = time_step * 3600  # Time step is stored in seconds
+        # Read environmental data
+        self.environmental_data = {}
         # Data collection
-        self.time_start = time_start
-        self.time_end = time_end
+        self.history = {n: [] for n in self.dynamic_nodes.keys()}
+        self.comp_history = {c_name: {n: [] for n in c.nodes} for c_name, c in self.components.items()}
+        # Time
+        self.time_start = time_start * 3600  # Time values are stored in seconds
+        self.time_end = time_end * 3600  # Time values are stored in seconds
         self.time = time_start
         self.time_id = 0
         self.time_vector = np.arange(self.time_start, self.time_end, self.time_step)
@@ -153,6 +154,10 @@ class Environment:
             self.time_id += 1
 
     def to_dataframe(self):
-        df_nodes = pd.DataFrame(self.history, index=pd.Index(self.time_vector, name='time_s'))
-        df_comps = pd.DataFrame(self.comp_history, index=pd.Index(self.time_vector, name='time_s'))
+        df_nodes = pd.DataFrame(self.history, index=pd.Index(self.time_vector / 3600, name='time_s'))
+        df_comps = pd.concat(
+            {comp: pd.DataFrame(nodes, index=pd.Index(self.time_vector / 3600, name='time_s')) for comp, nodes in self.comp_history.items()},
+            axis=1)
+        
+
         return df_nodes, df_comps

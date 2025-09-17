@@ -3,7 +3,7 @@ import numpy as np
 
 import pandas as pd
 
-def resample_with_interpolation(df, target_freq, sim_end: float | None = None, agg="mean"):
+def resample_with_interpolation(df, target_freq, sim_end: float | None = None, var_type: str = 'extensive'):
     """
     Resample a time series DataFrame to a new frequency, 
     handling both upsampling (with interpolation) and 
@@ -39,7 +39,6 @@ def resample_with_interpolation(df, target_freq, sim_end: float | None = None, a
         df = pd.concat(dfs)
         # Trim to exact simulation end
         df = df[df.index <= df.index[0] + pd.to_timedelta(sim_end, 'h')]
-
     # Check original resolution
     original_freq = pd.infer_freq(df.index)
     if original_freq is None:
@@ -47,15 +46,28 @@ def resample_with_interpolation(df, target_freq, sim_end: float | None = None, a
         original_step = df.index.to_series().diff().median()
     else:
         original_step = pd.to_timedelta(pd.tseries.frequencies.to_offset(original_freq))
-
+    # Adding one line to prevent the final dataframe being too short
+    if isinstance(df, pd.DataFrame):
+        df.loc[df.index[-1] + original_step, :] = df.loc[df.index[-1], :]
+    elif isinstance(df, pd.Series):
+        df.loc[df.index[-1] + original_step] = df.loc[df.index[-1]]
     target_step = pd.to_timedelta(pd.tseries.frequencies.to_offset(target_freq))
 
-    if target_step >= original_step:
-        # --- Downsampling ---
-        return df.resample(target_freq).agg(agg).values
-    else:
-        # --- Upsampling ---
-        return df.resample(target_freq).asfreq().interpolate(method="time").values
+    if target_step >= original_step: # --- Downsampling ---
+        match var_type:
+            case 'extensive':
+                return df.resample(target_freq).agg('sum').values
+            case 'intensive':
+                return df.resample(target_freq).agg('mean').values
+    else:  # --- Upsampling ---
+        match var_type:
+            case 'extensive':
+                output = df.resample(target_freq).ffill()
+                output = output * (target_step / original_step)
+                return output
+            case 'intensive':
+                output = df.reindex(pd.date_range(df.index[0], df.index[-1], freq = target_freq, tz=df.index.tz))
+                return output.interpolate(method='time').values
 
 
 def C2K(T):

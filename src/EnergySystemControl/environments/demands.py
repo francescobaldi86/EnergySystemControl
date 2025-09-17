@@ -33,13 +33,13 @@ class HotWaterDemand(Demand):
     def resample_data(self, time_step: float, sim_end: float):
         # Resamples the raw data to the format required 
         if hasattr(self, 'raw_data'):
-            target_freq = f"{round(time_step*60)}T"
-            self.data = resample_with_interpolation(self.raw_data, target_freq, sim_end, agg="sum")
+            target_freq = f"{round(time_step/60)}T"
+            self.data = resample_with_interpolation(self.raw_data, target_freq, sim_end, var_type="extensive")
 
     def step(self, time_step: float, nodes: list, environmental_data: dict, action = None):
         T_cold_water = environmental_data['Temperature cold water']
         T_hot_water = nodes[self.thermal_node].T 
-        temp = self.data[self.time_id] / time_step  # This calculates the required power in kW
+        temp = self.data[self.time_id] / time_step * 3600  # This calculates the required power in kW (note: time step is in [s], read value in [kWh], hence the 3600)
         if temp > 0.0:
             pass
         mdot_dhw_th = temp / 4.187 / (313.25 - T_cold_water)  # Theroetical hot water mass flow, in kg/s
@@ -48,7 +48,7 @@ class HotWaterDemand(Demand):
         else:
             mdot = mdot_dhw_th
         Qdot = mdot * 4.187 * T_hot_water  # Enthalpy flow output, in kW
-        return {self.thermal_node: -Qdot * time_step*3600, self.mass_node: -mdot * time_step*3600}  # output in {kJ, kg} 
+        return {self.thermal_node: -Qdot * time_step, self.mass_node: -mdot * time_step}  # output in {kJ, kg} 
 
 
 class IEAHotWaterDemand(HotWaterDemand):
@@ -58,6 +58,6 @@ class IEAHotWaterDemand(HotWaterDemand):
 
 
 class CustomProfileHotWaterDemand(HotWaterDemand):
-    def __init__(self, name: str, node: str, reference_temperature: float, project_path: str, filename:str):
+    def __init__(self, name: str, node: str, reference_temperature: float, data_path: str, filename:str):
         super().__init__(name, node, reference_temperature)
-        self.raw_data = pd.read_csv(os.path.join(project_path, filename,'..','data','DHW_profiles_IEA.csv'), sep = ";", decimal = '.', parse_dates = True)
+        self.raw_data = pd.read_csv(os.path.join(data_path, filename), sep = ";", decimal = '.', parse_dates = True)

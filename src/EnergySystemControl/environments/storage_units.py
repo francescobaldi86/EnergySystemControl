@@ -16,7 +16,7 @@ class StorageUnit(Component):
 
     def step(self, time_step: float, nodes: list, environmental_data: dict, action):
         # Storage doesn't actively add Q (unless charged/discharged), but could implement losses
-        return {}
+        return {n: 0.0 for n in self.nodes}
     
     def check_max_capacity(self):
         for var in self.storage_variables:

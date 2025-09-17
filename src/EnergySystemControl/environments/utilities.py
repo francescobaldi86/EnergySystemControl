@@ -15,8 +15,8 @@ class HeatSource(Utility):
         self.efficiency = efficiency
 
     def step(self, time_step: float, nodes: list, environmental_data: dict, action):
-        return {self.nodes[0]: self.Qdot_out * action * time_step * 3600, 
-                self.nodes[1]: self.Qdot_out * action / self.efficiency * time_step * 3600}
+        return {self.nodes[0]: self.Qdot_out * action * time_step, 
+                self.nodes[1]: -self.Qdot_out * action / self.efficiency * time_step}
     
 class HeatPumpConstantEfficiency(HeatSource):
     COP: float
