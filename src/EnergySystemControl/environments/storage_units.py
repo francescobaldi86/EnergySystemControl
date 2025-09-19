@@ -51,3 +51,33 @@ class HotWaterStorage(StorageUnit):
         nodes[f'{self.name}_mass_node'] = MassNode(name = f'{self.name}_mass_node', max_capacity=self.tank_volume, m_0 = self.tank_volume)
         return nodes
         
+class Battery(StorageUnit):
+    crate: float
+    erate: float
+    efficiency_charge: float
+    efficiency_discharge: float
+    def __init__(self, name, capacity: float, electrical_node: str | None = None, crate: float = 1.0, erate: float = 1.0, efficiency_charge: float = 0.92, efficiency_discharge: float = 0.94):
+        self.crate = crate
+        self.erate = erate
+        self.efficiency_charge = efficiency_charge
+        self.efficiency_discharge = efficiency_discharge
+        self.max_capacity = capacity * 3600  # Energy capacity, in kJ
+        self.electrical_node = electrical_node if electrical_node else f'{name}_electrical_node'
+        super().__init__(name, [self.electrical_node], {self.electrical_node: self.max_capacity})
+
+    def create_storage_nodes(self):
+        nodes = {}
+        if self.electrical_node == f'{self.name}_electrical_node':
+            nodes[f'{self.name}_electrical_node'] = ElectricalStorageNode(name = self.electrical_node, max_capacity = self.max_capacity[self.electrical_node])
+        # self.verify_connected_components()
+        return nodes
+    
+    def verify_connected_components(self):
+        raise(NotImplementedError)
+    
+    def step(self, time_step: float, nodes: list, environmental_data: dict, action):
+        # Just considering charging/discharging losses
+        if nodes[self.nodes[0]].delta > 0: 
+            return {self.nodes[0]: -nodes[self.nodes[0]].delta * (1 - self.efficiency_charge)}
+        else:
+            return {self.nodes[0]: nodes[self.nodes[0]].delta * (1 - self.efficiency_discharge)}

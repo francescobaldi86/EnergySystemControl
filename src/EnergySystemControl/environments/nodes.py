@@ -37,8 +37,16 @@ class ElectricalNode(BalanceNode):
         super().__init__(name)
 
 class ElectricalStorageNode(DynamicNode):
-    def __init__(self, ):
-        super().__init__()
+    max_capacity: float
+    def __init__(self, name, max_capacity):
+        super().__init__(name, inertia=1)
+        self.max_capacity = max_capacity
+    @property
+    def SOC(self): 
+        return self.state_variable / self.max_capacity
+    @SOC.setter
+    def SOC(self, value):
+        self.state_variable = value * self.max_capacity
 
 
 class MassNode(DynamicNode):

@@ -8,6 +8,29 @@ class Utility(Component):
     def __init__(self, name: str, nodes: List[str]):
         super().__init__(name, nodes)
 
+class GenericUtility(Utility):
+    def __init__(self, name: str, node:str, max_power: float, type: str):
+        super().__init__(name, [node])
+        match type:
+            case 'source':
+                self.power_min, self.power_max = 0.0, max_power
+            case 'sink':
+                self.power_min, self.power_max = -max_power, 0.0
+            case 'bidirectional': 
+                self.power_min, self.power_max = -max_power, max_power
+
+    def step(self, time_step: float, nodes: list, environmental_data: dict, action):
+        # Assuming action is a value in kJ
+        required_power = action / time_step
+        if required_power > self.power_max:
+            return {self.nodes[0]: self.power_max * time_step}
+        elif required_power < self.power_min:
+            return {self.nodes[0]: self.power_min * time_step}
+        else:
+            return {self.nodes[0]: action}
+
+
+
 class HeatSource(Utility):
     def __init__(self, name: str, thermal_node: str, source_node: str, Qdot_max: float, efficiency: float):
         super().__init__(name, [thermal_node, source_node])
