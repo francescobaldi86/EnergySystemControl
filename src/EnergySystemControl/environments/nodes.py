@@ -38,8 +38,8 @@ class ElectricalNode(BalanceNode):
 
 class ElectricalStorageNode(DynamicNode):
     max_capacity: float
-    def __init__(self, name, max_capacity):
-        super().__init__(name, inertia=1)
+    def __init__(self, name, max_capacity, SOC_0: float):
+        super().__init__(name, inertia=1, starting_state=SOC_0*max_capacity)
         self.max_capacity = max_capacity
     @property
     def SOC(self): 

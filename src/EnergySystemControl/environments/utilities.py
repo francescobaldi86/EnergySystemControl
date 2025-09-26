@@ -54,6 +54,7 @@ class HeatPumpConstantEfficiency(HeatSource):
         return output
 
 
+
 class BalancingUtility(Utility):
     # Balancing utilities are only used because their task is to ensure the balance of the nodes they are connected to. 
     def __init__(self, name: str, nodes: List[str]):

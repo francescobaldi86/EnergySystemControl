@@ -89,7 +89,7 @@ def test_4():
         "heat_pump": HeatPumpConstantEfficiency(name = 'heat_pump', thermal_node = "hot_water_storage_thermal_node", electrical_node = 'battery_electrical_node', Qdot_max = 1.5, COP = 3.2),
         "hot_water_storage": HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45),
         "pv_panels": PVpanelFromPVGIS(name = 'pv_panels', electrical_node='battery_electrical_node', installed_power=3.0, latitude=44.511, longitude=11.335, tilt=30, azimuth=90),
-        "battery": Battery(name = 'battery', capacity = 2.0),
+        "battery": Battery(name = 'battery', capacity = 2.0, SOC_0 = 0.5),
         "electric_grid": GenericUtility(name = 'electric_grid', node= 'battery_electrical_node', max_power = 5, type = 'bidirectional'),
         "water_grid": ColdWaterGrid(name = 'water_grid', nodes = ['hot_water_storage_mass_node', 'hot_water_storage_thermal_node'])
     }

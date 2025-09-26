@@ -79,5 +79,5 @@ def K2C(T):
 class NodeImbalanceError(Exception):
     pass
 
-class MaxStorageError(Exception):
+class StorageError(Exception):
     pass

@@ -5,23 +5,23 @@ from typing import Dict, List
 
 class StorageUnit(Component):
     """A lumped hot-water store modeled as node with internal losses."""
-    storage_variables: list
     SOC: dict
     state: dict
     max_capacity: dict
 
     def __init__(self, name: str, nodes: List[str], max_capacity: dict):
         super().__init__(name, nodes)
+        self.SOC = {}
         self.max_capacity = max_capacity
 
     def step(self, time_step: float, nodes: list, environmental_data: dict, action):
         # Storage doesn't actively add Q (unless charged/discharged), but could implement losses
         return {n: 0.0 for n in self.nodes}
     
-    def check_max_capacity(self):
-        for var in self.storage_variables:
-            if self.state[var] > self.max_capacity[var]:
-                raise(MaxStorageError, f'Storage unit {self.name} has storage level higher than maximum allowed at time step {self.ts}')
+    def check_storage_state(self):
+        # This function must be implemented for each sub type
+        raise(NotImplementedError)
+            
         
 
 class HotWaterStorage(StorageUnit):
@@ -43,6 +43,7 @@ class HotWaterStorage(StorageUnit):
                 f'{name}_mass_node': tank_volume
             }
             nodes = [f'{name}_thermal_node', f'{name}_mass_node']
+        min_capacity = {n: 0.0 for n in max_capacity.keys()}
         super().__init__(name, nodes, max_capacity)
 
     def create_storage_nodes(self):
@@ -56,11 +57,14 @@ class Battery(StorageUnit):
     erate: float
     efficiency_charge: float
     efficiency_discharge: float
-    def __init__(self, name, capacity: float, electrical_node: str | None = None, crate: float = 1.0, erate: float = 1.0, efficiency_charge: float = 0.92, efficiency_discharge: float = 0.94):
+    def __init__(self, name, capacity: float, electrical_node: str | None = None, crate: float = 1.0, erate: float = 1.0, efficiency_charge: float = 0.92, efficiency_discharge: float = 0.94, SOC_0: float = 0.5, SOC_min: float = 0.2, SOC_max: float = 0.8):
         self.crate = crate
         self.erate = erate
         self.efficiency_charge = efficiency_charge
         self.efficiency_discharge = efficiency_discharge
+        self.SOC_0 = SOC_0
+        self.SOC_min = SOC_min
+        self.SOC_max = SOC_max
         self.max_capacity = capacity * 3600  # Energy capacity, in kJ
         self.electrical_node = electrical_node if electrical_node else f'{name}_electrical_node'
         super().__init__(name, [self.electrical_node], {self.electrical_node: self.max_capacity})
@@ -68,9 +72,15 @@ class Battery(StorageUnit):
     def create_storage_nodes(self):
         nodes = {}
         if self.electrical_node == f'{self.name}_electrical_node':
-            nodes[f'{self.name}_electrical_node'] = ElectricalStorageNode(name = self.electrical_node, max_capacity = self.max_capacity[self.electrical_node])
+            nodes[f'{self.name}_electrical_node'] = ElectricalStorageNode(name = self.electrical_node, max_capacity = self.max_capacity[self.electrical_node], SOC_0 = self.SOC_0)
         # self.verify_connected_components()
         return nodes
+    
+    def check_storage_state(self, nodes):
+        if nodes[self.nodes[0]].state_variable > self.max_capacity * self.SOC_max:
+            raise(StorageError, f'Storage unit {self.name} has storage level higher than maximum allowed at time step {self.time}')
+        elif nodes[self.nodes[0]].state_variable < self.max_capacity * self.SOC_min:
+            raise(StorageError, f'Storage unit {self.name} has storage level lower than zero at time {self.time}')
     
     def verify_connected_components(self):
         raise(NotImplementedError)
