@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from collections import defaultdict
 from EnergySystemControl.environments.base_classes import Node
 
 

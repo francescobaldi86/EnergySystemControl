@@ -1,16 +1,20 @@
 from EnergySystemControl.helpers import *
-from typing import List
+from typing import List, Dict
 
 class Controller():
     name: str
     time: float
     time_id: int
     control_components: list
-    control_nodes: list
-    def __init__(self, name, controlled_components: List[str], control_nodes: List[str]):
+    sensors: list
+    obs = dict
+    def __init__(self, name, controlled_components: List[str], sensors: Dict[str, str]):
         self.name = name
         self.controlled_components = controlled_components
-        self.control_nodes = control_nodes
+        self.sensors = sensors
+
+    def get_obs(self, environment):
+        self.obs = {var: environment.sensors[sensor_name].get_measurement(environment) for var, sensor_name in self.sensors.items()}
 
     def get_action(self):
         return None
@@ -20,20 +24,18 @@ class HeaterControllerWithBandwidth(Controller):
     """
     Controller for a heater with a bandwidth: it tries to keep the temperature within the specific band
     """
-    def __init__(self, name, control_node: str, controlled_component: str, temperature_comfort: float, temperature_bandwidth: float):
-        super().__init__(name, [controlled_component], [control_node])
+    def __init__(self, name, controlled_component: str, temperature_sensor: str, temperature_comfort: float, temperature_bandwidth: float):
+        super().__init__(name, [controlled_component], {'Storage temperature': temperature_sensor})
         self.temperature_comfort = C2K(temperature_comfort)
         self.temperature_bandwidth = temperature_bandwidth
         self.previous_action = {controlled_component: 0}
 
-    def get_obs(self, environment):
-        return environment.nodes[self.control_nodes[0]].T
-
-    def get_action(self, temperature_hp):
+    def get_action(self):
+        temperature = self.obs["Storage temperature"]
         action = {}
-        if temperature_hp <= self.temperature_comfort:
+        if temperature <= self.temperature_comfort:
             action[self.controlled_components[0]] = 1
-        elif temperature_hp <= self.temperature_comfort + self.temperature_bandwidth:
+        elif temperature <= self.temperature_comfort + self.temperature_bandwidth:
             action = self.previous_action
         else: 
             action[self.controlled_components[0]] = 0
@@ -41,27 +43,22 @@ class HeaterControllerWithBandwidth(Controller):
         return action
 
 class Inverter(Controller):
-    def __init__(self, name, control_node: str, controlled_component: str):
-        super().__init__(name, [controlled_component], [control_node])
+    def __init__(self, name, controlled_component: str, soc_sensor: str, grid_flow_sensor: str, SOC_min: float = 0.3, SOC_max: float = 0.9):
+        super().__init__(name, [controlled_component], {'SOC': soc_sensor, 'balance': grid_flow_sensor})
         self.previous_action = {controlled_component: 0}
+        self.SOC_min = SOC_min
+        self.SOC_max = SOC_max
 
-    def get_obs(self, environment):
-        return {'SOC': environment.nodes[self.control_nodes[0]].SOC,
-                'balance': environment.nodes[self.control_nodes[0]].delta,
-                'battery capacity': environment.nodes[self.control_nodes[0]].max_capacity}
-
-    def get_action(self, obs):
+    def get_action(self):
         # In the case of the inverter, the action is the energy required to the grid
-        if obs['balance'] >= 0:
-            available_batt_space = obs['battery capacity'] * (1 - obs['SOC'])
-            if available_batt_space > obs['balance']:
-                action = 0
+        if self.obs['balance'] >= 0:
+            if self.obs['SOC'] >= self.SOC_max:
+                action = - self.obs['balance']
             else:
-                action = available_batt_space - obs['balance']
+                action = 0
         else:
-            battery_energy_level = obs['battery capacity'] * obs['SOC']
-            if battery_energy_level >= -obs['balance']: 
-                action = 0
+            if self.obs['SOC'] <= self.SOC_min:
+                action = -self.obs['balance']
             else:
-                action = -(obs['balance'] + battery_energy_level)
+                action = 0
         return {self.controlled_components[0]: action}

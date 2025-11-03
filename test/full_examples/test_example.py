@@ -4,6 +4,7 @@ from EnergySystemControl.environments.storage_units import  HotWaterStorage, Bat
 from EnergySystemControl.environments.demands import IEAHotWaterDemand
 from EnergySystemControl.controllers.base_controller import HeaterControllerWithBandwidth, Inverter
 from EnergySystemControl.environments.producers import PVpanelFromPVGIS
+from EnergySystemControl.environments.sensors import TemperatureSensor, PowerSensor, PowerBalanceSensor, SOCSensor
 import pytest, math, os
 
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
@@ -20,10 +21,13 @@ def test_1():
         "water_grid": ColdWaterGrid(name = 'water_grid', nodes = ['hot_water_storage_mass_node', 'hot_water_storage_thermal_node'])
     }
     controllers = [
-        HeaterControllerWithBandwidth('heat_pump_controller', 'hot_water_storage_thermal_node', 'heat_pump', 40, 10)
+        HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10)
     ]
+    sensors = {
+        'storage_tank_temperature_sensor': TemperatureSensor('storage_tank_temperature_sensor', node_name = 'hot_water_storage_thermal_node')
+    }
 
-    env = Environment(nodes=nodes, components=components, controllers = controllers)  # dt = 60 s
+    env = Environment(nodes=nodes, components=components, controllers = controllers, sensors=sensors)  # dt = 60 s
     time_step = 0.5
     env.run(time_step = time_step, time_end = 24.0*7)  # simulate 6 hours
     df_nodes, df_comps = env.to_dataframe()
@@ -40,9 +44,12 @@ def test_2():
         "water_grid": ColdWaterGrid(name = 'water_grid', nodes = ['hot_water_storage_mass_node', 'hot_water_storage_thermal_node'])
     }
     controllers = [
-        HeaterControllerWithBandwidth('heat_pump_controller', 'hot_water_storage_thermal_node', 'heat_pump', 40, 10)
+        HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10)
     ]
-    env = Environment(nodes=nodes, components=components, controllers = controllers)  # dt = 60 s
+    sensors = {
+        'storage_tank_temperature_sensor': TemperatureSensor('storage_tank_temperature_sensor', node_name = 'hot_water_storage_thermal_node')
+    }
+    env = Environment(nodes=nodes, components=components, controllers = controllers, sensors=sensors)  # dt = 60 s
     for time_step in [1, 0.5, 0.25, 1/6, 5/60, 1/60]:
     # Test that results remain similar when changing the time step
         env.run(time_step = time_step, time_end = 24.0*7)  # simulate 6 hours
@@ -62,10 +69,13 @@ def test_3():
         "water_grid": ColdWaterGrid(name = 'water_grid', nodes = ['hot_water_storage_mass_node', 'hot_water_storage_thermal_node'])
     }
     controllers = [
-        HeaterControllerWithBandwidth('heat_pump_controller', 'hot_water_storage_thermal_node', 'heat_pump', 40, 10)
+        HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10)
     ]
+    sensors = {
+        'storage_tank_temperature_sensor': TemperatureSensor('storage_tank_temperature_sensor', node_name = 'hot_water_storage_thermal_node')
+    }
 
-    env = Environment(nodes=nodes, components=components, controllers = controllers)  # dt = 60 s
+    env = Environment(nodes=nodes, components=components, controllers = controllers, sensors = sensors)  # dt = 60 s
     time_step = 0.5
     env.run(time_step = time_step, time_end = 24.0*7)  # simulate 6 hours
     df_nodes, df_comps = env.to_dataframe()
@@ -82,7 +92,7 @@ def test_3():
     assert math.isclose(df_nodes.loc[10.0, 'hot_water_storage_thermal_node'], 325, abs_tol = 1)
 
 def test_4():
-    # Adding more complexity: a battery
+    # Like test 3, but adding a battery with related controller
     # Trying a more complex system, with PV panels 
     components = {
         "demand_DHW": IEAHotWaterDemand(name= "demand_DHW", thermal_node = "hot_water_storage_thermal_node", mass_node = "hot_water_storage_mass_node", reference_temperature = 40, profile_name='M'),
@@ -94,11 +104,16 @@ def test_4():
         "water_grid": ColdWaterGrid(name = 'water_grid', nodes = ['hot_water_storage_mass_node', 'hot_water_storage_thermal_node'])
     }
     controllers = [
-        HeaterControllerWithBandwidth('heat_pump_controller', 'hot_water_storage_thermal_node', 'heat_pump', 40, 10),
-        Inverter('inverter', 'battery_electrical_node', 'electric_grid')
+        HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10),
+        Inverter('inverter', 'electric_grid', 'battery_SOC_sensor', 'grid_exchange_power_sensor')
     ]
+    sensors = {
+        'storage_tank_temperature_sensor': TemperatureSensor('storage_tank_temperature_sensor', node_name = 'hot_water_storage_thermal_node'),
+        'battery_SOC_sensor': SOCSensor('battery_SOC_sensor', 'battery', 'battery_electrical_node'),
+        'grid_exchange_power_sensor': PowerBalanceSensor('grid_exchange_power_sensor', 'battery_electrical_node')
+    }
 
-    env = Environment(nodes={}, components=components, controllers = controllers)  # dt = 60 s
+    env = Environment(nodes={}, components=components, controllers = controllers, sensors = sensors)  # dt = 60 s
     time_step = 0.5
     env.run(time_step = time_step, time_end = 24.0*7)  # simulate 6 hours
     df_nodes, df_comps = env.to_dataframe()

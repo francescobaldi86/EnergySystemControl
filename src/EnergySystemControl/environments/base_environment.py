@@ -7,19 +7,21 @@ from EnergySystemControl.environments.producers import *
 from EnergySystemControl.environments.utilities import *
 from EnergySystemControl.environments.storage_units import *
 from EnergySystemControl.environments.nodes import *
+from EnergySystemControl.environments.sensors import *
 from EnergySystemControl.controllers.base_controller import *
 from EnergySystemControl.helpers import *
 
 
 
 class Environment:
-    def __init__(self, nodes: Dict[str, Node], components: List[Component], controllers: List[Controller]):
+    def __init__(self, nodes: Dict[str, Node], components: List[Component], controllers: List[Controller], sensors: Dict[str, Sensor]):
         self.nodes = nodes
         self.balance_nodes = {}
         self.dynamic_nodes = {}
         self.components = components
         self.components_classified = defaultdict(list)
         self.controllers: List[Controller] = controllers
+        self.sensors: Dict[str, Sensor] = sensors
         # Ordering data
         self.classify_components()
         self.create_storage_nodes()
@@ -116,8 +118,8 @@ class Environment:
         for controller in self.controllers:
             controller.time = self.time
             controller.time_id = self.time_id
-            obs = controller.get_obs(self)
-            actions = controller.get_action(obs)
+            controller.get_obs(self)
+            actions = controller.get_action()
             for component_name, action in actions.items():
                 if component_name in self.components_to_simulate:
                     self.take_component_step(self.components[component_name], action)
@@ -134,6 +136,7 @@ class Environment:
                 self.nodes[node_name].delta += dd / self.nodes[node_name].inertia
             elif isinstance(self.nodes[node_name], BalanceNode):
                 self.nodes[node_name].delta += dd
+            self.nodes[node_name].flow[component.name] = dd
         # Update component history
         for node in component.nodes:
             self.comp_history[component.name][node].append(contribs[node] / self.time_step)  # Energy flows are saved in kW. Mass flows in kg/s      

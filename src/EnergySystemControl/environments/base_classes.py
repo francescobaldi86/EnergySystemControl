@@ -1,11 +1,12 @@
 from typing import Dict, List
+from collections import defaultdict
 
 class Node:
     def __init__(self, name):
         self.name = name
         self.time = 0.0
         self.time_id = 0
-        self.delta = 0.0
+        self.flow = defaultdict(lambda: 0)
 
     def balance(self, flows):
         raise NotImplementedError

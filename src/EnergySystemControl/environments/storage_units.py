@@ -57,14 +57,12 @@ class Battery(StorageUnit):
     erate: float
     efficiency_charge: float
     efficiency_discharge: float
-    def __init__(self, name, capacity: float, electrical_node: str | None = None, crate: float = 1.0, erate: float = 1.0, efficiency_charge: float = 0.92, efficiency_discharge: float = 0.94, SOC_0: float = 0.5, SOC_min: float = 0.2, SOC_max: float = 0.8):
+    def __init__(self, name, capacity: float, electrical_node: str | None = None, crate: float = 1.0, erate: float = 1.0, efficiency_charge: float = 0.92, efficiency_discharge: float = 0.94, SOC_0: float = 0.5):
         self.crate = crate
         self.erate = erate
         self.efficiency_charge = efficiency_charge
         self.efficiency_discharge = efficiency_discharge
         self.SOC_0 = SOC_0
-        self.SOC_min = SOC_min
-        self.SOC_max = SOC_max
         self.max_capacity = capacity * 3600  # Energy capacity, in kJ
         self.electrical_node = electrical_node if electrical_node else f'{name}_electrical_node'
         super().__init__(name, [self.electrical_node], {self.electrical_node: self.max_capacity})

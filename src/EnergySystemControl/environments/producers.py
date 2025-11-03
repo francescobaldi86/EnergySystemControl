@@ -25,6 +25,8 @@ class PVpanel(Producer):
 
     def step(self, time_step: float, nodes: list, environmental_data: dict, action = None):
         temp = self.data[self.time_id] * self.installed_power  # The raw data is expected in terms of capacity factor (that is, adimensional)
+        if temp > 0:
+            pass
         return {self.nodes[0]: temp * time_step}  # Output is in kJ, so kW * h * 
     
     def check_data(self):
