@@ -1,6 +1,6 @@
-from EnergySystemControl.environments.base_classes import Component, Node
-from EnergySystemControl.environments.nodes import *
-from EnergySystemControl.helpers import *
+from energy_system_control import Component, Node
+from energy_system_control import *
+from energy_system_control import *
 from typing import Dict, List
 
 

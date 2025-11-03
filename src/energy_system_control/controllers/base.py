@@ -1,4 +1,4 @@
-from EnergySystemControl.helpers import *
+from energy_system_control.helpers import *
 from typing import List, Dict
 
 class Controller():

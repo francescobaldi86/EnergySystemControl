@@ -1,6 +1,6 @@
-from EnergySystemControl.environments.base_environment import Component
-from EnergySystemControl.environments.nodes import *
-from EnergySystemControl.helpers import *
+from energy_system_control import Component
+from energy_system_control import *
+from energy_system_control import *
 from typing import Dict, List
 
 class StorageUnit(Component):

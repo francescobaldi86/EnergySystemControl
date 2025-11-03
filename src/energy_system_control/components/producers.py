@@ -1,5 +1,5 @@
-from EnergySystemControl.environments.base_classes import Component
-from EnergySystemControl.helpers import *
+from energy_system_control import Component
+from energy_system_control import *
 from typing import List
 import os, yaml, csv, json, requests
 import numpy as np
