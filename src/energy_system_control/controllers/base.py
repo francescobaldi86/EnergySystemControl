@@ -7,7 +7,7 @@ class Controller():
     time_id: int
     control_components: list
     sensors: list
-    obs = dict
+    obs: dict
     def __init__(self, name, controlled_components: List[str], sensors: Dict[str, str]):
         self.name = name
         self.controlled_components = controlled_components

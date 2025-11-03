@@ -1,8 +1,9 @@
 from energy_system_control import Component
-from energy_system_control import *
+from energy_system_control.helpers import *
 from typing import List
 import os, yaml, csv, json, requests
 import numpy as np
+import pandas as pd
 
 
 class Producer(Component):

@@ -1,6 +1,6 @@
 from energy_system_control import Component
-from energy_system_control import *
-from energy_system_control import *
+from energy_system_control.core.nodes import ThermalNode, MassNode, ElectricalStorageNode
+from energy_system_control.helpers import *
 from typing import Dict, List
 
 class StorageUnit(Component):

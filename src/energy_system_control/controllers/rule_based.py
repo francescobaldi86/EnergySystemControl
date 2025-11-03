@@ -5,7 +5,7 @@ class HeatPumpRuleBasedController(Controller):
     """
     Controller for a heater with a bandwidth: it tries to keep the temperature within the specific band
     """
-    def __init__(self, name, temperature_control_node: str, controlled_component: str, temperature_comfort: float, temperature_bandwidth: float, power_PV_activation: float):
+    def __init__(self, name, control_node: str, controlled_component: str, temperature_comfort: float, temperature_bandwidth: float, power_PV_activation: float):
         super().__init__(name, [controlled_component], [control_node])
         self.temperature_comfort = C2K(temperature_comfort)
         self.temperature_bandwidth = temperature_bandwidth
