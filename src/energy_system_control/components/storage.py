@@ -1,4 +1,4 @@
-from energy_system_control import Component
+from energy_system_control.core.base_classes import Component
 from energy_system_control.core.nodes import ThermalNode, MassNode, ElectricalStorageNode
 from energy_system_control.helpers import *
 from typing import Dict, List

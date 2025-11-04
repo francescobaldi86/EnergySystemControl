@@ -1,4 +1,4 @@
-from energy_system_control import Component
+from energy_system_control.core.base_classes import Component
 from energy_system_control.helpers import *
 from typing import List
 import os, yaml, csv, json, requests
