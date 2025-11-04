@@ -1,15 +1,15 @@
 from typing import Dict, List
 from collections import defaultdict
 import pandas as pd
-from EnergySystemControl.environments.base_classes import *
-from EnergySystemControl.environments.demands import *
-from EnergySystemControl.environments.producers import *
-from EnergySystemControl.environments.utilities import *
-from EnergySystemControl.environments.storage_units import *
-from EnergySystemControl.environments.nodes import *
-from EnergySystemControl.environments.sensors import *
-from EnergySystemControl.controllers.base_controller import *
-from EnergySystemControl.helpers import *
+from energy_system_control.core.base_classes import *
+from energy_system_control.components.demands import *
+from energy_system_control.components.producers import *
+from energy_system_control.components.utilities import *
+from energy_system_control.components.storage import *
+from energy_system_control.core.nodes import *
+from energy_system_control.sensors.sensors import *
+from energy_system_control.controllers.base import *
+from energy_system_control.helpers import *
 
 
 

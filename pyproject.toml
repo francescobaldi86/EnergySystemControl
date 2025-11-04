@@ -4,12 +4,15 @@ requires = [
     "pandas",
     "matplotlib",
     "numpy",
-    "dataclasses"
+    "dataclasses",
+    "pytest",
+    "pyyaml",
+    "requests",
     ]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "EnergySystemControl"
+name = "energy_system_control"
 version = "0.1.0"
 description = "A package to model small energy systems and implement different types of control systems"
 authors = [
@@ -34,8 +37,11 @@ dev = ["flake8", "pytest"]
 minversion = "6.0"
 addopts = "-ra -q"
 testpaths = [
-    "test",
+    "tests",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+energy_system_control = ["data/*.csv"]

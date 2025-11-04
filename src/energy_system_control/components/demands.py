@@ -1,8 +1,8 @@
-from EnergySystemControl.environments.base_classes import Component, Node
-from EnergySystemControl.helpers import *
-import os
+from energy_system_control.core.base_classes import Component, Node
+from energy_system_control.helpers import *
+import os, yaml
 import numpy as np
-import yaml
+from importlib.resources import files
 
 
 class Demand(Component):
@@ -54,7 +54,8 @@ class HotWaterDemand(Demand):
 class IEAHotWaterDemand(HotWaterDemand):
     def __init__(self, name: str, thermal_node: str, mass_node:str, reference_temperature: float, profile_name: str):
         super().__init__(name, thermal_node, mass_node, reference_temperature)
-        self.raw_data = pd.read_csv(os.path.join(os.path.dirname(os.path.realpath(__file__)),'..','data','DHW_profiles_IEA.csv'), sep = ";", decimal = '.', index_col = 0, header = 0, parse_dates = True)[profile_name]
+        path = files("energy_system_control.data") / "dhw_profiles_iea.csv"
+        self.raw_data = pd.read_csv(path, sep = ";", decimal = '.', index_col = 0, header = 0, parse_dates = True)[profile_name]
 
 
 class CustomProfileHotWaterDemand(HotWaterDemand):

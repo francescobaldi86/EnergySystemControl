@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from collections import defaultdict
-from EnergySystemControl.environments.base_classes import Node
+from energy_system_control.core.base_classes import Node
 
 
 class DynamicNode(Node):
