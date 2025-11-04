@@ -1,17 +1,22 @@
 # Re-export a stable public API
 from .core.base_environment import Environment
 from .core.nodes import ThermalNode, ElectricalNode, MassNode
-from .components.producers import PVPanel, Boiler, HeatPump
-from .components.storage import Battery, HotWaterTank
-from .components.demands import HotWaterDemand, ThermalLoss
-from .controllers.base import Controller
-from .controllers.rule_based import HeaterController, Inverter
+from .components.producers import PVpanel, PVpanelFromData, PVpanelFromPVGIS
+from .components.storage import StorageUnit, Battery, HotWaterStorage
+from .components.demands import HotWaterDemand, ThermalLoss, IEAHotWaterDemand, CustomProfileHotWaterDemand
+from .components.utilities import HeatSource, HeatPumpConstantEfficiency, BalancingUtility, ColdWaterGrid
+from .controllers.base import Controller, HeaterControllerWithBandwidth, Inverter
+from .controllers.rule_based import HeatPumpRuleBasedController
+from .sensors.sensors import Sensor, PowerBalanceSensor, PowerSensor, TemperatureSensor, SOCSensor
 
 __all__ = [
     "Environment",
     "ThermalNode", "ElectricalNode", "MassNode",
-    "PVPanel", "Boiler", "HeatPump",
-    "Battery", "HotWaterTank",
-    "HotWaterDemand", "ThermalLoss",
-    "Controller", "HeaterController", "Inverter",
+    "PVpanel", "PVpanelFromData", "PVpanelFromPVGIS",
+    "StorageUnit", "Battery", "HotWaterStorage",
+    "HotWaterDemand", "ThermalLoss", "IEAHotWaterDemand", "CustomProfileHotWaterDemand",
+    "HeatSource", "HeatPumpConstantEfficiency", "BalancingUtility", "ColdWaterGrid",
+    "Controller", "HeaterControllerWithBandwidth", "Inverter",
+    "HeatPumpRuleBasedController", 
+    "Sensor", "PowerBalanceSensor", "PowerSensor", "TemperatureSensor", "SOCSensor",
 ]
