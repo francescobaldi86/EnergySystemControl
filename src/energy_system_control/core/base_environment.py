@@ -14,7 +14,7 @@ from energy_system_control.helpers import *
 
 
 class Environment:
-    def __init__(self, nodes: Dict[str, Node], components: List[Component], controllers: List[Controller], sensors: Dict[str, Sensor]):
+    def __init__(self, nodes: Dict[str, Node] = {}, components: Dict[str, Component] = {}, controllers: List[Controller] = [], sensors: Dict[str, Sensor] = {}):
         self.nodes = nodes
         self.balance_nodes = {}
         self.dynamic_nodes = {}
@@ -26,6 +26,7 @@ class Environment:
         self.classify_components()
         self.create_storage_nodes()
         self.classify_nodes()
+        self.load_nodes_to_components()
 
     def add_component(self, component_name, component_type, **kwargs):
         if component_type not in Component.registry:
@@ -55,6 +56,13 @@ class Environment:
                 self.components_classified['Utility'].append(component)
             elif isinstance(component, StorageUnit):
                 self.components_classified['StorageUnit'].append(component)
+
+    def load_nodes_to_components(self):
+        # Assigns the field "nodes" to all components
+        for name, component in self.components.items():
+            component.nodes = {}
+            for node in component.node_names:
+                component.nodes[node] = self.nodes[node]
 
     def create_storage_nodes(self):
         for component in self.components_classified['StorageUnit']:
@@ -129,7 +137,7 @@ class Environment:
             self.control_actions.update(actions)
 
     def take_component_step(self, component, action):
-        contribs = component.step(self.time_step, self.nodes, self.environmental_data, action)
+        contribs = component.step(self.time_step, self.environmental_data, action)
         # Update node delta
         for node_name, dd in contribs.items():
             if isinstance(self.nodes[node_name], DynamicNode):

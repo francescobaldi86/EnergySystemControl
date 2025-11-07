@@ -16,10 +16,12 @@ class Component:
     time: float
     time_id: int
     registry = {}
+    node_names: List[str]
+    nodes: Dict[str, Node]
     """Base class for components. Subclasses implement step(dt_s, nodes)."""
     def __init__(self, name: str, nodes: List[str]):
         self.name = name
-        self.nodes = nodes
+        self.node_names = nodes
         self.time = 0.0
         self.time_id = 0
 

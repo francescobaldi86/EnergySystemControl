@@ -36,9 +36,9 @@ class HotWaterDemand(Demand):
             target_freq = f"{round(time_step/60)}T"
             self.data = resample_with_interpolation(self.raw_data, target_freq, sim_end, var_type="extensive")
 
-    def step(self, time_step: float, nodes: list, environmental_data: dict, action = None):
+    def step(self, time_step: float, environmental_data: dict, action = None):
         T_cold_water = environmental_data['Temperature cold water']
-        T_hot_water = nodes[self.thermal_node].T 
+        T_hot_water = self.nodes[self.thermal_node].T 
         temp = self.data[self.time_id] / time_step * 3600  # This calculates the required power in kW (note: time step is in [s], read value in [kWh], hence the 3600)
         if temp > 0.0:
             pass

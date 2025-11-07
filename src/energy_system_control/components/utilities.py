@@ -19,7 +19,7 @@ class GenericUtility(Utility):
             case 'bidirectional': 
                 self.power_min, self.power_max = -max_power, max_power
 
-    def step(self, time_step: float, nodes: list, environmental_data: dict, action):
+    def step(self, time_step: float, environmental_data: dict, action):
         # Assuming action is a value in kJ
         required_power = action / time_step
         if required_power > self.power_max:
@@ -37,9 +37,9 @@ class HeatSource(Utility):
         self.Qdot_out = Qdot_max
         self.efficiency = efficiency
 
-    def step(self, time_step: float, nodes: list, environmental_data: dict, action):
-        return {self.nodes[0]: self.Qdot_out * action * time_step, 
-                self.nodes[1]: -self.Qdot_out * action / self.efficiency * time_step}
+    def step(self, time_step: float, environmental_data: dict, action):
+        return {self.node_names[0]: self.Qdot_out * action * time_step, 
+                self.node_names[1]: -self.Qdot_out * action / self.efficiency * time_step}
     
 class HeatPumpConstantEfficiency(HeatSource):
     COP: float
@@ -47,8 +47,8 @@ class HeatPumpConstantEfficiency(HeatSource):
         super().__init__(name = name, thermal_node = thermal_node, source_node = electrical_node, Qdot_max = Qdot_max, efficiency = COP)
         self.COP = COP
 
-    def step(self, time_step: float, nodes: list, environmental_data: dict, action):
-        output = super().step(time_step, nodes, environmental_data, action)
+    def step(self, time_step: float, environmental_data: dict, action):
+        output = super().step(time_step, environmental_data, action)
         if action not in {0.0, 1.0}:
             raise OnOffComponent(f'The control input to the component {self.name} of type "HeatPumpConstantEfficiency" should be either 1 or 0. {action} was provided at time step {self.time}')
         return output
@@ -60,23 +60,23 @@ class BalancingUtility(Utility):
     def __init__(self, name: str, nodes: List[str]):
         super().__init__(name, nodes)
 
-    def step(self, time_step: float, nodes: list, environmental_data: dict, action):
+    def step(self, time_step: float, environmental_data: dict, action):
         output = {}
-        for node in self.nodes:
-            output[node] = -nodes[node].delta
+        for node_name, node in self.nodes.items():
+            output[node_name] = -node.delta
         return output
     
 class ColdWaterGrid(BalancingUtility):
     # This is a balancing note specifically for cold water. It balances both a thermal and a mass noed
-    def step(self, time_step: float, nodes: list, environmental_data: dict, action):
+    def step(self, time_step: float, environmental_data: dict, action):
         output = {}
-        for node in self.nodes:
-            if isinstance(nodes[node], MassNode):
-                mass_node_name = node
-            elif isinstance(nodes[node], ThermalNode):
-                thermal_node_name = node
-        output[mass_node_name] = -nodes[mass_node_name].delta
-        output[thermal_node_name] = -nodes[mass_node_name].delta * 4.187 * environmental_data['Temperature cold water']  # Enthalpy content in kJ
+        for node_name, node in self.nodes.items():
+            if isinstance(node, MassNode):
+                mass_node_name = node_name
+            elif isinstance(node, ThermalNode):
+                thermal_node_name = node_name
+        output[mass_node_name] = -self.nodes[mass_node_name].delta
+        output[thermal_node_name] = -self.nodes[mass_node_name].delta * 4.187 * environmental_data['Temperature cold water']  # Enthalpy content in kJ
         return output
     
     
