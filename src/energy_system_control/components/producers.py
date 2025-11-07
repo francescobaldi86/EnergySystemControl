@@ -16,8 +16,8 @@ class ConstantPowerProducer(Producer):
         super().__init__(name, nodes)
         self.power = power
     
-    def step(self, time_step: float, nodes: dict | None = None, environmental_data: dict | None = None, action = None): 
-        return {key: self.power[key] for key in nodes}  # Output is in kJ, but time step is in s
+    def step(self, action = None): 
+        return {key: self.power[key] for key in self.nodes}  # Output is in kJ, but time step is in s
 
 class PVpanel(Producer):
     electrical_node: str
@@ -35,9 +35,9 @@ class PVpanel(Producer):
             target_freq = f"{round(time_step/60)}min"
             self.data = resample_with_interpolation(self.raw_data, target_freq, sim_end, var_type="intensive")
 
-    def step(self, time_step: float, environmental_data: dict | None = None, action = None):
+    def step(self, action = None):
         temp = self.data[self.time_id] * self.installed_power  # The raw data is expected in terms of capacity factor (that is, adimensional)
-        return {self.nodes[0]: temp * time_step}  # Output is in kJ, but time step is in s
+        return {self.node_names[0]: temp * self.time_step}  # Output is in kJ, but time step is in s
     
     def check_data(self):
         if self.raw_data.between(0, 1).sum() != len(self.raw_data):

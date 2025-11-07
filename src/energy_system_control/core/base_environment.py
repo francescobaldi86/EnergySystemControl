@@ -56,6 +56,10 @@ class Environment:
                 self.components_classified['Utility'].append(component)
             elif isinstance(component, StorageUnit):
                 self.components_classified['StorageUnit'].append(component)
+            component.attach(get_environmental_data=self.get_environmental_data)
+    
+    def get_environmental_data(self):
+        return self.environmental_data
 
     def load_nodes_to_components(self):
         # Assigns the field "nodes" to all components
@@ -137,7 +141,7 @@ class Environment:
             self.control_actions.update(actions)
 
     def take_component_step(self, component, action):
-        contribs = component.step(self.time_step, self.environmental_data, action)
+        contribs = component.step(action)
         # Update node delta
         for node_name, dd in contribs.items():
             if isinstance(self.nodes[node_name], DynamicNode):
@@ -153,6 +157,8 @@ class Environment:
         self.time_step = time_step * 3600  # Time step is stored in seconds
         # Read environmental data
         self.environmental_data = {}
+        # Set the time step for all components once for all
+        self.set_components_time_step()
         # Data collection
         self.history = {n: [] for n in self.dynamic_nodes.keys()}
         self.comp_history = {c_name: {n: [] for n in c.nodes} for c_name, c in self.components.items()}
@@ -173,6 +179,8 @@ class Environment:
         df_comps = pd.concat(
             {comp: pd.DataFrame(nodes, index=pd.Index(self.time_vector / 3600, name='time_s')) for comp, nodes in self.comp_history.items()},
             axis=1)
-        
-
         return df_nodes, df_comps
+    
+    def set_components_time_step(self):
+        for _, component in self.components.items():
+            component.time_step = self.time_step

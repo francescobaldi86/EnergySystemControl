@@ -13,7 +13,7 @@ class StorageUnit(Component):
         super().__init__(name, nodes)
         self.max_capacity = max_capacity
 
-    def step(self, time_step: float, environmental_data: dict, action):
+    def step(self, action):
         # Storage doesn't actively add Q (unless charged/discharged), but could implement losses
         return {n: 0.0 for n in self.nodes}
     
@@ -114,9 +114,9 @@ class Battery(StorageUnit):
     def verify_connected_components(self):
         raise(NotImplementedError)
     
-    def step(self, time_step: float, environmental_data: dict, action):
+    def step(self, action):
         # Just considering charging/discharging losses
         if self.nodes[self.node_names[0]].delta > 0: 
-            return {self.nodes[0]: -self.nodes[self.node_names[0]].delta * (1 - self.efficiency_charge)}
+            return {self.node_names[0]: -self.nodes[self.node_names[0]].delta * (1 - self.efficiency_charge)}
         else:
-            return {self.nodes[0]: self.nodes[self.node_names[0]].delta * (1 - self.efficiency_discharge)}
+            return {self.node_names[0]: self.nodes[self.node_names[0]].delta * (1 - self.efficiency_discharge)}

@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Callable, Any
 from collections import defaultdict
 
 class Node:
@@ -15,6 +15,8 @@ class Component:
     name: str
     time: float
     time_id: int
+    time_step: float
+    # environment: esc.Environment
     registry = {}
     node_names: List[str]
     nodes: Dict[str, Node]
@@ -29,10 +31,5 @@ class Component:
         super().__init_subclass__(**kwargs)
         Component.registry[cls.__name__] = cls
 
-    def step(self, time, time_step) -> Dict[str, float]:
-        """
-        Perform one time step.
-        Returns a dict node_name -> heat_added_in_J (positive adds energy to node).
-        """
-        self.time = time
-        self.time_step = time_step
+    def attach(self, *, get_environmental_data: Callable[[str, Any], None]):
+        self._environmental_data = get_environmental_data

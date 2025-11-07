@@ -36,10 +36,10 @@ class HotWaterDemand(Demand):
             target_freq = f"{round(time_step/60)}T"
             self.data = resample_with_interpolation(self.raw_data, target_freq, sim_end, var_type="extensive")
 
-    def step(self, time_step: float, environmental_data: dict, action = None):
-        T_cold_water = environmental_data['Temperature cold water']
+    def step(self, action = None):
+        T_cold_water = self._environmental_data()['Temperature cold water']
         T_hot_water = self.nodes[self.thermal_node].T 
-        temp = self.data[self.time_id] / time_step * 3600  # This calculates the required power in kW (note: time step is in [s], read value in [kWh], hence the 3600)
+        temp = self.data[self.time_id] / self.time_step * 3600  # This calculates the required power in kW (note: time step is in [s], read value in [kWh], hence the 3600)
         if temp > 0.0:
             pass
         mdot_dhw_th = temp / 4.187 / (313.25 - T_cold_water)  # Theroetical hot water mass flow, in kg/s
@@ -48,7 +48,7 @@ class HotWaterDemand(Demand):
         else:
             mdot = mdot_dhw_th
         Qdot = mdot * 4.187 * T_hot_water  # Enthalpy flow output, in kW
-        return {self.thermal_node: -Qdot * time_step, self.mass_node: -mdot * time_step}  # output in {kJ, kg} 
+        return {self.thermal_node: -Qdot * self.time_step, self.mass_node: -mdot * self.time_step}  # output in {kJ, kg} 
 
 
 class IEAHotWaterDemand(HotWaterDemand):
