@@ -106,16 +106,17 @@ class Battery(StorageUnit):
         return nodes
     
     def check_storage_state(self):
-        if self.nodes[self.node_names[0]].state_variable > self.max_capacity[self.nodes[0]] * self.SOC_max:
-            warnings.warn(f'Storage unit {self.name} has storage level higher than maximum allowed at time step {self.time}. Observed SOC is {self.nodes[self.node_names[0]].state_variable/self.max_capacity[self.node_names[0]]} while max value is {self.SOC_max}')
-        elif self.nodes[self.node_names[0]].state_variable < self.max_capacity[self.nodes[0]] * self.SOC_min:
-            warnings.warn(f'Storage unit {self.name} has storage level higher than maximum allowed at time step {self.time}. Observed SOC is {self.nodes[self.node_names[0]].state_variable/self.max_capacity[self.node_names[0]]} while min value is {self.SOC_min}')
+        if self.SOC > self.SOC_max:
+            warnings.warn(f'Storage unit {self.name} has storage level higher than maximum allowed at time step {self.time}. Observed SOC is {self.SOC} while max value is {self.SOC_max}', UserWarning)
+        elif self.SOC < self.SOC_min:
+            warnings.warn(f'Storage unit {self.name} has storage level lower than minimum allowed at time step {self.time}. Observed SOC is {self.SOC} while min value is {self.SOC_min}', UserWarning)
     
     def verify_connected_components(self):
         raise(NotImplementedError)
     
     def step(self, action):
         # Just considering charging/discharging losses
+        self.check_storage_state()
         if self.nodes[self.node_names[0]].delta > 0: 
             return {self.node_names[0]: -self.nodes[self.node_names[0]].delta * (1 - self.efficiency_charge)}
         else:

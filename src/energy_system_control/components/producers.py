@@ -17,7 +17,7 @@ class ConstantPowerProducer(Producer):
         self.power = power
     
     def step(self, action = None): 
-        return {key: self.power[key] for key in self.nodes}  # Output is in kJ, but time step is in s
+        return {key: self.power[key] * self.time_step for key in self.nodes}  # Output is in kJ, but time step is in s
 
 class PVpanel(Producer):
     electrical_node: str

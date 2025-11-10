@@ -3,11 +3,20 @@ from energy_system_control.helpers import *
 import os, yaml
 import numpy as np
 from importlib.resources import files
+from typing import List, Dict
 
 
 class Demand(Component):
     def __init__(self, name: str, connections: list):
         super().__init__(name, connections)
+
+class ConstantPowerDemand(Demand):
+    def __init__(self, name: str, nodes: List[str], power: Dict[str, float]):
+        super().__init__(name, nodes)
+        self.power = power  # Since it is a demand, the power is always negative
+    
+    def step(self, action = None): 
+        return {key: -abs(self.power[key]) * self.time_step for key in self.nodes}  # Output is in kJ, but time step is in s. NOTE: since this is a demand, power is always negative
 
 
 class ThermalLoss(Demand):
