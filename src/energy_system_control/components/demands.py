@@ -10,6 +10,7 @@ class Demand(Component):
     def __init__(self, name: str, connections: list):
         super().__init__(name, connections)
 
+
 class ConstantPowerDemand(Demand):
     def __init__(self, name: str, nodes: List[str], power: Dict[str, float]):
         super().__init__(name, nodes)
@@ -29,7 +30,8 @@ class ThermalLoss(Demand):
         T_node = self.connections.T
         Q_W = -self.U * (T_node - self.T_amb)  # negative if node hotter than ambient
         return {self.node: Q_W * dt_s}
-    
+
+
 class HotWaterDemand(Demand):
     thermal_node: str
     mass_node: str
@@ -42,7 +44,7 @@ class HotWaterDemand(Demand):
     def resample_data(self, time_step: float, sim_end: float):
         # Resamples the raw data to the format required 
         if hasattr(self, 'raw_data'):
-            target_freq = f"{round(time_step/60)}T"
+            target_freq = f"{round(time_step/60)}min"
             self.data = resample_with_interpolation(self.raw_data, target_freq, sim_end, var_type="extensive")
 
     def step(self, action = None):

@@ -1,23 +1,6 @@
 from energy_system_control.helpers import *
 from typing import List, Dict
-
-class Controller():
-    name: str
-    time: float
-    time_id: int
-    control_components: list
-    sensors: list
-    obs: dict
-    def __init__(self, name, controlled_components: List[str], sensors: Dict[str, str]):
-        self.name = name
-        self.controlled_components = controlled_components
-        self.sensors = sensors
-
-    def get_obs(self, environment):
-        self.obs = {var: environment.sensors[sensor_name].get_measurement(environment) for var, sensor_name in self.sensors.items()}
-
-    def get_action(self):
-        return None
+from energy_system_control.core.base_classes import Controller
     
 
 class HeaterControllerWithBandwidth(Controller):
@@ -34,11 +17,11 @@ class HeaterControllerWithBandwidth(Controller):
         temperature = self.obs["Storage temperature"]
         action = {}
         if temperature <= self.temperature_comfort:
-            action[self.controlled_components[0]] = 1
+            action[self.controlled_component_names[0]] = 1
         elif temperature <= self.temperature_comfort + self.temperature_bandwidth:
             action = self.previous_action
         else: 
-            action[self.controlled_components[0]] = 0
+            action[self.controlled_component_names[0]] = 0
         self.previous_action = action
         return action
 
@@ -50,15 +33,14 @@ class Inverter(Controller):
         self.SOC_max = SOC_max
 
     def get_action(self):
-        # In the case of the inverter, the action is the energy required to the grid
-        if self.obs['balance'] >= 0:
-            if self.obs['SOC'] >= self.SOC_max:
-                action = - self.obs['balance']
-            else:
-                action = 0
+        # In the case of the inverter, the action is the energy required to balance the controlled sensor node (normally the exchange with the grid)
+        # This involves two checks:
+        #   - Power check (the power should not be higher than what is allowed by the battery)
+        #   - Energy check (we should not be asking from the battery more energy then what is stored inside)
+        if self.obs['balance'] >= 0:  # If the node balance is positive, the inverter will try to charge the battery
+            energy_to_charge = min(self.controlled_components[self.controlled_component_names[0]].get_maximum_charge_power() * self.time_step, self.obs['balance'])  # First we limit based on battery power limits
+            action = min(self.controlled_components[self.controlled_component_names[0]].max_battery_capacity * (self.SOC_max - self.controlled_components[self.controlled_component_names[0]].SOC), energy_to_charge)  # Then we limit based on the available energy
         else:
-            if self.obs['SOC'] <= self.SOC_min:
-                action = -self.obs['balance']
-            else:
-                action = 0
-        return {self.controlled_components[0]: action}
+            energy_to_discharge = min(self.controlled_components[self.controlled_component_names[0]].get_maximum_discharge_power() * self.time_step, -self.obs['balance'])  # First we limit based on battery power limits
+            action = -min(self.controlled_components[self.controlled_component_names[0]].max_battery_capacity * (self.controlled_components[self.controlled_component_names[0]].SOC - self.SOC_min), energy_to_discharge)  # Then we limit based on the available energy
+        return {self.controlled_component_names[0]: action}

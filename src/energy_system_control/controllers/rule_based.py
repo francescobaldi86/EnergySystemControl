@@ -1,4 +1,4 @@
-from energy_system_control import Controller
+from energy_system_control.core.base_classes import Controller
 from energy_system_control.helpers import *
 
 class HeatPumpRuleBasedController(Controller):

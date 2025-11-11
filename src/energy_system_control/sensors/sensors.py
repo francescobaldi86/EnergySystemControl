@@ -1,13 +1,4 @@
-
-
-
-class Sensor():
-    def __init__(self, name):
-        self.name = name
-
-    def get_measurement(self, environment):
-        raise(NotImplementedError)
-    
+from energy_system_control.core.base_classes import Sensor
 
 class TemperatureSensor(Sensor):
     def __init__(self, name, node_name):

@@ -14,9 +14,9 @@ def test_1():
         "electric_grid": esc.BalancingUtility(name = 'electric_grid', nodes = ['contatore']),
         "water_grid": esc.ColdWaterGrid(name = 'water_grid', nodes = ['hot_water_storage_mass_node', 'hot_water_storage_thermal_node'])
     }
-    controllers = [
-        esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10)
-    ]
+    controllers = {
+        'heat_pump_controller': esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10)
+    }
     sensors = {
         'storage_tank_temperature_sensor': esc.TemperatureSensor('storage_tank_temperature_sensor', node_name = 'hot_water_storage_thermal_node')
     }
@@ -37,9 +37,9 @@ def test_2():
         "electric_grid": esc.BalancingUtility(name = 'electric_grid', nodes = ['contatore']),
         "water_grid": esc.ColdWaterGrid(name = 'water_grid', nodes = ['hot_water_storage_mass_node', 'hot_water_storage_thermal_node'])
     }
-    controllers = [
-        esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10)
-    ]
+    controllers = {
+        'heat_pump_controller': esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10)
+    }
     sensors = {
         'storage_tank_temperature_sensor': esc.TemperatureSensor('storage_tank_temperature_sensor', node_name = 'hot_water_storage_thermal_node')
     }
@@ -62,9 +62,9 @@ def test_3():
         "electric_grid": esc.BalancingUtility(name = 'electric_grid', nodes = ['contatore']),
         "water_grid":esc. ColdWaterGrid(name = 'water_grid', nodes = ['hot_water_storage_mass_node', 'hot_water_storage_thermal_node'])
     }
-    controllers = [
-        esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10)
-    ]
+    controllers = {
+        'heat_pump_controller': esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10)
+    }
     sensors = {
         'storage_tank_temperature_sensor': esc.TemperatureSensor('storage_tank_temperature_sensor', node_name = 'hot_water_storage_thermal_node')
     }
@@ -87,38 +87,39 @@ def test_3():
 
 def test_4():
     # Like test 3, but adding a battery with related controller
-    # Trying a more complex system, with PV panels 
+    # Trying a more complex system, with PV panels
+    nodes = {"inverter": esc.ElectricalNode("inverter")}
     components = {
         "demand_DHW": esc.IEAHotWaterDemand(name= "demand_DHW", thermal_node = "hot_water_storage_thermal_node", mass_node = "hot_water_storage_mass_node", reference_temperature = 40, profile_name='M'),
-        "heat_pump": esc.HeatPumpConstantEfficiency(name = 'heat_pump', thermal_node = "hot_water_storage_thermal_node", electrical_node = 'battery_electrical_node', Qdot_max = 1.5, COP = 3.2),
+        "heat_pump": esc.HeatPumpConstantEfficiency(name = 'heat_pump', thermal_node = "hot_water_storage_thermal_node", electrical_node = 'inverter', Qdot_max = 1.5, COP = 3.2),
         "hot_water_storage": esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45),
-        "pv_panels": esc.PVpanelFromPVGIS(name = 'pv_panels', electrical_node='battery_electrical_node', installed_power=3.0, latitude=44.511, longitude=11.335, tilt=30, azimuth=90),
-        "battery": esc.Battery(name = 'battery', capacity = 2.0, SOC_0 = 0.5),
-        "electric_grid": esc.GenericUtility(name = 'electric_grid', node= 'battery_electrical_node', max_power = 5, type = 'bidirectional'),
+        "pv_panels": esc.PVpanelFromPVGIS(name = 'pv_panels', electrical_node='inverter', installed_power=3.0, latitude=44.511, longitude=11.335, tilt=30, azimuth=90),
+        "battery": esc.LithiumIonBattery(name = 'battery', electrical_node='inverter', capacity = 2.0, SOC_0 = 0.5),
+        "electric_grid": esc.BalancingUtility(name = 'electric_grid', nodes = ['inverter']),
         "water_grid": esc.ColdWaterGrid(name = 'water_grid', nodes = ['hot_water_storage_mass_node', 'hot_water_storage_thermal_node'])
     }
-    controllers = [
-        esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10),
-        esc.Inverter('inverter', 'electric_grid', 'battery_SOC_sensor', 'grid_exchange_power_sensor')
-    ]
+    controllers = {
+        'heat_pump_controller': esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10),
+        'inverter': esc.Inverter('inverter', 'battery', 'battery_SOC_sensor', 'grid_exchange_power_sensor')
+    }
     sensors = {
         'storage_tank_temperature_sensor': esc.TemperatureSensor('storage_tank_temperature_sensor', node_name = 'hot_water_storage_thermal_node'),
         'battery_SOC_sensor': esc.SOCSensor('battery_SOC_sensor', 'battery', 'battery_electrical_node'),
-        'grid_exchange_power_sensor': esc.PowerBalanceSensor('grid_exchange_power_sensor', 'battery_electrical_node')
+        'grid_exchange_power_sensor': esc.PowerBalanceSensor('grid_exchange_power_sensor', 'inverter')
     }
 
-    env = esc.Environment(nodes={}, components=components, controllers = controllers, sensors = sensors)  # dt = 60 s
+    env = esc.Environment(nodes=nodes, components=components, controllers = controllers, sensors = sensors)  # dt = 60 s
     time_step = 0.5
     env.run(time_step = time_step, time_end = 24.0*7)  # simulate 6 hours
     df_nodes, df_comps = env.to_dataframe()
-    heat_pump_energy_demand = -df_comps[('heat_pump', 'battery_electrical_node')].sum() * time_step
+    heat_pump_energy_demand = -df_comps[('heat_pump', 'inverter')].sum() * time_step
     assert math.isclose(heat_pump_energy_demand, 13, abs_tol = 2)
-    electricity_from_pv = df_comps[('pv_panels', 'battery_electrical_node')].sum() * time_step
+    electricity_from_pv = df_comps[('pv_panels', 'inverter')].sum() * time_step
     assert math.isclose(electricity_from_pv, 27, abs_tol = 2)
-    electricity_demand = df_comps[('electric_grid', 'battery_electrical_node')].sum() * time_step
-    electricity_from_grid = df_comps.loc[df_comps[('electric_grid', 'battery_electrical_node')] > 0, ('electric_grid', 'battery_electrical_node')].sum() * time_step
-    electricity_to_grid = -df_comps.loc[df_comps[('electric_grid', 'battery_electrical_node')] < 0, ('electric_grid', 'battery_electrical_node')].sum() * time_step
-    assert math.isclose(electricity_demand, -13, abs_tol = 2)
+    electricity_demand = df_comps[('electric_grid', 'inverter')].sum() * time_step
+    electricity_from_grid = df_comps.loc[df_comps[('electric_grid', 'inverter')] > 0, ('electric_grid', 'inverter')].sum() * time_step
+    electricity_to_grid = -df_comps.loc[df_comps[('electric_grid', 'inverter')] < 0, ('electric_grid', 'inverter')].sum() * time_step
+    assert math.isclose(electricity_demand, -15, abs_tol = 2)
     assert math.isclose(electricity_from_grid, 0, abs_tol = 2)
-    assert math.isclose(electricity_to_grid, 13, abs_tol = 2)
+    assert math.isclose(electricity_to_grid, 15, abs_tol = 2)
     assert math.isclose(df_nodes.loc[10.0, 'hot_water_storage_thermal_node'], 325, abs_tol = 1)

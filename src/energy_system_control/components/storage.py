@@ -9,13 +9,13 @@ class StorageUnit(Component):
     state: dict
     max_capacity: dict
 
-    def __init__(self, name: str, nodes: List[str], max_capacity: dict):
+    def __init__(self, name: str, nodes: List[str], max_capacity: Dict[str, float]):
         super().__init__(name, nodes)
         self.max_capacity = max_capacity
 
     def step(self, action):
         # Storage doesn't actively add Q (unless charged/discharged), but could implement losses
-        return {n: 0.0 for n in self.nodes}
+        raise(NotImplementedError)
     
     def check_storage_state(self):
         # This function must be implemented for each sub type
@@ -50,13 +50,19 @@ class HotWaterStorage(StorageUnit):
         nodes[f'{self.name}_thermal_node'] = ThermalNode(name = f'{self.name}_thermal_node', inertia = self.tank_volume * 4.187, T_0 = self.T_0)
         nodes[f'{self.name}_mass_node'] = MassNode(name = f'{self.name}_mass_node', max_capacity=self.tank_volume, m_0 = self.tank_volume)
         return nodes
+    
+    def step(self, action):
+        output = {}
+        for node_name, node in self.nodes.items():
+            output[node_name] = 0.0
+        return output
         
 class Battery(StorageUnit):
     crate: float
     erate: float
     efficiency_charge: float
     efficiency_discharge: float
-    def __init__(self, name, capacity: float, electrical_node: str | None = None, crate: float = 1.0, erate: float = 1.0, efficiency_charge: float = 0.92, efficiency_discharge: float = 0.94, SOC_0: float = 0.5, SOC_max: float = 0.9, SOC_min: float = 0.3):
+    def __init__(self, name, capacity: float, electrical_node: str | None = None, crate: float = 1.0, erate: float = 1.0, efficiency_charge: float = 0.92, efficiency_discharge: float = 0.94, SOC_0: float = 0.5):
         """
         Model of a simple electric battery
 
@@ -78,21 +84,18 @@ class Battery(StorageUnit):
             Efficiency [-] of the discharging process of the battery. Defaults to 0.94 [REF]
         SOC_0 : float, optional
             Battery state of charge [-] at simulation start. Defaults to 0.5
-        SOC_max: float, optional
-            Maximum battery state of charge [-]. Defaults to 0.9
-        SOC_min: float, optional
-            Minimum battery state of charge [-]. Defaults to 0.3
         """
         self.crate = crate
         self.erate = erate
         self.efficiency_charge = efficiency_charge
         self.efficiency_discharge = efficiency_discharge
         self.SOC_0 = SOC_0
-        self.SOC_max = SOC_max
-        self.SOC_min = SOC_min
-        self.max_capacity = capacity * 3600  # Energy capacity, in kJ
-        self.electrical_node = electrical_node if electrical_node else f'{name}_electrical_node'
-        super().__init__(name, [self.electrical_node], {self.electrical_node: self.max_capacity})
+        self.max_battery_capacity = capacity * 3600  # Energy capacity, in kJ
+        self.max_charging_power = capacity * self.crate
+        self.max_discharging_power = capacity * self.erate
+        self.io_node_name = electrical_node
+        self.internal_node_name = f'{name}_electrical_node'
+        super().__init__(name, [self.internal_node_name, self.io_node_name], {self.internal_node_name: self.max_battery_capacity})
     
     @property
     def SOC(self): 
@@ -100,16 +103,15 @@ class Battery(StorageUnit):
 
     def create_storage_nodes(self):
         nodes = {}
-        if self.electrical_node == f'{self.name}_electrical_node':
-            nodes[f'{self.name}_electrical_node'] = ElectricalStorageNode(name = self.electrical_node, max_capacity = self.max_capacity[self.electrical_node], SOC_0 = self.SOC_0)
+        nodes[f'{self.name}_electrical_node'] = ElectricalStorageNode(name = self.internal_node_name, max_capacity = self.max_capacity[self.internal_node_name], SOC_0 = self.SOC_0)
         # self.verify_connected_components()
         return nodes
     
     def check_storage_state(self):
-        if self.SOC > self.SOC_max:
-            warnings.warn(f'Storage unit {self.name} has storage level higher than maximum allowed at time step {self.time}. Observed SOC is {self.SOC} while max value is {self.SOC_max}', UserWarning)
-        elif self.SOC < self.SOC_min:
-            warnings.warn(f'Storage unit {self.name} has storage level lower than minimum allowed at time step {self.time}. Observed SOC is {self.SOC} while min value is {self.SOC_min}', UserWarning)
+        if self.SOC > 1.0:
+            warnings.warn(f'Storage unit {self.name} has storage level higher than maximum allowed at time step {self.time}. Observed SOC is {self.SOC} while max value is 1.0', UserWarning)
+        elif self.SOC < 0.0:
+            warnings.warn(f'Storage unit {self.name} has storage level lower than minimum allowed at time step {self.time}. Observed SOC is {self.SOC} while min value is 0.0', UserWarning)
     
     def verify_connected_components(self):
         raise(NotImplementedError)
@@ -117,7 +119,38 @@ class Battery(StorageUnit):
     def step(self, action):
         # Just considering charging/discharging losses
         self.check_storage_state()
-        if self.nodes[self.node_names[0]].delta > 0: 
-            return {self.node_names[0]: -self.nodes[self.node_names[0]].delta * (1 - self.efficiency_charge)}
+        if action > 0: 
+            return {self.internal_node_name: action * self.efficiency_charge,
+                    self.io_node_name: -action}
         else:
-            return {self.node_names[0]: self.nodes[self.node_names[0]].delta * (1 - self.efficiency_discharge)}
+            return {self.internal_node_name: action * self.efficiency_discharge,
+                    self.io_node_name: -action}
+        
+    def get_maximum_charge_power(self):
+        raise NotImplementedError
+    
+    def get_maximum_discharge_power(self):
+        raise NotImplementedError
+    
+
+class LithiumIonBattery(Battery):
+    SOC_min: float
+    SOC_max: float
+    def __init__(self, name, capacity: float, electrical_node: str | None = None, crate: float = 1.0, erate: float = 1.0, efficiency_charge: float = 0.92, efficiency_discharge: float = 0.94, SOC_0: float = 0.5, SOC_min: float = 0.3, SOC_max: float = 0.9):
+        super().__init__(name, capacity, electrical_node, crate, erate, efficiency_charge, efficiency_discharge, SOC_0)
+        self.SOC_min = SOC_min
+        self.SOC_max = SOC_max
+
+    def get_maximum_charge_power(self):
+        # In a lithium-ion battery, we assume that the maximum charging power is constant between SOC_min and SOC_max, and then decreases linearly to zero between SOC_max and 1.0
+        if self.SOC < self.SOC_max:
+            return self.max_charging_power
+        else:
+            return self.max_charging_power * (1.0 - self.SOC) / (1.0 - self.SOC_max)
+    
+    def get_maximum_discharge_power(self):
+        # In a lithium-ion battery, we assume that the maximum discharging power is constant between SOC_min and SOC_max, and then decreases linearly to zero between SOC_min and 0.0
+        if self.SOC > self.SOC_min:
+            return self.max_discharging_power
+        else:
+            return self.max_discharging_power * self.SOC / self.SOC_min

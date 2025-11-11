@@ -14,19 +14,20 @@ from energy_system_control.helpers import *
 
 
 class Environment:
-    def __init__(self, nodes: Dict[str, Node] = {}, components: Dict[str, Component] = {}, controllers: List[Controller] = [], sensors: Dict[str, Sensor] = {}):
+    def __init__(self, nodes: Dict[str, Node] = {}, components: Dict[str, Component] = {}, controllers: Dict[str, Controller] = {}, sensors: Dict[str, Sensor] = {}):
         self.nodes = nodes
         self.balance_nodes = {}
         self.dynamic_nodes = {}
         self.components = components
         self.components_classified = defaultdict(list)
-        self.controllers: List[Controller] = controllers
+        self.controllers: Dict[str, Controller] = controllers
         self.sensors: Dict[str, Sensor] = sensors
         # Ordering data
         self.classify_components()
         self.create_storage_nodes()
         self.classify_nodes()
         self.load_nodes_to_components()
+        self.load_components_and_sensors_to_controllers()
 
     def add_component(self, component_name, component_type, **kwargs):
         if component_type not in Component.registry:
@@ -67,6 +68,11 @@ class Environment:
             component.nodes = {}
             for node in component.node_names:
                 component.nodes[node] = self.nodes[node]
+
+    def load_components_and_sensors_to_controllers(self):
+        for name, controller in self.controllers.items():
+            controller.load_controlled_components(self.components)
+            controller.load_sensors(self.sensors)
 
     def create_storage_nodes(self):
         for component in self.components_classified['StorageUnit']:
@@ -110,6 +116,8 @@ class Environment:
         for name, node in self.balance_nodes.items():
             if node.check_balance() == False:
                 raise(NodeImbalanceError, f'Node imbalance error for node {name} at time step {self.time:.2f}')
+        for name, node in self.nodes.items():
+            node.reset_flow_data()
 
     def update_environmental_data(self):
         self.environmental_data = {
@@ -127,7 +135,7 @@ class Environment:
                 self.components_to_simulate.remove(component.name)
 
     def get_controller_actions(self):
-        for controller in self.controllers:
+        for _, controller in self.controllers.items():
             controller.time = self.time
             controller.time_id = self.time_id
             controller.get_obs(self)
@@ -184,3 +192,5 @@ class Environment:
     def set_components_time_step(self):
         for _, component in self.components.items():
             component.time_step = self.time_step
+        for _, controller in self.controllers.items():
+            controller.time_step = self.time_step
