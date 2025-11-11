@@ -14,14 +14,14 @@ from energy_system_control.helpers import *
 
 
 class Environment:
-    def __init__(self, nodes: Dict[str, Node] = {}, components: Dict[str, Component] = {}, controllers: Dict[str, Controller] = {}, sensors: Dict[str, Sensor] = {}):
-        self.nodes = nodes
+    def __init__(self, nodes: List[Node] = [], components: List[Component] = [], controllers: List[Controller] = [], sensors: List[Sensor] = []):
+        self.nodes: Dict[str, Node] = {node.name: node for node in nodes}
         self.balance_nodes = {}
         self.dynamic_nodes = {}
-        self.components = components
+        self.components: Dict[str, Component] = {component.name: component for component in components}
         self.components_classified = defaultdict(list)
-        self.controllers: Dict[str, Controller] = controllers
-        self.sensors: Dict[str, Sensor] = sensors
+        self.controllers: Dict[str, Controller] = {controller.name: controller for controller in controllers}
+        self.sensors: Dict[str, Sensor] = {sensor.name: sensor for sensor in sensors}
         # Ordering data
         self.classify_components()
         self.create_storage_nodes()
