@@ -13,11 +13,12 @@ def test_panel_with_custom_data():
         raw_data=raw_data
     )
     # Resampling the data to the required time step
-    pv.resample_data(time_step = 0.25*3600, sim_end = 24*3600)
+    pv.time_step = 0.25 * 3600
+    pv.resample_data(pv.time_step, sim_end = 24*3600)
     # Checking input
     assert pv.data[0] == 0.12
     # Testing taking step
-    test_step = pv.step(0.25*3600)
+    test_step = pv.step()
     assert test_step['test_PV_node'] == 0.25 * 3600 * 0.12 * 2  # Energy generated during the time step in kJ. time_step[h] * hours_to_seconds[s/h] * capacity_factor[-] * installed_power[kW] 
     # Testing the check data function
     pv.check_data()
@@ -35,11 +36,12 @@ def test_panel_from_PVGIS():
         azimuth = 45
     )
     # Resampling the data to the required time step
-    pv.resample_data(time_step = 0.25*3600, sim_end = 24*3600)
+    pv.time_step = 0.25 * 3600
+    pv.resample_data(time_step = pv.time_step, sim_end = 24*3600)
     # Checking input
     assert isclose(pv.data[50], 0.223, abs_tol=0.01)
     # Testing taking step
-    test_step = pv.step(0.25)
+    test_step = pv.step()
     assert test_step['test_PV_node'] == 0.0
     # Testing the check data function
     pv.check_data()

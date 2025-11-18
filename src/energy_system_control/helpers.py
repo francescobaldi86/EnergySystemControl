@@ -1,8 +1,6 @@
 import pandas as pd
 import numpy as np
 
-import pandas as pd
-
 def resample_with_interpolation(df, target_freq, sim_end: float | None = None, var_type: str = 'extensive'):
     """
     Resample a time series DataFrame to a new frequency, 
@@ -64,7 +62,7 @@ def resample_with_interpolation(df, target_freq, sim_end: float | None = None, v
             case 'extensive':
                 output = df.resample(target_freq).ffill()
                 output = output * (target_step / original_step)
-                return output
+                return output.values
             case 'intensive':
                 output = df.reindex(pd.date_range(df.index[0], df.index[-1], freq = target_freq, tz=df.index.tz))
                 return output.interpolate(method='time').values
@@ -80,4 +78,7 @@ class NodeImbalanceError(Exception):
     pass
 
 class StorageError(Exception):
+    pass
+
+class OnOffComponentError(BaseException):
     pass

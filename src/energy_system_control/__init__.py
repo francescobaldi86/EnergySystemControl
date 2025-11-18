@@ -4,7 +4,8 @@ from .core.nodes import ThermalNode, ElectricalNode, MassNode, ElectricalStorage
 from .components.producers import PVpanel, PVpanelFromData, PVpanelFromPVGIS, ConstantPowerProducer
 from .components.storage import HotWaterStorage, LithiumIonBattery
 from .components.demands import HotWaterDemand, ThermalLoss, IEAHotWaterDemand, CustomProfileHotWaterDemand, ConstantPowerDemand
-from .components.utilities import HeatSource, HeatPumpConstantEfficiency, BalancingUtility, ColdWaterGrid, GenericUtility
+from .components.utilities import HeatSource, BalancingUtility, ColdWaterGrid, GenericUtility
+from .components.heat_pumps import HeatPumpConstantEfficiency, HeatPumpLorentzEfficiency
 from .controllers.base import HeaterControllerWithBandwidth, Inverter
 from .controllers.rule_based import HeatPumpRuleBasedController
 from .sensors.sensors import Sensor, PowerBalanceSensor, PowerSensor, TemperatureSensor, SOCSensor
@@ -15,7 +16,8 @@ __all__ = [
     "PVpanel", "PVpanelFromData", "PVpanelFromPVGIS", "ConstantPowerProducer",
     "HotWaterStorage", "LithiumIonBattery",
     "HotWaterDemand", "ThermalLoss", "IEAHotWaterDemand", "CustomProfileHotWaterDemand", "ConstantPowerDemand",
-    "HeatSource", "HeatPumpConstantEfficiency", "BalancingUtility", "ColdWaterGrid", "GenericUtility",
+    "HeatSource", "BalancingUtility", "ColdWaterGrid", "GenericUtility",
+    "HeatPumpLorentzEfficiency", "HeatPumpConstantEfficiency",
     "HeaterControllerWithBandwidth", "Inverter",
     "HeatPumpRuleBasedController", 
     "Sensor", "PowerBalanceSensor", "PowerSensor", "TemperatureSensor", "SOCSensor",
