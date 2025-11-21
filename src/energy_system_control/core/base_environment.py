@@ -152,11 +152,7 @@ class Environment:
         contribs = component.step(action)
         # Update node delta
         for node_name, dd in contribs.items():
-            if isinstance(self.nodes[node_name], DynamicNode):
-                self.nodes[node_name].delta += dd / self.nodes[node_name].inertia
-            elif isinstance(self.nodes[node_name], BalanceNode):
-                self.nodes[node_name].delta += dd
-            self.nodes[node_name].flow[component.name] = dd
+            self.nodes[node_name].update(dd, component.name)
         # Update component history
         for node in component.nodes:
             self.comp_history[component.name][node].append(contribs[node] / self.time_step)  # Energy flows are saved in kW. Mass flows in kg/s      

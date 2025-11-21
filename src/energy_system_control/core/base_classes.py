@@ -2,10 +2,16 @@ from typing import Dict, List, Callable, Any
 from collections import defaultdict
 
 class Node:
+    name: str
+    time: float
+    time_id: int
+    flow: dict
+    delta: float
     def __init__(self, name):
         self.name = name
         self.time = 0.0
         self.time_id = 0
+        self.delta = 0.0
         self.flow = defaultdict(lambda: 0)
 
     def balance(self, flows):

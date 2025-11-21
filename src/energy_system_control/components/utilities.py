@@ -72,7 +72,7 @@ class SimplifiedHeatSource(HeatSource):
         efficiency : float
             Efficiency [-] of the unit
         """
-        super().__init__(self, name = name, thermal_node = thermal_node, source_node = source_node)
+        super().__init__(name = name, thermal_node = thermal_node, source_node = source_node)
         self.Qdot_out = Qdot_max
         self.efficiency = efficiency
 

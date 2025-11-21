@@ -9,14 +9,18 @@ class DynamicNode(Node):
         self.state_variable = starting_state
         self.inertia = inertia
 
-    def update(self, inflows, outflows, dt):
-        net_flow = sum(inflows) - sum(outflows)
-        self.state_variable += (net_flow / self.inertia) * dt
+    def update(self, dd, component_name):
+        self.delta += dd / self.inertia
+        self.flow[component_name] = dd
 
 
 class BalanceNode(Node):
     def __init__(self, name):
         super().__init__(name)
+
+    def update(self, dd, component_name):
+        self.delta += dd
+        self.flow[component_name] = dd
 
     def check_balance(self, tol=1e-6):
         return abs(self.delta) < tol
