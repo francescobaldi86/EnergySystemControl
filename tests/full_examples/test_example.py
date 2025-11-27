@@ -77,7 +77,7 @@ def test_3():
         esc.InverterController('inverter_controller', 'inverter', None)
     ]
     sensors = [
-        esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage')
+        esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
     ]
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
@@ -121,7 +121,9 @@ def test_4():
         esc.InverterController('inverter_controller', 'inverter', 'battery')
     ]
     sensors = [
-        esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage')
+        esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
+        esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
+        esc.SOCSensor('battery_SOC_sensor', 'battery')
     ]
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
@@ -138,13 +140,14 @@ def test_4():
     df_ports, df_controllers, df_sensors = env.to_dataframe()
     heat_pump_energy_demand = df_ports['heat_pump_electricity_input_port:electricity'].sum() / 3600
     df_ports.to_csv(os.path.join(__TEST__, 'PLAYGROUND', 'test_4_results_ports.csv'), sep = ";")
+    df_sensors.to_csv(os.path.join(__TEST__, 'PLAYGROUND', 'test_4_results_sensors.csv'), sep = ";")
     assert math.isclose(heat_pump_energy_demand, 13, abs_tol = 2)
     electricity_from_pv = df_ports['inverter_PV_input_port:electricity'].sum() / 3600
     assert math.isclose(electricity_from_pv, 27, abs_tol = 2)
     net_electricity_demand = -df_ports['electric_grid_electricity_port:electricity'].sum() /3600
     electricity_to_grid = df_ports.loc[df_ports['electric_grid_electricity_port:electricity'] > 0, 'electric_grid_electricity_port:electricity'].sum() / 3600
     electricity_from_grid = -df_ports.loc[df_ports['electric_grid_electricity_port:electricity'] < 0, 'electric_grid_electricity_port:electricity'].sum() / 3600
-    assert math.isclose(net_electricity_demand, -11, abs_tol = 2)
+    assert math.isclose(net_electricity_demand, -12, abs_tol = 2)
     assert math.isclose(electricity_from_grid, 2, abs_tol = 2)
     assert math.isclose(electricity_to_grid, 13, abs_tol = 2)
     assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 325, abs_tol = 1)

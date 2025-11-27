@@ -70,6 +70,7 @@ class HotWaterStorage(StorageUnit):
         self.T_0 = C2K(T_0)
         self.T_amb = C2K(T_amb)
         self.temperature = self.T_0
+        self.SOC = self.temperature_to_SOC(self.temperature)
         self.convection_coefficient_losses = convection_coefficient_losses
         self.located_inside = located_inside
         self.cold_water_input_port_name = f'{name}_cold_water_input_port'
@@ -92,7 +93,7 @@ class HotWaterStorage(StorageUnit):
         if heat_fluid != 0.0:
             pass
         self.temperature += (heat_input + heat_fluid + heat_losses) / (WATER.cp * self.volume * WATER.rho)
-        
+        self.SOC = self.temperature_to_SOC(self.temperature)
 
     def calculate_losses(self):
         ambient_temperature = self.T_amb if self.located_inside else self._environmental_data()['Temperature ambient']
@@ -102,6 +103,13 @@ class HotWaterStorage(StorageUnit):
     def set_inherited_fluid_port_values(self):
         self.ports[self.hot_water_output_port_name].T = self.temperature
         return self.hot_water_output_port_name, self.temperature
+    
+    def temperature_to_SOC(self, current_temperature):
+        try:
+            T_cold_water = self._environmental_data()['Temperature cold water']
+        except AttributeError:
+            T_cold_water = C2K(20)
+        return (current_temperature - T_cold_water) / (self.max_temperature - T_cold_water)
 
 
 
@@ -171,6 +179,7 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         """
         self.number_of_layers = number_of_layers
         self.T_layer = np.array([self.T_0 - 0.01 * x for x in range(self.number_of_layers)])
+        self.SOC = self.temperature_to_SOC(self.T_layer.mean())
         self.layer_mass = self.volume * WATER.rho / self.number_of_layers
         self.layer_height = self.height / self.number_of_layers
         self.surface_cross_section = math.pi * self.diameter**2 / 4
@@ -239,6 +248,7 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         C = self.create_C_vector()
         D = -(self.matrix_B * self.T_layer + C)
         self.T_layer = solve_banded((1, 1), self.matrix_A, D)
+        self.SOC = self.temperature_to_SOC(self.T_layer.mean())
         # In the end, the only value that needs updating is the input from the cold water grid
         self.ports[self.cold_water_input_port_name].flow['mass'] = self.water_mass_flow_t
         self.ports[self.cold_water_input_port_name].flow['heat'] = self.water_mass_flow_t * WATER.cp * self.ports[self.cold_water_input_port_name].T
@@ -361,7 +371,7 @@ class Battery(StorageUnit):
             self.SOC += self.ports[self.port_name].flow['electricity'] * self.efficiency_charge / self.max_capacity
         else:
             self.SOC += self.ports[self.port_name].flow['electricity'] / self.efficiency_discharge / self.max_capacity
-        self.SOC -= self.SOC * self.self_discharge_rate * self.max_capacity * self.time_step
+        self.SOC -= self.SOC * self.self_discharge_rate * self.max_capacity * self.time_step / 3600 # The self discharge is input in fraction of current capacity per hour
         
     def get_maximum_charge_power(self):
         return self.max_charging_power

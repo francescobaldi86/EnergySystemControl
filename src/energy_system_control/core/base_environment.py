@@ -126,6 +126,9 @@ class Environment:
         # Put to 0 the delta of the balance at each node
         for _, port in self.ports.items():
             port.reset_flow_data()
+        # Also erase all sensor measurements, to make sure that we do not get old values
+        for _, sensor in self.sensors.items():
+            sensor.current_measurement = None
         # Initialize control actions
         self.control_actions = defaultdict(lambda: None)
         self.components_to_simulate = [x for x in self.components.keys()]
@@ -203,6 +206,8 @@ class Environment:
         # We also create a registry for each sensor
         for sensor_name, sensor in self.sensors.items():
             col = self.signal_registry_sensors.col_index(sensor_name, "")
+            if not sensor.current_measurement:
+                sensor.get_measurement(self)  # This is needed in case no other component has used the sensor
             self.simulation_data.sensors[self.time_id, col] = sensor.current_measurement
 
     def to_dataframe(self):
