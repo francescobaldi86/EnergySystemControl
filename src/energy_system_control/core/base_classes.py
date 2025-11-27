@@ -26,7 +26,9 @@ class Sensor():
     current_measurement: float
     def __init__(self, name):
         self.name = name
-        self.current_measurement = None
 
     def get_measurement(self):
         return self.current_measurement
+    
+    def reset(self):
+        self.current_measurement = None

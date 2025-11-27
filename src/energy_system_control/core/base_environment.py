@@ -100,7 +100,7 @@ class Environment:
         # Read environmental data
         self.environmental_data = {}
         # Set the time step for all components once for all
-        self.set_components_time_step()
+        self.initialize_units()
         # Time
         self.time_start = time_start * 3600  # Time values are stored in seconds
         self.time_end = time_end * 3600  # Time values are stored in seconds
@@ -213,10 +213,13 @@ class Environment:
     def to_dataframe(self):
         return self.simulation_data.to_dataframe(self.time_vector, self.signal_registry_ports, self.signal_registry_controllers, self.signal_registry_sensors)
     
-    def set_components_time_step(self):
+    def initialize_units(self):
         for _, component in self.components.items():
             component.time_step = self.time_step
+            component.reset()
         for _, controller in self.controllers.items():
             controller.time_step = self.time_step
+            controller.reset()
         for _, sensor in self.sensors.items():
             sensor.time_step = self.time_step
+            sensor.reset()

@@ -24,6 +24,9 @@ class StorageUnit(Component):
     def check_storage_state(self):
         # This function must be implemented for each sub type
         raise(NotImplementedError)
+    
+    def reset(self):
+        self.SOC = self.SOC_0
             
         
 
@@ -69,8 +72,6 @@ class HotWaterStorage(StorageUnit):
         self.max_temperature = C2K(max_temperature)
         self.T_0 = C2K(T_0)
         self.T_amb = C2K(T_amb)
-        self.temperature = self.T_0
-        self.SOC = self.temperature_to_SOC(self.temperature)
         self.convection_coefficient_losses = convection_coefficient_losses
         self.located_inside = located_inside
         self.cold_water_input_port_name = f'{name}_cold_water_input_port'
@@ -90,10 +91,8 @@ class HotWaterStorage(StorageUnit):
         heat_losses = self.calculate_losses()
         heat_input = self.ports[self.main_heat_input_port_name].flow['heat'] + self.ports[self.aux_heat_input_port_name].flow['heat'] 
         heat_fluid = self.ports[self.hot_water_output_port_name].flow['heat'] + self.ports[self.cold_water_input_port_name].flow['heat']
-        if heat_fluid != 0.0:
-            pass
         self.temperature += (heat_input + heat_fluid + heat_losses) / (WATER.cp * self.volume * WATER.rho)
-        self.SOC = self.temperature_to_SOC(self.temperature)
+        self.SOC = self.temperature_to_SOC()
 
     def calculate_losses(self):
         ambient_temperature = self.T_amb if self.located_inside else self._environmental_data()['Temperature ambient']
@@ -104,13 +103,17 @@ class HotWaterStorage(StorageUnit):
         self.ports[self.hot_water_output_port_name].T = self.temperature
         return self.hot_water_output_port_name, self.temperature
     
-    def temperature_to_SOC(self, current_temperature):
+    def temperature_to_SOC(self):
         try:
             T_cold_water = self._environmental_data()['Temperature cold water']
-        except AttributeError:
+        except (AttributeError, KeyError):
             T_cold_water = C2K(20)
-        return (current_temperature - T_cold_water) / (self.max_temperature - T_cold_water)
+        return (self.temperature - T_cold_water) / (self.max_temperature - T_cold_water)
 
+    def reset(self):
+        self.temperature = self.T_0
+        self.SOC_0 = self.temperature_to_SOC()
+        super().reset()
 
 
 class MultiNodeHotWaterTank(HotWaterStorage):
@@ -178,8 +181,6 @@ class MultiNodeHotWaterTank(HotWaterStorage):
             Temperature [°C] used to calculate heat losses to the ambient from the tank if located_inside is True. Defaults to 22.0
         """
         self.number_of_layers = number_of_layers
-        self.T_layer = np.array([self.T_0 - 0.01 * x for x in range(self.number_of_layers)])
-        self.SOC = self.temperature_to_SOC(self.T_layer.mean())
         self.layer_mass = self.volume * WATER.rho / self.number_of_layers
         self.layer_height = self.height / self.number_of_layers
         self.surface_cross_section = math.pi * self.diameter**2 / 4
@@ -248,7 +249,8 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         C = self.create_C_vector()
         D = -(self.matrix_B * self.T_layer + C)
         self.T_layer = solve_banded((1, 1), self.matrix_A, D)
-        self.SOC = self.temperature_to_SOC(self.T_layer.mean())
+        self.temperature = self.T_layer.mean()
+        self.SOC = self.temperature_to_SOC()
         # In the end, the only value that needs updating is the input from the cold water grid
         self.ports[self.cold_water_input_port_name].flow['mass'] = self.water_mass_flow_t
         self.ports[self.cold_water_input_port_name].flow['heat'] = self.water_mass_flow_t * WATER.cp * self.ports[self.cold_water_input_port_name].T
@@ -307,6 +309,9 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         self.ports[self.hot_water_output_port_name].T = T_port
         return self.hot_water_output_port_name, T_port
         
+    def reset(self):
+        self.T_layer = self.T_layer = np.array([self.T_0 - 0.01 * x for x in range(self.number_of_layers)])
+        super().reset()
 
 
 class Battery(StorageUnit):
@@ -345,7 +350,7 @@ class Battery(StorageUnit):
         self.erate = erate
         self.efficiency_charge = efficiency_charge
         self.efficiency_discharge = efficiency_discharge
-        self.SOC = SOC_0
+        self.SOC_0 = SOC_0
         self.max_capacity = capacity * 3600  # Energy capacity, in kJ
         self.max_charging_power = capacity * self.crate
         self.max_discharging_power = capacity * self.erate

@@ -14,7 +14,8 @@ class FlowTemperatureSensor(Sensor):
 
 class PowerSensor(Sensor):
     port_name: str
-    def __init__(self, name, port_name):
+    flow_type: str
+    def __init__(self, name, port_name, flow_type):
         """
         Model of sensor that measures the power flow at a specific port
 
@@ -27,10 +28,17 @@ class PowerSensor(Sensor):
     """
         super().__init__(name)
         self.port_name = port_name
+        self.flow_type = flow_type
 
     def get_measurement(self, environment):
-        self.current_measurement = environment.ports[self.port_name].flow / environment.time_step
+        self.current_measurement = environment.ports[self.port_name].flow[self.flow_type] / environment.time_step
         return super().get_measurement()
+
+
+class ElectricPowerSensor(PowerSensor):
+    def __init__(self, name: str, port_name: str):
+        super().__init__(name, port_name, 'electricity')
+
 
     
 class SOCSensor(Sensor):

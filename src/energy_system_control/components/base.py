@@ -35,3 +35,6 @@ class Component:
 
     def set_inherited_fluid_port_values(self):
         return None, None
+    
+    def reset(self):
+        pass

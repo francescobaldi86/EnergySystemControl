@@ -42,6 +42,9 @@ class Controller():
 
     def get_action(self):
         return None
+    
+    def reset(self):
+        self.previous_action = {comp: 0 for comp in self.controlled_components}
 
 class HeaterControllerWithBandwidth(Controller):
     """
@@ -51,17 +54,18 @@ class HeaterControllerWithBandwidth(Controller):
         super().__init__(name, [controlled_component], {'Storage temperature': temperature_sensor})
         self.temperature_comfort = C2K(temperature_comfort)
         self.temperature_bandwidth = temperature_bandwidth
-        self.previous_action = {controlled_component: 0}
+        self.temperature_sensor_name = temperature_sensor
+        self.controlled_heater_name = controlled_component
 
     def get_action(self):
         temperature = self.obs["Storage temperature"]
         action = {}
         if temperature <= self.temperature_comfort:
-            action[self.controlled_component_names[0]] = 1
+            action[self.controlled_heater_name] = 1
         elif temperature <= self.temperature_comfort + self.temperature_bandwidth:
             action = self.previous_action
         else: 
-            action[self.controlled_component_names[0]] = 0
+            action[self.controlled_heater_name] = 0
         self.previous_action = action
         return action
 
@@ -73,7 +77,6 @@ class InverterController(Controller):
         self.battery_name = battery_name
         self.SOC_min = SOC_min
         self.SOC_max = SOC_max
-        self.previous_action = {inverter_name: 0, battery_name: None} if battery_name else {inverter_name: 0}
         if self.battery_name:
             super().__init__(name, [inverter_name, battery_name], {})
         else:
