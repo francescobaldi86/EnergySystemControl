@@ -28,7 +28,7 @@ def resample_with_interpolation(df, target_freq, sim_end: float | None = None, v
     # Check if repetition is needed
     if sim_end is not None:
         period = df.index[-1] - df.index[0] + (df.index[1] - df.index[0])
-        n_repeat = int(np.ceil((pd.to_timedelta(sim_end, 'h')) / period))
+        n_repeat = int(np.ceil((pd.to_timedelta(sim_end, 's')) / period))
         dfs = []
         for i in range(n_repeat):
             df_copy = df.copy()
@@ -36,7 +36,7 @@ def resample_with_interpolation(df, target_freq, sim_end: float | None = None, v
             dfs.append(df_copy)
         df = pd.concat(dfs)
         # Trim to exact simulation end
-        df = df[df.index <= df.index[0] + pd.to_timedelta(sim_end, 'h')]
+        df = df[df.index <= df.index[0] + pd.to_timedelta(sim_end, 's')]
     # Check original resolution
     original_freq = pd.infer_freq(df.index)
     if original_freq is None:
