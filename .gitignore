@@ -1,6 +1,6 @@
 settings.json
 
-Problems/
+tests/PLAYGROUND/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

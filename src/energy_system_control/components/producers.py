@@ -1,4 +1,4 @@
-from energy_system_control.core.base_classes import Component
+from energy_system_control.components.base import Component
 from energy_system_control.helpers import *
 from typing import List, Dict
 import os, yaml, csv, json, requests
@@ -7,25 +7,29 @@ import pandas as pd
 
 
 class Producer(Component):
-    def __init__(self, name: str, nodes: List[str]):
-        super().__init__(name, nodes)
+    port_name: str
+    production_type: str
+    def __init__(self, name: str, production_type: str):
+        self.production_type = production_type
+        self.port_name = f'{name}_{self.production_type}_port'
+        super().__init__(name, {self.port_name: self.production_type})
 
 
 class ConstantPowerProducer(Producer):
-    def __init__(self, name: str, nodes: List[str], power: Dict[str, float]):
-        super().__init__(name, nodes)
-        self.power = power
+    def __init__(self, name: str, production_type: str, power: float):
+        super().__init__(name, production_type)
+        self.power = power  # Since it is a demand, the power is always negative
     
     def step(self, action = None): 
-        return {key: self.power[key] * self.time_step for key in self.nodes}  # Output is in kJ, but time step is in s
+        self.ports[self.port_name].flow[self.production_type] = self.power * self.time_step
+
 
 class PVpanel(Producer):
-    electrical_node: str
     installed_power: float
     raw_data: pd.Series
     data: pd.Series
-    def __init__(self, name: str, electrical_node: str, installed_power: float, raw_data: pd.Series):
-        super().__init__(name, [electrical_node])
+    def __init__(self, name: str, installed_power: float, raw_data: pd.Series):
+        super().__init__(name, 'electricity')
         self.installed_power = installed_power
         self.raw_data = raw_data
 
@@ -36,21 +40,20 @@ class PVpanel(Producer):
             self.data = resample_with_interpolation(self.raw_data, target_freq, sim_end, var_type="intensive")
 
     def step(self, action = None):
-        temp = self.data[self.time_id] * self.installed_power  # The raw data is expected in terms of capacity factor (that is, adimensional)
-        return {self.node_names[0]: temp * self.time_step}  # Output is in kJ, but time step is in s
+        self.ports[self.port_name].flow['electricity'] = -self.data[self.time_id] * self.installed_power * self.time_step
     
     def check_data(self):
         if self.raw_data.between(0, 1).sum() != len(self.raw_data):
             raise ValueError(f'The data for the capacity factor of the PV {self.name} should be between 0 and 1. Please check it')
 
 class PVpanelFromData(PVpanel):
-    def __init__(self, name: str, electrical_node: str, installed_power: float, data_path: str, filename: str, datetime_format: str = '%Y%m%D:%H%M'):
+    def __init__(self, name: str, installed_power: float, data_path: str, filename: str, datetime_format: str = '%Y%m%D:%H%M'):
         raw_data = pd.read_csv(os.path.join(data_path, filename), sep = ";", decimal = '.', parse_dates = True)
-        super().__init__(name, electrical_node, installed_power, raw_data)
+        super().__init__(name, installed_power, raw_data)
         self.check_data()
 
 class PVpanelFromPVGIS(PVpanel):
-    def __init__(self, name: str, electrical_node: str, installed_power: float, latitude: float, longitude: float, tilt: float, azimuth: float, loss: float = 14, years: list[int] = [2023]):
+    def __init__(self, name: str, installed_power: float, latitude: float, longitude: float, tilt: float, azimuth: float, loss: float = 14, years: list[int] = [2023]):
         """
         Reads data from PVGIS for the selected location. 
 
@@ -75,7 +78,7 @@ class PVpanelFromPVGIS(PVpanel):
         self.azimuth = azimuth
         self.loss = loss
         self.years = years
-        super().__init__(name, electrical_node, installed_power, raw_data=self.pvgis_api_call())
+        super().__init__(name, installed_power, raw_data=self.pvgis_api_call())
         self.check_data()
 
     def pvgis_api_call(self):

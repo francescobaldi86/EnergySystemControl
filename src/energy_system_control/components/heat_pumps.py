@@ -3,8 +3,8 @@ from energy_system_control.helpers import OnOffComponentError
 
 
 class HeatPump(HeatSource):
-    def __init__(self, name: str, thermal_node: str, electrical_node: str, Qdot_max: float):
-        super().__init__(name = name, thermal_node = thermal_node, source_node = electrical_node)
+    def __init__(self, name: str, Qdot_max: float):
+        super().__init__(name = name, source_type='electricity')
         self.Qdot_out = Qdot_max
 
     @property
@@ -23,8 +23,8 @@ class HeatPump(HeatSource):
 
 class HeatPumpConstantEfficiency(HeatPump):
     COP_design: float
-    def __init__(self, name: str, thermal_node: str, electrical_node: str, Qdot_max: float, COP = 3):
-        super().__init__(name = name, thermal_node = thermal_node, electrical_node = electrical_node, Qdot_max = Qdot_max)
+    def __init__(self, name: str, Qdot_max: float, COP = 3):
+        super().__init__(name = name, Qdot_max = Qdot_max)
         self.COP_design = COP
 
     def get_efficiency(self):
@@ -40,7 +40,7 @@ class HeatPumpLorentzEfficiency(HeatPump):
     T_air_design: float
     T_water_design: float
     heat_capacity_loss: float
-    def __init__(self, name, thermal_node: str, electrical_node: str, Qdot_max: float | None = None, Wdot_design: float | None = None, COP_design: float | None = None, eta_lorentz: float | None = None, T_air_design: float = 7, T_water_design: float = 40, dT_air : float = 5.0, dT_water: float = 5.0, heat_capacity_loss: float = 0.0):
+    def __init__(self, name, Qdot_max: float | None = None, Wdot_design: float | None = None, COP_design: float | None = None, eta_lorentz: float | None = None, T_air_design: float = 7, T_water_design: float = 40, dT_air : float = 5.0, dT_water: float = 5.0, heat_capacity_loss: float = 0.0):
         """
         Model of heat pump based on a constant second-law efficiency. Example reference is Walden, Jasper VM, and Roger Padullés. "An analytical solution to optimal heat pump integration." Energy Conversion and Management 320 (2024): 118983.
         Note that the assumption is that of a constant heat output, while the power input varies with the COP
@@ -49,10 +49,6 @@ class HeatPumpLorentzEfficiency(HeatPump):
         ----------
         name : str
             Name of the component
-        thermal_node : str
-         	Name of the node for the thermal connection. Most times, it is the thermal node of the storage tank
-        electrical_node : str
-           	Name of the node for the electrical connection.
         Qdot_max : float, optional
             Design heat output [kW] of the heat pump
         Wdot_design : float, optional
@@ -72,7 +68,7 @@ class HeatPumpLorentzEfficiency(HeatPump):
         heat_capacity_loss: float, optional
             Fraction of the heating output lost for every additional K to the [T_condensation - T_evaporation] difference. Defaults to 0.0 (constant thermal power output)
         """
-        super().__init__(name = name, thermal_node = thermal_node, electrical_node = electrical_node, Qdot_max = Qdot_max)
+        super().__init__(name = name, Qdot_max = Qdot_max)
         self.dT_air = dT_air
         self.dT_water = dT_water
         self.heat_capacity_loss = heat_capacity_loss

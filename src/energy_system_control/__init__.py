@@ -1,24 +1,22 @@
 # Re-export a stable public API
 from .core.base_environment import Environment
-from .core.nodes import ThermalNode, ElectricalNode, MassNode, ElectricalStorageNode
 from .components.producers import PVpanel, PVpanelFromData, PVpanelFromPVGIS, ConstantPowerProducer
 from .components.storage import HotWaterStorage, LithiumIonBattery, MultiNodeHotWaterTank
-from .components.demands import HotWaterDemand, ThermalLoss, IEAHotWaterDemand, CustomProfileHotWaterDemand, ConstantPowerDemand
-from .components.utilities import SimplifiedHeatSource, BalancingUtility, ColdWaterGrid, GenericUtility
+from .components.demands import IEAHotWaterDemand, CustomProfileHotWaterDemand, ConstantPowerDemand
+from .components.utilities import SimplifiedHeatSource, BalancingUtility, GenericUtility, ColdWaterGrid, Inverter 
 from .components.heat_pumps import HeatPumpConstantEfficiency, HeatPumpLorentzEfficiency
-from .controllers.base import HeaterControllerWithBandwidth, Inverter
+from .controllers.base import HeaterControllerWithBandwidth, InverterController
 from .controllers.rule_based import HeatPumpRuleBasedController
-from .sensors.sensors import Sensor, PowerBalanceSensor, PowerSensor, TemperatureSensor, SOCSensor
+from .sensors.sensors import Sensor, PowerSensor, FlowTemperatureSensor, SOCSensor, TankTemperatureSensor
 
 __all__ = [
     "Environment",
-    "ThermalNode", "ElectricalNode", "MassNode",
     "PVpanel", "PVpanelFromData", "PVpanelFromPVGIS", "ConstantPowerProducer",
-    "HotWaterStorage", "LithiumIonBattery", "MultiNodeHotWaterTank"
+    "HotWaterStorage", "LithiumIonBattery", "MultiNodeHotWaterTank",
     "HotWaterDemand", "ThermalLoss", "IEAHotWaterDemand", "CustomProfileHotWaterDemand", "ConstantPowerDemand",
-    "SimplifiedHeatSource", "BalancingUtility", "ColdWaterGrid", "GenericUtility",
+    "SimplifiedHeatSource", "BalancingUtility", "ColdWaterGrid", "GenericUtility", "Inverter",
     "HeatPumpLorentzEfficiency", "HeatPumpConstantEfficiency",
-    "HeaterControllerWithBandwidth", "Inverter",
+    "HeaterControllerWithBandwidth", "InverterController",
     "HeatPumpRuleBasedController", 
-    "Sensor", "PowerBalanceSensor", "PowerSensor", "TemperatureSensor", "SOCSensor",
+    "Sensor", "FlowTemperatureSensor", "PowerSensor", "TankTemperatureSensor", "SOCSensor",
 ]
