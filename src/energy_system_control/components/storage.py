@@ -43,7 +43,15 @@ class HotWaterStorage(StorageUnit):
     temperature: float
     convection_coefficient_losses: float
 
-    def __init__(self, name, max_temperature: float, tank_volume: float, tank_height: float|None = None, T_0: float = 40.0, convection_coefficient_losses: float = 0.8, located_inside: bool = True, T_amb: float = 22):
+    def __init__(self, 
+                 name, 
+                 tank_volume: float, 
+                 tank_height: float|None = None,
+                 max_temperature: float = 80,
+                 T_0: float = 40.0, 
+                 convection_coefficient_losses: float = 0.8, 
+                 located_inside: bool = True, 
+                 T_amb: float = 22):
         """
         Simplified model of hot water storage tank, assuming perfect mixing.
         Has potentially two heat sources: main and auxiliary
@@ -103,6 +111,10 @@ class HotWaterStorage(StorageUnit):
         self.ports[self.hot_water_output_port_name].T = self.temperature
         return self.hot_water_output_port_name, self.temperature
     
+    def set_inherited_heat_port_values(self):
+        self.ports[self.main_heat_input_port_name].T = self.temperature
+        return self.main_heat_input_port_name, self.temperature
+    
     def temperature_to_SOC(self):
         try:
             T_cold_water = self._environmental_data()['Temperature cold water']
@@ -137,11 +149,13 @@ class MultiNodeHotWaterTank(HotWaterStorage):
                  name, 
                  tank_volume: float, 
                  tank_height: float | None = None, 
+                 max_temperature: float = 80,
                  height_cold_water_input: float | None = None,
                  height_hot_water_output: float | None = None,
                  height_main_heat_input: float | list | None = None,
                  height_aux_heat_input: float | list | None = None, 
-                 number_of_layers: int = 5, T_0: float = 40.0, 
+                 number_of_layers: int = 5, 
+                 T_0: float = 40.0, 
                  convection_effect_coefficient: float = 1_000, 
                  convection_coefficient_losses: float = 0.8, 
                  located_inside: bool = True, 
@@ -174,12 +188,20 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         convection_effect_coefficient: float, optional
             The factor [-] by which the heat exchange coefficient between layers is increased when convection is included (when the temperature is higher in the lower layer). Defaults to 10_000, from Leclercq et al. (2024)
         convection_coefficient_losses: float, optional
-            The convection coefficient [W/m2K] used to calculate losses to the ambient where the tank is located
+            The convection coefficient [W/m2K] used to calculate losses to the ambient where the tank is located. Defaults to 0.8
         located_inside: bool, optional
             Defines the location where the tank is placed. If True the heat losses are calculated assuming T_amb. If False, the outer air temperature is used. Defaults to True
         T_amb: float, optional
             Temperature [°C] used to calculate heat losses to the ambient from the tank if located_inside is True. Defaults to 22.0
         """
+        super().__init__(name, 
+                         tank_volume = tank_volume, 
+                         tank_height = tank_height, 
+                         max_temperature = max_temperature,
+                         T_0 = T_0, 
+                         convection_coefficient_losses = convection_coefficient_losses, 
+                         located_inside = located_inside, 
+                         T_amb = T_amb)
         self.number_of_layers = number_of_layers
         self.layer_mass = self.volume * WATER.rho / self.number_of_layers
         self.layer_height = self.height / self.number_of_layers
@@ -189,31 +211,23 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         self.surface_losses_layer_vec = np.ones(self.number_of_layers) * self.surface_lateral_layer
         self.surface_losses_layer_vec[0] += self.surface_cross_section
         self.surface_losses_layer_vec[self.number_of_layers-1] += self.surface_cross_section
-        self.relative_temperature_layers_state = np.zeros(self.number_of_layers-1)
-        self.internal_heat_exchange_coefficient = np.ones(self.number_of_layers-1) * WATER.k
         self.convection_effect_coefficient = convection_effect_coefficient
         self.convection_coefficient_losses = convection_coefficient_losses
         # Identifying layers for heat exchange with the ports
         self.cold_water_input_location = self.identify_layer_by_height(height = height_cold_water_input, default = self.number_of_layers-1)
         self.hot_water_output_location = self.identify_layer_by_height(height = height_hot_water_output, default = 0)
-        self.main_heating_source_location = self.identify_heat_input_layers(height_main_heat_input)
-        self.aux_heating_source_location = self.identify_heat_input_layers(height_aux_heat_input)
+        self.main_heating_source_location = self.identify_heat_input_layers(height_main_heat_input, default=self.number_of_layers-1)
+        self.aux_heating_source_location = self.identify_heat_input_layers(height_aux_heat_input, default=self.number_of_layers-1)
         self.matrix_B = None
         self.matrix_A = None
-        super().__init__(name, 
-                         tank_volume = tank_volume, 
-                         tank_heigh = tank_height, 
-                         T_0 = 40.0, 
-                         convection_coefficient_losses = convection_coefficient_losses, 
-                         located_inside = located_inside, 
-                         T_amb = T_amb)
     
     def identify_heat_input_layers(self, input_heights: float | list | None = None, default: int | None = None):
-        temp = np.zeros(self.number_of_layers)
+        vector_with_heat_input_layers = np.zeros(self.number_of_layers, dtype=np.float16)
         if not input_heights:
-            return np.array([default]) if default else np.array([0])
+            default = default if default else 0
+            vector_with_heat_input_layers[default] = 1
         elif isinstance(input_heights, (int, float)):
-            return np.array(self.identify_layer_by_height(height = input_heights, default = default))
+            vector_with_heat_input_layers[self.identify_layer_by_height(height = input_heights, default = default)] = 1
         elif isinstance(input_heights, list):
             if len(input_heights) != 2:
                 raise(IndexError, f'The length of the heat input heights of the hot water storage {self.name} should be provided either as a float or as a list with two elements')
@@ -222,18 +236,19 @@ class MultiNodeHotWaterTank(HotWaterStorage):
                     layer_start_height = self.height - (layer + 1) * self.layer_height
                     layer_end_height = self.height - layer * self.layer_height
                     if (layer_start_height >= input_heights[0]) and (layer_end_height <= input_heights[1]):
-                        temp[layer] = 1.0
+                        vector_with_heat_input_layers[layer] = 1.0
                     elif (layer_start_height < input_heights[0]) and (layer_end_height <= input_heights[1]):
-                        temp[layer] = (layer_end_height - input_heights[0]) / self.layer_height
+                        vector_with_heat_input_layers[layer] = (layer_end_height - input_heights[0]) / self.layer_height
                     elif (layer_start_height >= input_heights[0]) and (layer_end_height > input_heights[1]):
-                        temp[layer] = (input_heights[1] - layer_start_height) / self.layer_height
+                        vector_with_heat_input_layers[layer] = (input_heights[1] - layer_start_height) / self.layer_height
                     else:
-                        temp[layer] = 0
+                        vector_with_heat_input_layers[layer] = 0
+        return vector_with_heat_input_layers
 
     def identify_layer_by_height(self, height: float|int|None, default: int, output_type: str = 'vector'):
         layer_id = self.number_of_layers - height // self.layer_height - 1 if height else default
         if output_type == 'vector':
-            output = np.zeros(self.number_of_layers)
+            output = np.zeros(self.number_of_layers, dtype=np.int16)
             output[layer_id] = 1
             return output
         elif output_type == 'layer_id':
@@ -244,51 +259,49 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         change_in_water_mass_flow = not math.isclose(self.water_mass_flow_t, -self.ports[self.hot_water_output_port_name].flow['mass'] / self.time_step, abs_tol = 1e-4)
         self.water_mass_flow_t = -self.ports[self.hot_water_output_port_name].flow['mass'] / self.time_step
         self.update_A_matrix(change_in_water_mass_flow)
-        if not self.matrix:
-            self.matrix_B = np.array([-self.layer_mass * WATER.cp / self.time_step])
         C = self.create_C_vector()
         D = -(self.matrix_B * self.T_layer + C)
-        self.T_layer = solve_banded((1, 1), self.matrix_A, D)
+        self.T_layer = solve_banded((1, 1), self.matrix_A, D)  
         self.temperature = self.T_layer.mean()
         self.SOC = self.temperature_to_SOC()
         # In the end, the only value that needs updating is the input from the cold water grid
-        self.ports[self.cold_water_input_port_name].flow['mass'] = self.water_mass_flow_t
+        self.ports[self.cold_water_input_port_name].flow['mass'] = self.water_mass_flow_t * self.time_step
         self.ports[self.cold_water_input_port_name].flow['heat'] = self.water_mass_flow_t * WATER.cp * self.ports[self.cold_water_input_port_name].T
         return output
 
     def update_A_matrix(self, change_in_water_mass_flow):
         # First we check if the matrix need updating
-        relative_temperature_layers_state = np.zeros(self.number_of_layers + 1)
+        relative_temperature_layers_state = np.array([0] * (self.number_of_layers + 1), dtype=bool)
         relative_temperature_layers_state[1:-1] = self.T_layer[1:] > self.T_layer[:-1]
         # Compare the relative temperature layers state with the existing one. Only recalculate the internal heat exchange coefficient vector if changes happen
         if any(relative_temperature_layers_state != self.relative_temperature_layers_state) or change_in_water_mass_flow:
             self.relative_temperature_layers_state = relative_temperature_layers_state
             # First we update the vector of internal heat exchange coefficients
-            internal_heat_exchange_coefficient = np.ones(self.number_of_layers+1) * WATER.k
+            internal_heat_exchange_coefficient = np.ones(self.number_of_layers+1, dtype=np.float32) * WATER.k
             internal_heat_exchange_coefficient[0] = 0.0
             internal_heat_exchange_coefficient[self.number_of_layers] = 0.0
             internal_heat_exchange_coefficient[self.relative_temperature_layers_state] = WATER.k * self.convection_effect_coefficient
             # Calculating diagonals
-            alpha = - internal_heat_exchange_coefficient[1:-1] * self.surface_cross_section / self.layer_height
-            beta = -self.matrix_B + self.hot_water_output_location * self.water_mass_flow_t * WATER.cp + self.surface_cross_section / self.layer_height * (internal_heat_exchange_coefficient[1:]-internal_heat_exchange_coefficient[:-1]) + self.convection_coefficient_losses * self.surface_losses_layer_vec
-            gamma = -self.cold_water_input_location * self.water_mass_flow_t * WATER.cp - internal_heat_exchange_coefficient[1:-1]
+            alpha = - internal_heat_exchange_coefficient[1:-1] * self.surface_cross_section / self.layer_height * 1e-3  # Power values are converted to kW
+            beta = -self.matrix_B + self.water_mass_flow_t * WATER.cp + self.surface_cross_section / self.layer_height * (internal_heat_exchange_coefficient[1:]+internal_heat_exchange_coefficient[:-1]) * 1e-3 + self.convection_coefficient_losses * self.surface_losses_layer_vec * 1e-3
+            gamma = - self.water_mass_flow_t * WATER.cp - internal_heat_exchange_coefficient[1:-1] * self.surface_cross_section / self.layer_height * 1e-3
             # Finally creating the A matrix
-            A = np.zeros((3, self.number_of_layers))
+            A = np.zeros((3, self.number_of_layers), dtype=np.float32)
             A[0, 1:] = gamma
             A[1, :] = beta
             A[2, :-1] = alpha
             self.matrix_A = A
         
-    def create_C_vector(self, water_mass_flow):
+    def create_C_vector(self):
         ambient_temperature = self.T_amb if self.located_inside else self._environmental_data()['Temperature ambient']
-        total_heat_from_main_heating_source = self.ports[self.main_heat_input_port_name].flow['heat']
-        total_heat_from_aux_heating_source = self.ports[self.aux_heat_input_port_name].flow['heat']
+        total_heat_from_main_heating_source = self.ports[self.main_heat_input_port_name].flow['heat'] / self.time_step
+        total_heat_from_aux_heating_source = self.ports[self.aux_heat_input_port_name].flow['heat'] / self.time_step
         # Calculating useful vectors
-        vector_cold_water_input = self.cold_water_input_location * water_mass_flow * WATER.cp * self.ports[self.cold_water_input_port_name].T
+        vector_cold_water_input = self.cold_water_input_location * self.water_mass_flow_t * WATER.cp * self.ports[self.cold_water_input_port_name].T
         vector_heat_from_main_heating_source = total_heat_from_main_heating_source / len([self.main_heating_source_location]) * self.main_heating_source_location
         vector_heat_from_aux_heating_source = total_heat_from_aux_heating_source / len([self.aux_heating_source_location]) * self.aux_heating_source_location
         # Finally calculating the C vector
-        C = -self.convection_coefficient_losses * self.surface_losses_layer_vec * ambient_temperature - vector_heat_from_main_heating_source - vector_heat_from_aux_heating_source - vector_cold_water_input
+        C = -self.convection_coefficient_losses * self.surface_losses_layer_vec * ambient_temperature * 1e-3 - vector_heat_from_main_heating_source - vector_heat_from_aux_heating_source - vector_cold_water_input
         return C
 
     def calculate_heat_exchange_between_layers(self):
@@ -308,9 +321,19 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         T_port = self.T_layer[np.nonzero(self.hot_water_output_location==1)]
         self.ports[self.hot_water_output_port_name].T = T_port
         return self.hot_water_output_port_name, T_port
+    
+    def set_inherited_heat_port_values(self):
+        T_heating_port = self.T_layer[self.main_heating_source_location==1].max()
+        self.ports[self.main_heat_input_port_name].T = T_heating_port
+        return self.main_heat_input_port_name, T_heating_port
         
     def reset(self):
-        self.T_layer = self.T_layer = np.array([self.T_0 - 0.01 * x for x in range(self.number_of_layers)])
+        self.water_mass_flow_t = 0.0
+        self.T_layer = self.T_layer = np.array([self.T_0 - 0.01 * x for x in range(self.number_of_layers)], dtype=np.float32)
+        self.relative_temperature_layers_state = np.zeros(self.number_of_layers + 1, dtype=np.int16)
+        self.internal_heat_exchange_coefficient = np.ones(self.number_of_layers-1, dtype=np.float32) * WATER.k
+        self.matrix_B = np.array([-self.layer_mass * WATER.cp / self.time_step] * self.number_of_layers, dtype=np.float32)
+        self.update_A_matrix(True)
         super().reset()
 
 

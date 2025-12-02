@@ -69,6 +69,8 @@ class Environment:
         for port_name, port in self.ports.items():
             for layer in port.layers:
                 self.signal_registry_ports.register(port_name, layer)
+                if isinstance(port, FluidPort):
+                    self.signal_registry_ports.register(port_name, 'temperature')
         # We create a registry for each pair controller-component that will store the action
         for controller_name, controller in self.controllers.items():
             for component_name in controller.controlled_component_names:
@@ -157,6 +159,9 @@ class Environment:
             port_name, T = component.set_inherited_fluid_port_values()  # Sets the value for each port that can do so
             if port_name:  # Propagates the value to the connected port
                 self.ports[self.ports[port_name].connected_port].T = T
+            port_name, T = component.set_inherited_heat_port_values()  # Sets the value for each port that can do so
+            if port_name:  # Propagates the value to the connected port
+                self.ports[self.ports[port_name].connected_port].T = T
 
     def simulate_components_of_type(self, type: str):
         components = self.components_classified[type]
@@ -197,7 +202,10 @@ class Environment:
         for port_name, port in self.ports.items():
             for layer, flow in port.flow.items():
                 col = self.signal_registry_ports.col_index(port_name, layer)
-                self.simulation_data.ports[self.time_id, col] = flow
+                self.simulation_data.ports[self.time_id, col] = flow / self.time_step
+            if isinstance(port, FluidPort):
+                col = self.signal_registry_ports.col_index(port_name, 'temperature')
+                self.simulation_data.ports[self.time_id, col] = port.T
         # Controllers
         for controller_name, controller in self.controllers.items():
             for component_name in controller.controlled_component_names:
@@ -213,6 +221,13 @@ class Environment:
     def to_dataframe(self):
         return self.simulation_data.to_dataframe(self.time_vector, self.signal_registry_ports, self.signal_registry_controllers, self.signal_registry_sensors)
     
+    def to_excel(self, location):
+        keys = ['ports', 'controllers', 'sensors']
+        data = self.to_dataframe()
+        with pd.ExcelWriter(location, engine="xlsxwriter") as writer:
+            for id in range(len(keys)):
+                data[id].to_excel(writer, sheet_name=keys[id], float_format = "%.3f")
+    
     def initialize_units(self):
         for _, component in self.components.items():
             component.time_step = self.time_step
@@ -223,3 +238,41 @@ class Environment:
         for _, sensor in self.sensors.items():
             sensor.time_step = self.time_step
             sensor.reset()
+
+    def get_cumulated_electricity(self, port_name: str, unit: str = 'kWh', sign: str = 'net'):
+        match unit:
+            case 'kWh':
+                scaling_factor = 1 / 3600
+            case 'MWh':
+                scaling_factor = 1 / 3_600_000
+        match sign:
+            case 'net':
+                return self.get_cumulated_result(port_name, 'electricity', scaling_factor)
+            case 'only positive' | 'only negative':
+                return self.get_cumulated_result_with_sign(port_name, 'electricity', scaling_factor, sign)
+    
+    def get_DHW_temperature_comfort_index(self, port_name, boundary):
+        # Measures the temperature-based comfort given a condition
+        condition = abs(self.simulation_data.ports[port_name].flow['mass']) > 1e-6
+        return sum(self.simulation_data.ports[port_name].T[condition] >= boundary) / len(self.simulation_data.ports[port_name].T[condition])
+
+    def get_cumulated_result(self, port_name: str, layer_name: str, scaling_factor: float = 1):
+        # Calculates the cumulated value of a given flow over the duration of the simulation
+        return self.simulation_data.ports[:, self.signal_registry_ports.col_index(port_name, layer_name)].sum() * self.time_step * scaling_factor
+
+    def get_cumulated_result_with_sign(self, port_name: str, layer_name: str, scaling_factor: float = 1, sign: str = 'only_positive'):
+        # Calculates the cumulated value of a given flow over the duration of the simulation
+        # Keeps only positive or negative values
+        match sign:
+            case "only positive":
+                return self.simulation_data.ports[self.simulation_data.ports[:, self.signal_registry_ports.col_index(port_name, layer_name)] >=0, self.signal_registry_ports.col_index(port_name, layer_name)].sum() * self.time_step * scaling_factor
+            case "only negative":
+                return -self.simulation_data.ports[self.simulation_data.ports[:, self.signal_registry_ports.col_index(port_name, layer_name)] <=0, self.signal_registry_ports.col_index(port_name, layer_name)].sum() * self.time_step * scaling_factor
+    
+    def get_boundary_index(self, sensor_name: str, boundary: float, condition: str):
+        # Calculates the fraction of time over the simulation a certain value was above or below a certain boundary
+        match condition:
+            case "gt" | ">" | ">=":
+                return sum(self.simulation_data.sensors[:, self.signal_registry_sensors.col_index(sensor_name, "")] >= boundary) / len(self.simulation_data.sensors[:, self.signal_registry_sensors.col_index(sensor_name, "")])
+            case "lt" | "<" | "<=":
+                return sum(self.simulation_data.sensors[:, self.signal_registry_sensors.col_index(sensor_name, "")] <= boundary) / len(self.simulation_data.sensors[:, self.signal_registry_sensors.col_index(sensor_name, "")])

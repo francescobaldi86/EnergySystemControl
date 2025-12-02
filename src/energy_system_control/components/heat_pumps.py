@@ -1,5 +1,5 @@
 from energy_system_control.components.utilities import HeatSource
-from energy_system_control.helpers import OnOffComponentError
+from energy_system_control.helpers import OnOffComponentError, C2K
 
 
 class HeatPump(HeatSource):
@@ -15,10 +15,9 @@ class HeatPump(HeatSource):
         return self.Qdot_out
     
     def step(self, action):
-        output = super().step(action)
         if action not in {0.0, 1.0}:
             raise OnOffComponentError(f'The control input to the component {self.name} of type "HeatPumpConstantEfficiency" should be either 1 or 0. {action} was provided at time step {self.time}')
-        return output
+        return super().step(action)
 
 
 class HeatPumpConstantEfficiency(HeatPump):
@@ -72,8 +71,8 @@ class HeatPumpLorentzEfficiency(HeatPump):
         self.dT_air = dT_air
         self.dT_water = dT_water
         self.heat_capacity_loss = heat_capacity_loss
-        self.T_air_design = T_air_design
-        self.T_water_design = T_water_design
+        self.T_air_design = C2K(T_air_design)
+        self.T_water_design = C2K(T_water_design)
         provided = (Wdot_design is not None) + (COP_design is not None) + (eta_lorentz is not None)
         if provided == 1:
             pass
@@ -84,21 +83,21 @@ class HeatPumpLorentzEfficiency(HeatPump):
         if Wdot_design:
             self.Wdot_design = Wdot_design
             self.COP_design = self.Qdot_out / self.Wdot_design
-            self.eta_lorentz = self.calculate_Carnot_COP(T_air_design, T_water_design) / self.COP_design
+            self.eta_lorentz = self.COP_design * self.calculate_Carnot_COP(self.T_air_design, self.T_water_design)
         elif COP_design:
             self.COP_design = COP_design
             self.Wdot_design = self.Qdot_out / self.COP_design
-            self.eta_lorentz = self.COP_design / self.calculate_Carnot_COP(T_air_design, T_water_design)
+            self.eta_lorentz = self.COP_design / self.calculate_Carnot_COP(self.T_air_design, self.T_water_design)
         elif eta_lorentz:
             self.eta_lorentz = eta_lorentz
-            self.COP_design = self.eta_lorentz * self.calculate_Carnot_COP(T_air_design, T_water_design)
+            self.COP_design = self.eta_lorentz * self.calculate_Carnot_COP(self.T_air_design, self.T_water_design)
             self.Wdot_design = self.Qdot_out / self.COP_design
 
     def calculate_Carnot_COP(self, T_air, T_water):
-        return (T_water + self.dT_water + 273.15) / (T_water - T_air + self.dT_air + self.dT_water)
+        return (T_water + self.dT_water) / (T_water - T_air + self.dT_air + self.dT_water)
     
     def get_heat_output(self):
-        return self._get_heat_output(self._environmental_data()['Temperature ambient'], self.nodes[self.node_names[0]].T)
+        return self._get_heat_output(self._environmental_data()['Temperature ambient'], self.ports[self.heat_output_port_name].T)
 
     def _get_heat_output(self, T_air, T_water):
         if self.heat_capacity_loss != 0.0:
@@ -107,7 +106,7 @@ class HeatPumpLorentzEfficiency(HeatPump):
             return self.Qdot_out
         
     def get_efficiency(self):
-        return self._get_efficiency(self._environmental_data()['Temperature ambient'], self.nodes[self.node_names[0]].T)
+        return self._get_efficiency(self._environmental_data()['Temperature ambient'], self.ports[self.heat_output_port_name].T)
     
     def _get_efficiency(self, T_air, T_water):
         return self.eta_lorentz * self.calculate_Carnot_COP(T_air, T_water)

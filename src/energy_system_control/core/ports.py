@@ -24,8 +24,12 @@ class Port(Node):
                 return ElectricPort(port_name)
 
 class HeatPort(Port):
+    T: float
     def __init__(self, name):
-        super().__init__(name, ['heat'])   
+        super().__init__(name, ['heat'])
+
+    def reset_state_value(self):
+        self.T = None   
 
 
 class FluidPort(Port):

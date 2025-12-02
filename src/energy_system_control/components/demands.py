@@ -5,7 +5,7 @@ import os, yaml
 import numpy as np
 from importlib.resources import files
 from typing import List, Dict
-
+from energy_system_control.constants import WATER
 
 class Demand(Component):
     port_name: str
@@ -42,12 +42,12 @@ class HotWaterDemand(Demand):
         T_cold_water = self._environmental_data()['Temperature cold water']
         T_hot_water = self.ports[self.port_name].T 
         temp = self.data[self.time_id] / self.time_step * 3600  # This calculates the required power in kW (note: time step is in [s], read value in [kWh], hence the 3600)
-        mdot_dhw_th = temp / 4.187 / (313.25 - T_cold_water)  # Theroetical hot water mass flow, in kg/s
+        mdot_dhw_th = temp / WATER.cp / (313.25 - T_cold_water)  # Theroetical hot water mass flow, in kg/s
         if T_hot_water > self.T_ref:
             mdot = mdot_dhw_th * (313.25 - T_cold_water) / (T_hot_water - T_cold_water)  # Actual hot water mass flow, in kg/s
         else:
             mdot = mdot_dhw_th
-        Qdot = mdot * 4.187 * T_hot_water  # Enthalpy flow output, in kW
+        Qdot = mdot * WATER.cp * T_hot_water  # Enthalpy flow output, in kW
         # Remember: flows are POSITIVE if they ENTER the component
         self.ports[self.port_name].flow['heat'] = Qdot * self.time_step
         self.ports[self.port_name].flow['mass'] = mdot * self.time_step

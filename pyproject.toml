@@ -1,14 +1,5 @@
 [build-system]
-requires = [
-    "setuptools>=61.0",
-    "pandas",
-    "matplotlib",
-    "numpy",
-    "dataclasses",
-    "pytest",
-    "pyyaml",
-    "requests",
-    ]
+requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -25,6 +16,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
 ]
+dependencies = ["numpy", "pandas", "matplotlib", "dataclasses", "pytest", "pyyaml", "requests", "xlsxwriter"]
 
 [project.urls]
 "Homepage" = "https://github.com/francescobaldi86/EnergySystemControl"
