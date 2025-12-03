@@ -27,7 +27,9 @@ def test_1():
     ]
     env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
     time_step = 0.5
-    env.run(time_step = time_step, time_end = 24.0*7)  # simulate 6 hours
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = time_step)
+    sim = esc.Simulator(env, sim_config)
+    sim.run()
     df_ports, df_controllers, df_sensors = env.to_dataframe()
     assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 325, abs_tol = 1)
     df_ports.to_csv(os.path.join(__TEST__, 'PLAYGROUND', 'test_1_results_ports.csv'), sep = ";")

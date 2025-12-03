@@ -1,5 +1,7 @@
 # Re-export a stable public API
 from .core.base_environment import Environment
+from .sim.config import SimulationConfig
+from .sim.simulator import Simulator
 from .components.producers import PVpanel, PVpanelFromData, PVpanelFromPVGIS, ConstantPowerProducer
 from .components.storage import HotWaterStorage, LithiumIonBattery, MultiNodeHotWaterTank
 from .components.demands import IEAHotWaterDemand, CustomProfileHotWaterDemand, ConstantPowerDemand
@@ -11,6 +13,7 @@ from .sensors.sensors import Sensor, PowerSensor, ElectricPowerSensor, FlowTempe
 
 __all__ = [
     "Environment",
+    "SimulationConfig", "Simulator"
     "PVpanel", "PVpanelFromData", "PVpanelFromPVGIS", "ConstantPowerProducer",
     "HotWaterStorage", "LithiumIonBattery", "MultiNodeHotWaterTank",
     "HotWaterDemand", "ThermalLoss", "IEAHotWaterDemand", "CustomProfileHotWaterDemand", "ConstantPowerDemand",

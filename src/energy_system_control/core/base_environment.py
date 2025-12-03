@@ -3,6 +3,7 @@ from collections import defaultdict
 import pandas as pd
 from energy_system_control.core.base_classes import *
 from energy_system_control.core.ports import *
+from energy_system_control.sim.simulation_data import *
 from energy_system_control.core.registry import *
 from energy_system_control.components.base import *
 from energy_system_control.components.demands import *
