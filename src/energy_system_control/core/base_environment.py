@@ -45,9 +45,10 @@ class Environment:
         cls = Component.registry[component_type]
         self.components[component_name] = cls(**kwargs)
 
-    def classify_components(self):
+    def classify_components(self, components: Dict[str, Component] | None = None):
         # Classify components based on their type
-        for _, component in self.components.items():
+        dict_to_iterate = components if components else self.components
+        for _, component in dict_to_iterate.items():
             if isinstance(component, Demand):
                 self.components_classified['Demand'].append(component)
             elif isinstance(component, Producer):
@@ -60,8 +61,10 @@ class Environment:
                 self.components_classified['StorageUnit'].append(component)
             component.attach(get_environmental_data=self.get_environmental_data)
     
-    def create_ports(self):
-        for _, component in self.components.items():
+    def create_ports(self, components: Dict[str, Component] | None = None):
+        # Classify components based on their type
+        dict_to_iterate = components if components else self.components
+        for _, component in dict_to_iterate.items():
             self.ports.update(component.create_ports())
     
     def create_data_registry(self):
