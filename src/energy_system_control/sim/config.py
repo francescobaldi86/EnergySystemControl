@@ -10,3 +10,9 @@ class SimulationConfig:
     @property
     def time_step_s(self) -> float:
         return self.time_step_h * 3600.0
+
+    def time_end_s(self) -> float:
+        return self.time_end_h * 3600.0
+    
+    def time_start_s(self) -> float:
+        return self.time_start_h * 3600.0

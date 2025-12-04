@@ -30,5 +30,8 @@ class Sensor():
     def get_measurement(self):
         return self.current_measurement
     
+    def initialize(self):
+        self.current_measurement = None
+
     def reset(self):
         self.current_measurement = None

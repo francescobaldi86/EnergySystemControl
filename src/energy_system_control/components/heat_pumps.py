@@ -1,6 +1,6 @@
 from energy_system_control.components.utilities import HeatSource
 from energy_system_control.helpers import OnOffComponentError, C2K
-
+from energy_system_control.sim.state import SimulationState
 
 class HeatPump(HeatSource):
     def __init__(self, name: str, Qdot_max: float):
@@ -11,13 +11,13 @@ class HeatPump(HeatSource):
     def COP(self): 
         return self.get_efficiency()
     
-    def get_heat_output(self):
+    def get_heat_output(self, state: SimulationState):
         return self.Qdot_out
     
-    def step(self, action):
+    def step(self, state: SimulationState, action):
         if action not in {0.0, 1.0}:
-            raise OnOffComponentError(f'The control input to the component {self.name} of type "HeatPumpConstantEfficiency" should be either 1 or 0. {action} was provided at time step {self.time}')
-        return super().step(action)
+            raise OnOffComponentError(f'The control input to the component {self.name} of type "HeatPumpConstantEfficiency" should be either 1 or 0. {action} was provided at time step {state.time}')
+        return super().step(state, action)
 
 
 class HeatPumpConstantEfficiency(HeatPump):
@@ -26,7 +26,7 @@ class HeatPumpConstantEfficiency(HeatPump):
         super().__init__(name = name, Qdot_max = Qdot_max)
         self.COP_design = COP
 
-    def get_efficiency(self):
+    def get_efficiency(self, state:SimulationState):
         return self.COP_design
     
     
@@ -96,8 +96,8 @@ class HeatPumpLorentzEfficiency(HeatPump):
     def calculate_Carnot_COP(self, T_air, T_water):
         return (T_water + self.dT_water) / (T_water - T_air + self.dT_air + self.dT_water)
     
-    def get_heat_output(self):
-        return self._get_heat_output(self._environmental_data()['Temperature ambient'], self.ports[self.heat_output_port_name].T)
+    def get_heat_output(self, state: SimulationState):
+        return self._get_heat_output(state.environmental_data['Temperature ambient'], self.ports[self.heat_output_port_name].T)
 
     def _get_heat_output(self, T_air, T_water):
         if self.heat_capacity_loss != 0.0:
@@ -105,8 +105,8 @@ class HeatPumpLorentzEfficiency(HeatPump):
         else:
             return self.Qdot_out
         
-    def get_efficiency(self):
-        return self._get_efficiency(self._environmental_data()['Temperature ambient'], self.ports[self.heat_output_port_name].T)
+    def get_efficiency(self, state: SimulationState):
+        return self._get_efficiency(state.environmental_data['Temperature ambient'], self.ports[self.heat_output_port_name].T)
     
     def _get_efficiency(self, T_air, T_water):
         return self.eta_lorentz * self.calculate_Carnot_COP(T_air, T_water)

@@ -1,4 +1,5 @@
 from energy_system_control.components.base import Component
+from energy_system_control.sim.state import SimulationState
 from energy_system_control.helpers import *
 from typing import Dict, List
 from abc import abstractmethod
@@ -21,7 +22,7 @@ class GenericUtility(Utility):
             case 'bidirectional': 
                 self.power_min, self.power_max = -max_power, max_power
 
-    def step(self, action):
+    def step(self, state: SimulationState, action):
         # Assuming action is a value in kJ
         required_power = action / self.time_step
         # According to the port paradigm, flow is POSITIVE if ENTERING the component. 
@@ -49,19 +50,19 @@ class HeatSource(Component):
         super().__init__(name, {self.heat_output_port_name: 'heat', self.power_input_port_name: source_type})
 
     @abstractmethod
-    def get_heat_output(self):
+    def get_heat_output(self, state: SimulationState):
         return NotImplementedError
     
     @abstractmethod
-    def get_efficiency(self):
+    def get_efficiency(self, state: SimulationState):
         raise NotImplementedError
     
-    def get_power_input(self):
-        return self.get_heat_output() / self.get_efficiency()
+    def get_power_input(self, state: SimulationState):
+        return self.get_heat_output(state) / self.get_efficiency(state)
 
-    def step(self, action):
-        self.ports[self.heat_output_port_name].flow['heat'] = -self.get_heat_output() * action * self.time_step
-        self.ports[self.power_input_port_name].flow[self.source_type] = self.get_power_input() * action * self.time_step
+    def step(self, state: SimulationState, action):
+        self.ports[self.heat_output_port_name].flow['heat'] = -self.get_heat_output(state) * action * self.time_step
+        self.ports[self.power_input_port_name].flow[self.source_type] = self.get_power_input(state) * action * self.time_step
 
 
 class SimplifiedHeatSource(HeatSource):
@@ -86,10 +87,10 @@ class SimplifiedHeatSource(HeatSource):
         self.Qdot_out = Qdot_max
         self.efficiency = efficiency
 
-    def get_heat_output(self):
+    def get_heat_output(self, state: SimulationState):
         return self.Qdot_out
     
-    def get_efficiency(self):
+    def get_efficiency(self, state: SimulationState):
         return self.efficiency
 
 
@@ -100,15 +101,15 @@ class BalancingUtility(Utility):
         self.port_name = f'{name}_{self.utility_type}_port'
         super().__init__(name, {self.port_name: self.utility_type})
 
-    def step(self, action):
+    def step(self, state: SimulationState, action):
         pass  # In theory, nothing is needed here!
 
 
 class ColdWaterGrid(BalancingUtility):
     # Specific balancing utility for the cold water grid. Useful because it reads the temperature of the water
-    def set_inherited_fluid_port_values(self):
-        self.ports[self.port_name].T = self._environmental_data()['Temperature cold water']  # Enthalpy content in kJ
-        return self.port_name, self._environmental_data()['Temperature cold water']
+    def set_inherited_fluid_port_values(self, state: SimulationState):
+        self.ports[self.port_name].T = state.environmental_data()['Temperature cold water']  # Enthalpy content in kJ
+        return self.port_name, state.environmental_data()['Temperature cold water']
         
 
 class Inverter(Component):

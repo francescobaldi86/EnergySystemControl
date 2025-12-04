@@ -2,6 +2,7 @@ from energy_system_control.helpers import *
 from typing import List, Dict
 from energy_system_control.components.base import Component
 from energy_system_control.core.base_classes import Sensor
+from energy_system_control.sim.state import SimulationState
 
 class Controller():
     name: str
@@ -43,7 +44,7 @@ class Controller():
     def get_action(self):
         return None
     
-    def reset(self):
+    def initialize(self):
         self.previous_action = {comp: 0 for comp in self.controlled_components}
 
 class HeaterControllerWithBandwidth(Controller):

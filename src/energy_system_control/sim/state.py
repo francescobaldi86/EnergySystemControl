@@ -10,6 +10,7 @@ class SimulationState:
     time_vector: np.ndarray | None = None
     environmental_data: Dict[str, Any] = field(default_factory=dict)
     control_actions: Dict[str, Any] = field(default_factory=dict)
+    time_step: float = 0.0
 
     def init_time_vector(self, cfg: SimulationConfig) -> None:
         self.time = cfg.time_start_h * 3600.0
@@ -19,3 +20,4 @@ class SimulationState:
             cfg.time_end_h * 3600.0,
             cfg.time_step_s,
         )
+        self.time_step = cfg.time_step_s()

@@ -1,5 +1,6 @@
 from energy_system_control.components.base import Component
 from energy_system_control.helpers import *
+from energy_system_control.sim.state import SimulationState
 from typing import List, Dict
 import os, yaml, csv, json, requests
 import numpy as np
@@ -20,8 +21,8 @@ class ConstantPowerProducer(Producer):
         super().__init__(name, production_type)
         self.power = power  # Since it is a demand, the power is always negative
     
-    def step(self, action = None): 
-        self.ports[self.port_name].flow[self.production_type] = self.power * self.time_step
+    def step(self, state: SimulationState, action = None): 
+        self.ports[self.port_name].flow[self.production_type] = self.power * state.time_step
 
 
 class PVpanel(Producer):
@@ -39,8 +40,8 @@ class PVpanel(Producer):
             target_freq = f"{round(time_step/60)}min"
             self.data = resample_with_interpolation(self.raw_data, target_freq, sim_end, var_type="intensive")
 
-    def step(self, action = None):
-        self.ports[self.port_name].flow['electricity'] = -self.data[self.time_id] * self.installed_power * self.time_step
+    def step(self, state: SimulationState, action = None):
+        self.ports[self.port_name].flow['electricity'] = -self.data[self.time_id] * self.installed_power * state.time_step
     
     def check_data(self):
         if self.raw_data.between(0, 1).sum() != len(self.raw_data):

@@ -1,6 +1,7 @@
 from energy_system_control.components.base import Component
 from energy_system_control.helpers import *
 from energy_system_control.constants import WATER
+from energy_system_control.sim.state import SimulationState
 from typing import Dict, List
 from scipy.linalg import solve_banded
 import warnings, math
@@ -14,7 +15,7 @@ class StorageUnit(Component):
     def __init__(self, name: str, ports_info: dict):
         super().__init__(name, ports_info)
 
-    def step(self, action):
+    def step(self, state: SimulationState, action):
         # Storage doesn't actively add Q (unless charged/discharged), but could implement losses
         raise(NotImplementedError)
     
@@ -25,7 +26,7 @@ class StorageUnit(Component):
         # This function must be implemented for each sub type
         raise(NotImplementedError)
     
-    def reset(self):
+    def initialize(self):
         self.SOC = self.SOC_0
             
         
@@ -92,18 +93,18 @@ class HotWaterStorage(StorageUnit):
                                       self.main_heat_input_port_name: 'heat',
                                       self.aux_heat_input_port_name: 'heat'})
     
-    def step(self, action):
+    def step(self, state: SimulationState, action):
         # Heat port inputs are provided from external sources. Hot water output also. Hence, only the cold water input is updated
         self.ports[self.cold_water_input_port_name].flow['mass'] = -self.ports[self.hot_water_output_port_name].flow['mass']
         self.ports[self.cold_water_input_port_name].flow['heat'] = abs(self.ports[self.cold_water_input_port_name].flow['mass']) * WATER.cp * self.ports[self.cold_water_input_port_name].T
-        heat_losses = self.calculate_losses()
+        heat_losses = self.calculate_losses(state)
         heat_input = self.ports[self.main_heat_input_port_name].flow['heat'] + self.ports[self.aux_heat_input_port_name].flow['heat'] 
         heat_fluid = self.ports[self.hot_water_output_port_name].flow['heat'] + self.ports[self.cold_water_input_port_name].flow['heat']
         self.temperature += (heat_input + heat_fluid + heat_losses) / (WATER.cp * self.volume * WATER.rho)
-        self.SOC = self.temperature_to_SOC()
+        self.SOC = self.temperature_to_SOC(state)
 
-    def calculate_losses(self):
-        ambient_temperature = self.T_amb if self.located_inside else self._environmental_data()['Temperature ambient']
+    def calculate_losses(self, state: SimulationState):
+        ambient_temperature = self.T_amb if self.located_inside else state.environmental_data['Temperature ambient']
         losses = -self.convection_coefficient_losses * self.surface * (self.temperature - ambient_temperature) * 1e-3
         return losses
     
@@ -115,17 +116,17 @@ class HotWaterStorage(StorageUnit):
         self.ports[self.main_heat_input_port_name].T = self.temperature
         return self.main_heat_input_port_name, self.temperature
     
-    def temperature_to_SOC(self):
+    def temperature_to_SOC(self, state: SimulationState):
         try:
-            T_cold_water = self._environmental_data()['Temperature cold water']
+            T_cold_water = state.environmental_data['Temperature cold water']
         except (AttributeError, KeyError):
             T_cold_water = C2K(20)
         return (self.temperature - T_cold_water) / (self.max_temperature - T_cold_water)
 
-    def reset(self):
+    def initialize(self, state: SimulationState):
         self.temperature = self.T_0
-        self.SOC_0 = self.temperature_to_SOC()
-        super().reset()
+        self.SOC_0 = self.temperature_to_SOC(state)
+        super().initialize()
 
 
 class MultiNodeHotWaterTank(HotWaterStorage):
@@ -254,18 +255,18 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         elif output_type == 'layer_id':
             return layer_id
     
-    def step(self, action):
+    def step(self, state: SimulationState, action):
         output = {}
-        change_in_water_mass_flow = not math.isclose(self.water_mass_flow_t, -self.ports[self.hot_water_output_port_name].flow['mass'] / self.time_step, abs_tol = 1e-4)
-        self.water_mass_flow_t = -self.ports[self.hot_water_output_port_name].flow['mass'] / self.time_step
+        change_in_water_mass_flow = not math.isclose(self.water_mass_flow_t, -self.ports[self.hot_water_output_port_name].flow['mass'] / state.time_step, abs_tol = 1e-4)
+        self.water_mass_flow_t = -self.ports[self.hot_water_output_port_name].flow['mass'] / state.time_step
         self.update_A_matrix(change_in_water_mass_flow)
         C = self.create_C_vector()
         D = -(self.matrix_B * self.T_layer + C)
         self.T_layer = solve_banded((1, 1), self.matrix_A, D)  
         self.temperature = self.T_layer.mean()
-        self.SOC = self.temperature_to_SOC()
+        self.SOC = self.temperature_to_SOC(state)
         # In the end, the only value that needs updating is the input from the cold water grid
-        self.ports[self.cold_water_input_port_name].flow['mass'] = self.water_mass_flow_t * self.time_step
+        self.ports[self.cold_water_input_port_name].flow['mass'] = self.water_mass_flow_t * state.time_step
         self.ports[self.cold_water_input_port_name].flow['heat'] = self.water_mass_flow_t * WATER.cp * self.ports[self.cold_water_input_port_name].T
         return output
 
@@ -292,10 +293,10 @@ class MultiNodeHotWaterTank(HotWaterStorage):
             A[2, :-1] = alpha
             self.matrix_A = A
         
-    def create_C_vector(self):
-        ambient_temperature = self.T_amb if self.located_inside else self._environmental_data()['Temperature ambient']
-        total_heat_from_main_heating_source = self.ports[self.main_heat_input_port_name].flow['heat'] / self.time_step
-        total_heat_from_aux_heating_source = self.ports[self.aux_heat_input_port_name].flow['heat'] / self.time_step
+    def create_C_vector(self, state: SimulationState):
+        ambient_temperature = self.T_amb if self.located_inside else state.environmental_data['Temperature ambient']
+        total_heat_from_main_heating_source = self.ports[self.main_heat_input_port_name].flow['heat'] / state.time_step
+        total_heat_from_aux_heating_source = self.ports[self.aux_heat_input_port_name].flow['heat'] / state.time_step
         # Calculating useful vectors
         vector_cold_water_input = self.cold_water_input_location * self.water_mass_flow_t * WATER.cp * self.ports[self.cold_water_input_port_name].T
         vector_heat_from_main_heating_source = total_heat_from_main_heating_source / len([self.main_heating_source_location]) * self.main_heating_source_location
@@ -327,14 +328,14 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         self.ports[self.main_heat_input_port_name].T = T_heating_port
         return self.main_heat_input_port_name, T_heating_port
         
-    def reset(self):
+    def initialize(self, state: SimulationState):
         self.water_mass_flow_t = 0.0
         self.T_layer = self.T_layer = np.array([self.T_0 - 0.01 * x for x in range(self.number_of_layers)], dtype=np.float32)
         self.relative_temperature_layers_state = np.zeros(self.number_of_layers + 1, dtype=np.int16)
         self.internal_heat_exchange_coefficient = np.ones(self.number_of_layers-1, dtype=np.float32) * WATER.k
-        self.matrix_B = np.array([-self.layer_mass * WATER.cp / self.time_step] * self.number_of_layers, dtype=np.float32)
+        self.matrix_B = np.array([-self.layer_mass * WATER.cp / state.time_step] * self.number_of_layers, dtype=np.float32)
         self.update_A_matrix(True)
-        super().reset()
+        super().initialize(state)
 
 
 class Battery(StorageUnit):
@@ -390,7 +391,7 @@ class Battery(StorageUnit):
     def verify_connected_components(self):
         raise(NotImplementedError)
     
-    def step(self, action):
+    def step(self, state: SimulationState, action):
         # Just considering charging/discharging losses
         self.check_storage_state()
         if abs(self.ports[self.port_name].flow['electricity']) > 100:
@@ -399,7 +400,7 @@ class Battery(StorageUnit):
             self.SOC += self.ports[self.port_name].flow['electricity'] * self.efficiency_charge / self.max_capacity
         else:
             self.SOC += self.ports[self.port_name].flow['electricity'] / self.efficiency_discharge / self.max_capacity
-        self.SOC -= self.SOC * self.self_discharge_rate * self.max_capacity * self.time_step / 3600 # The self discharge is input in fraction of current capacity per hour
+        self.SOC -= self.SOC * self.self_discharge_rate * self.max_capacity * state.time_step / 3600 # The self discharge is input in fraction of current capacity per hour
         
     def get_maximum_charge_power(self):
         return self.max_charging_power

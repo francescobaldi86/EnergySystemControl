@@ -1,4 +1,4 @@
-from energy_system_control.core.base_classes import Node
+from energy_system_control.sim.state import SimulationState
 from energy_system_control.components.base import Component
 from energy_system_control.helpers import *
 import os, yaml
@@ -21,8 +21,8 @@ class ConstantPowerDemand(Demand):
         super().__init__(name, demand_type)
         self.power = power  # Since it is a demand, the power is always negative
     
-    def step(self, action = None): 
-        self.ports[self.port_name].flow[self.demand_type] = self.power * self.time_step
+    def step(self, state: SimulationState, action = None): 
+        self.ports[self.port_name].flow[self.demand_type] = self.power * state.time_step
 
 
 class HotWaterDemand(Demand):
@@ -38,10 +38,10 @@ class HotWaterDemand(Demand):
             target_freq = f"{round(time_step/60)}min"
             self.data = resample_with_interpolation(self.raw_data, target_freq, sim_end, var_type="extensive")
 
-    def step(self, action = None):
-        T_cold_water = self._environmental_data()['Temperature cold water']
+    def step(self, state: SimulationState, action = None):
+        T_cold_water = state.environmental_data['Temperature cold water']
         T_hot_water = self.ports[self.port_name].T 
-        temp = self.data[self.time_id] / self.time_step * 3600  # This calculates the required power in kW (note: time step is in [s], read value in [kWh], hence the 3600)
+        temp = self.data[state.time_id] / state.time_step * 3600  # This calculates the required power in kW (note: time step is in [s], read value in [kWh], hence the 3600)
         mdot_dhw_th = temp / WATER.cp / (313.25 - T_cold_water)  # Theroetical hot water mass flow, in kg/s
         if T_hot_water > self.T_ref:
             mdot = mdot_dhw_th * (313.25 - T_cold_water) / (T_hot_water - T_cold_water)  # Actual hot water mass flow, in kg/s
@@ -49,8 +49,8 @@ class HotWaterDemand(Demand):
             mdot = mdot_dhw_th
         Qdot = mdot * WATER.cp * T_hot_water  # Enthalpy flow output, in kW
         # Remember: flows are POSITIVE if they ENTER the component
-        self.ports[self.port_name].flow['heat'] = Qdot * self.time_step
-        self.ports[self.port_name].flow['mass'] = mdot * self.time_step
+        self.ports[self.port_name].flow['heat'] = Qdot * state.time_step
+        self.ports[self.port_name].flow['mass'] = mdot * state.time_step
 
 
 class IEAHotWaterDemand(HotWaterDemand):

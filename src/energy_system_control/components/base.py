@@ -1,6 +1,7 @@
 from typing import Dict, List, Callable, Any
 from energy_system_control.core.base_classes import Node
 from energy_system_control.core.ports import Port
+from energy_system_control.sim.state import SimulationState
 
 class Component:
     name: str
@@ -15,8 +16,6 @@ class Component:
     def __init__(self, name: str, ports_info: Dict[str, str]):
         self.name = name
         self.ports_info = ports_info
-        self.time = 0.0
-        self.time_id = 0
         self.ports = {}
 
     def __init_subclass__(cls, **kwargs):
@@ -39,5 +38,8 @@ class Component:
     def set_inherited_heat_port_values(self):
         return None, None
     
-    def reset(self):
+    def step(self):
+        pass
+    
+    def initialize(self, state: SimulationState | None = None):
         pass
