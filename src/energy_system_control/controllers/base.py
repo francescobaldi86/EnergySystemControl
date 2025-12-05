@@ -58,7 +58,7 @@ class HeaterControllerWithBandwidth(Controller):
         self.temperature_sensor_name = temperature_sensor
         self.controlled_heater_name = controlled_component
 
-    def get_action(self):
+    def get_action(self, state: SimulationState):
         temperature = self.obs["Storage temperature"]
         action = {}
         if temperature <= self.temperature_comfort:
@@ -84,7 +84,7 @@ class InverterController(Controller):
             super().__init__(name, [inverter_name], {})
         
 
-    def get_action(self):
+    def get_action(self, state: SimulationState):
         # In the case of the inverter, the action is the energy required to balance the controlled sensor node (normally the exchange with the grid)
         # This involves two checks:
         #   - Power check (the power should not be higher than what is allowed by the battery)
@@ -95,10 +95,10 @@ class InverterController(Controller):
         DC_balance = PV_power_input + DC_output
         if self.battery_name:
             if DC_balance >= 0:  # If the node balance is positive, the inverter will try to charge the battery
-                energy_to_charge = min(self.controlled_components[self.battery_name].get_maximum_charge_power() * self.time_step, DC_balance)  # First we limit based on battery power limits
+                energy_to_charge = min(self.controlled_components[self.battery_name].get_maximum_charge_power() * state.time_step, DC_balance)  # First we limit based on battery power limits
                 action = -min(self.controlled_components[self.battery_name].max_capacity * (self.SOC_max - self.controlled_components[self.battery_name].SOC), energy_to_charge)  # Then we limit based on the available energy
             else:
-                energy_to_discharge = min(self.controlled_components[self.battery_name].get_maximum_discharge_power() * self.time_step, -DC_balance)  # First we limit based on battery power limits
+                energy_to_discharge = min(self.controlled_components[self.battery_name].get_maximum_discharge_power() * state.time_step, -DC_balance)  # First we limit based on battery power limits
                 action = min(self.controlled_components[self.battery_name].max_capacity * (self.controlled_components[self.battery_name].SOC - self.SOC_min), energy_to_discharge)  # Then we limit based on the available energy
             return {self.inverter_name: action, self.battery_name: None}
         else:

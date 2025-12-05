@@ -108,8 +108,8 @@ class BalancingUtility(Utility):
 class ColdWaterGrid(BalancingUtility):
     # Specific balancing utility for the cold water grid. Useful because it reads the temperature of the water
     def set_inherited_fluid_port_values(self, state: SimulationState):
-        self.ports[self.port_name].T = state.environmental_data()['Temperature cold water']  # Enthalpy content in kJ
-        return self.port_name, state.environmental_data()['Temperature cold water']
+        self.ports[self.port_name].T = state.environmental_data['Temperature cold water']  # Enthalpy content in kJ
+        return self.port_name, state.environmental_data['Temperature cold water']
         
 
 class Inverter(Component):
@@ -138,7 +138,7 @@ class Inverter(Component):
     def get_efficiency(self):
         return self.efficiency
 
-    def step(self, action: float = 0.0):
+    def step(self, state: SimulationState, action: float = 0.0):
         # The action is the power exchanged with the battery. The AC grid input is calculated
         ESS_power = action
         # If there is no battery, there is no controller and the action is simply balancing produced PV with request

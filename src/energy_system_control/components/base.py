@@ -32,10 +32,10 @@ class Component:
             ports[port_name] = self.ports[port_name]
         return ports
 
-    def set_inherited_fluid_port_values(self):
+    def set_inherited_fluid_port_values(self, state: SimulationState):
         return None, None
     
-    def set_inherited_heat_port_values(self):
+    def set_inherited_heat_port_values(self, state: SimulationState):
         return None, None
     
     def step(self):

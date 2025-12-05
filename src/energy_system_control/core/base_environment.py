@@ -59,7 +59,6 @@ class Environment:
                 self.components_classified['Utility'].append(component)
             elif isinstance(component, StorageUnit):
                 self.components_classified['StorageUnit'].append(component)
-            component.attach(get_environmental_data=self.get_environmental_data)
     
     def create_ports(self, components: Dict[str, Component] | None = None):
         # Classify components based on their type

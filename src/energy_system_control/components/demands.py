@@ -35,8 +35,8 @@ class HotWaterDemand(Demand):
     def resample_data(self, time_step: float, sim_end: float):
         # Resamples the raw data to the format required 
         if hasattr(self, 'raw_data'):
-            target_freq = f"{round(time_step/60)}min"
-            self.data = resample_with_interpolation(self.raw_data, target_freq, sim_end, var_type="extensive")
+            target_freq = f"{int(time_step*3600)}s"
+            self.data = resample_with_interpolation(self.raw_data, target_freq, sim_end*3600.0, var_type="extensive")
 
     def step(self, state: SimulationState, action = None):
         T_cold_water = state.environmental_data['Temperature cold water']

@@ -20,4 +20,4 @@ class SimulationState:
             cfg.time_end_h * 3600.0,
             cfg.time_step_s,
         )
-        self.time_step = cfg.time_step_s()
+        self.time_step = cfg.time_step_s

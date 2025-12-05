@@ -37,11 +37,11 @@ class PVpanel(Producer):
     def resample_data(self, time_step: float, sim_end: float):
         # Resamples the raw data to the format required 
         if hasattr(self, 'raw_data'):
-            target_freq = f"{round(time_step/60)}min"
-            self.data = resample_with_interpolation(self.raw_data, target_freq, sim_end, var_type="intensive")
+            target_freq = f"{int(time_step*3600)}s"
+            self.data = resample_with_interpolation(self.raw_data, target_freq, sim_end*3600.0, var_type="intensive")
 
     def step(self, state: SimulationState, action = None):
-        self.ports[self.port_name].flow['electricity'] = -self.data[self.time_id] * self.installed_power * state.time_step
+        self.ports[self.port_name].flow['electricity'] = -self.data[state.time_id] * self.installed_power * state.time_step
     
     def check_data(self):
         if self.raw_data.between(0, 1).sum() != len(self.raw_data):

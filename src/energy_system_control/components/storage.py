@@ -26,7 +26,7 @@ class StorageUnit(Component):
         # This function must be implemented for each sub type
         raise(NotImplementedError)
     
-    def initialize(self):
+    def initialize(self, state: SimulationState):
         self.SOC = self.SOC_0
             
         
@@ -108,11 +108,11 @@ class HotWaterStorage(StorageUnit):
         losses = -self.convection_coefficient_losses * self.surface * (self.temperature - ambient_temperature) * 1e-3
         return losses
     
-    def set_inherited_fluid_port_values(self):
+    def set_inherited_fluid_port_values(self, state: SimulationState):
         self.ports[self.hot_water_output_port_name].T = self.temperature
         return self.hot_water_output_port_name, self.temperature
     
-    def set_inherited_heat_port_values(self):
+    def set_inherited_heat_port_values(self, state: SimulationState):
         self.ports[self.main_heat_input_port_name].T = self.temperature
         return self.main_heat_input_port_name, self.temperature
     
@@ -126,7 +126,7 @@ class HotWaterStorage(StorageUnit):
     def initialize(self, state: SimulationState):
         self.temperature = self.T_0
         self.SOC_0 = self.temperature_to_SOC(state)
-        super().initialize()
+        super().initialize(state)
 
 
 class MultiNodeHotWaterTank(HotWaterStorage):

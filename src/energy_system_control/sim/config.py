@@ -5,7 +5,7 @@ from dataclasses import dataclass
 class SimulationConfig:
     time_start_h: float = 0.0    # hours
     time_end_h: float = 8760.0   # hours
-    time_step_h: float = 0.5     # hours
+    time_step_h: float = 0.5     # hoursz
 
     @property
     def time_step_s(self) -> float:

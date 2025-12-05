@@ -29,8 +29,8 @@ def test_1():
     time_step = 0.5
     sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = time_step)
     sim = esc.Simulator(env, sim_config)
-    sim.run()
-    df_ports, df_controllers, df_sensors = env.to_dataframe()
+    results = sim.run()
+    df_ports, df_controllers, df_sensors = results.to_dataframe()
     assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 325, abs_tol = 1)
     df_ports.to_csv(os.path.join(__TEST__, 'PLAYGROUND', 'test_1_results_ports.csv'), sep = ";")
 
@@ -58,9 +58,10 @@ def test_2():
     env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
     for time_step in [1, 0.5, 0.25, 1/6, 5/60, 1/60]:
     # Test that results remain similar when changing the time step
-        env.run(time_step = time_step, time_end = 24.0*7)  # simulate 6 hours
-        df_ports, df_controllers, df_sensors = env.to_dataframe()
-        heat_pump_energy_demand = df_ports['heat_pump_electricity_input_port:electricity'].sum() / 3600
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = time_step)
+        sim = esc.Simulator(env, sim_config)
+        results = sim.run()  # simulate 6 hours
+        heat_pump_energy_demand = results.get_cumulated_electricity('heat_pump_electricity_input_port')
         assert math.isclose(heat_pump_energy_demand, 13, abs_tol = 2)
 
 def test_3():
@@ -89,21 +90,25 @@ def test_3():
         ('inverter_PV_input_port', 'pv_panels_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port')
     ]
+    # Create environment
     env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
-    time_step = 0.5
-    env.run(time_step = time_step, time_end = 24.0*7)  # simulate 6 hours
-    df_ports, df_controllers, df_sensors = env.to_dataframe()
-    heat_pump_energy_demand = df_ports['heat_pump_electricity_input_port:electricity'].sum() / 3600
-    df_ports.to_csv(os.path.join(__TEST__, 'PLAYGROUND', 'test_3_results_ports.csv'), sep = ";")
-    assert math.isclose(heat_pump_energy_demand, 13, abs_tol = 2)
-    electricity_from_pv = df_ports['inverter_PV_input_port:electricity'].sum() / 3600
+    # Create simulator object
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 0.5)
+    sim = esc.Simulator(env, sim_config)
+    # Run simulation
+    results = sim.run()
+    df_ports, df_controllers, df_sensors = results.to_dataframe()
+    # Verify results
+    heat_pump_energy_demand = results.get_cumulated_electricity('heat_pump_electricity_input_port')
+    electricity_from_pv = results.get_cumulated_electricity('inverter_PV_input_port')
+    net_electricity_demand = results.get_cumulated_electricity('electric_grid_electricity_port')
+    electricity_to_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only positive')
+    electricity_from_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only negative')
     assert math.isclose(electricity_from_pv, 27, abs_tol = 2)
-    net_electricity_demand = -df_ports['electric_grid_electricity_port:electricity'].sum() /3600
-    electricity_to_grid = df_ports.loc[df_ports['electric_grid_electricity_port:electricity'] > 0, 'electric_grid_electricity_port:electricity'].sum() / 3600
-    electricity_from_grid = -df_ports.loc[df_ports['electric_grid_electricity_port:electricity'] < 0, 'electric_grid_electricity_port:electricity'].sum() / 3600
+    assert math.isclose(heat_pump_energy_demand, 13, abs_tol = 2)
     assert math.isclose(electricity_from_grid, 9, abs_tol = 2)
     assert math.isclose(electricity_to_grid, 22, abs_tol = 2)
-    assert math.isclose(net_electricity_demand, -13, abs_tol = 2)
+    assert math.isclose(net_electricity_demand, 13, abs_tol = 2)
     assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 325, abs_tol = 1)
 
 def test_4():
@@ -136,20 +141,23 @@ def test_4():
         ('inverter_grid_input_port', 'electric_grid_electricity_port'),
         ('inverter_ESS_port', 'battery_electricity_port')
     ]
+    # Create environment
     env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
-    time_step = 0.5
-    env.run(time_step = time_step, time_end = 24.0*7)  # simulate 6 hours
-    df_ports, df_controllers, df_sensors = env.to_dataframe()
-    heat_pump_energy_demand = df_ports['heat_pump_electricity_input_port:electricity'].sum() / 3600
-    df_ports.to_csv(os.path.join(__TEST__, 'PLAYGROUND', 'test_4_results_ports.csv'), sep = ";")
-    df_sensors.to_csv(os.path.join(__TEST__, 'PLAYGROUND', 'test_4_results_sensors.csv'), sep = ";")
-    assert math.isclose(heat_pump_energy_demand, 13, abs_tol = 2)
-    electricity_from_pv = df_ports['inverter_PV_input_port:electricity'].sum() / 3600
+    # Create simulator object
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 0.5)
+    sim = esc.Simulator(env, sim_config)
+    # Run simulation
+    results = sim.run()
+    df_ports, df_controllers, df_sensors = results.to_dataframe()
+    # Verify results
+    heat_pump_energy_demand = results.get_cumulated_electricity('heat_pump_electricity_input_port')
+    electricity_from_pv = results.get_cumulated_electricity('inverter_PV_input_port')
+    net_electricity_demand = results.get_cumulated_electricity('electric_grid_electricity_port')
+    electricity_to_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only positive')
+    electricity_from_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only negative')
     assert math.isclose(electricity_from_pv, 27, abs_tol = 2)
-    net_electricity_demand = -df_ports['electric_grid_electricity_port:electricity'].sum() /3600
-    electricity_to_grid = df_ports.loc[df_ports['electric_grid_electricity_port:electricity'] > 0, 'electric_grid_electricity_port:electricity'].sum() / 3600
-    electricity_from_grid = -df_ports.loc[df_ports['electric_grid_electricity_port:electricity'] < 0, 'electric_grid_electricity_port:electricity'].sum() / 3600
-    assert math.isclose(net_electricity_demand, -12, abs_tol = 2)
+    assert math.isclose(heat_pump_energy_demand, 13, abs_tol = 2)
+    assert math.isclose(net_electricity_demand, 12, abs_tol = 2)
     assert math.isclose(electricity_from_grid, 2, abs_tol = 2)
     assert math.isclose(electricity_to_grid, 13, abs_tol = 2)
     assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 325, abs_tol = 1)
