@@ -29,7 +29,10 @@ class HeatPort(Port):
         super().__init__(name, ['heat'])
 
     def reset_state_value(self):
-        self.T = None   
+        self.T = None 
+
+    def initialize(self):
+        self.T = None
 
 
 class FluidPort(Port):
@@ -38,6 +41,9 @@ class FluidPort(Port):
         super().__init__(name, ['mass', 'heat'])
         
     def reset_state_value(self):
+        self.T = None
+
+    def initialize(self):
         self.T = None 
 
 class ElectricPort(Port):

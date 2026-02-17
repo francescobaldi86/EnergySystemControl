@@ -126,6 +126,8 @@ class HotWaterStorage(StorageUnit):
     def initialize(self, state: SimulationState):
         self.temperature = self.T_0
         self.SOC_0 = self.temperature_to_SOC(state)
+        self.ports[self.main_heat_input_port_name].T = self.T_0
+        self.ports[self.aux_heat_input_port_name].T = self.T_0
         super().initialize(state)
 
 

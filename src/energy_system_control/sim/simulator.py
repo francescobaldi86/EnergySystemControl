@@ -7,7 +7,7 @@ from energy_system_control.core.base_environment import Environment  # or move E
 from .config import SimulationConfig
 from .state import SimulationState
 from energy_system_control.helpers import C2K
-from energy_system_control.core.ports import FluidPort
+from energy_system_control.core.ports import FluidPort, HeatPort
 from energy_system_control.sim.simulation_data import SimulationData  # wherever it lives
 from energy_system_control.sim.results import SimulationResults
 
@@ -88,7 +88,7 @@ class Simulator:
         self._update_environmental_data()
 
         # Assign fluid port values
-        self._propagate_fluid_port_values()
+        self._propagate_port_values()
 
         # Simulate components in your chosen order
         self._simulate_components_of_type("Demand")
@@ -116,10 +116,13 @@ class Simulator:
             "Temperature ambient": C2K(20),
         }
 
-    def _propagate_fluid_port_values(self):
+    def _propagate_port_values(self):
         env = self.env
         for _, component in env.components.items():
             port_name, T = component.set_inherited_fluid_port_values(self.state)
+            if port_name:
+                env.ports[env.ports[port_name].connected_port].T = T
+            port_name, T = component.set_inherited_heat_port_values(self.state)
             if port_name:
                 env.ports[env.ports[port_name].connected_port].T = T
 
@@ -150,7 +153,7 @@ class Simulator:
             for layer, value in port.flow.items():
                 if port.connected_port:
                     self.env.ports[port.connected_port].flow[layer] = -value
-                    if isinstance(self.env.ports[port.connected_port], FluidPort):
+                    if isinstance(self.env.ports[port.connected_port], FluidPort | HeatPort):
                         self.env.ports[port.connected_port].T = self.env.ports[port.name].T
 
     def _save_simulation_data(self, sim_data):
