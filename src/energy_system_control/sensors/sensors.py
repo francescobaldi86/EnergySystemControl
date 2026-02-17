@@ -7,7 +7,7 @@ class FlowTemperatureSensor(Sensor):
         super().__init__(name)
         self.port_name = port_name
 
-    def get_measurement(self, environment):
+    def get_measurement(self, environment, state):
         self.current_measurement = environment.ports[self.port_name].T
         return super().get_measurement()
 
@@ -30,8 +30,8 @@ class PowerSensor(Sensor):
         self.port_name = port_name
         self.flow_type = flow_type
 
-    def get_measurement(self, environment):
-        self.current_measurement = environment.ports[self.port_name].flow[self.flow_type] / environment.time_step
+    def get_measurement(self, environment, state):
+        self.current_measurement = environment.ports[self.port_name].flow[self.flow_type] / state.time_step
         return super().get_measurement()
 
 
@@ -47,7 +47,7 @@ class SOCSensor(Sensor):
         super().__init__(name)
         self.component_name = component_name
 
-    def get_measurement(self, environment):
+    def get_measurement(self, environment, state):
         self.current_measurement = environment.components[self.component_name].SOC
         return super().get_measurement()
 
@@ -62,7 +62,7 @@ class TankTemperatureSensor(Sensor):
         self.sensor_height = sensor_height
         self.sensor_height_id = None
 
-    def get_measurement(self, environment):
+    def get_measurement(self, environment, state):
         if isinstance(environment.components[self.component_name], HotWaterStorage):
             self.current_measurement = environment.components[self.component_name].temperature
         elif isinstance(environment.components[self.component_name], MultiNodeHotWaterTank):

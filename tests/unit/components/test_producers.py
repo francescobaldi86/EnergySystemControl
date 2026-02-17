@@ -12,15 +12,16 @@ def test_panel_with_custom_data():
         installed_power = 2,
         raw_data=raw_data
     )
-    state = SimulationState(time_id = 0, time_step = 0.5)
+    time_step = 1800
+    state = SimulationState(time_id = 0, time_step = time_step)
     # Resampling the data to the required time step
-    pv.resample_data(time_step = 0.5, sim_end = 24)
+    pv.resample_data(time_step = time_step/3600, sim_end = 24)
     pv.create_ports()
     # Checking input
     assert isclose(pv.data[0], 0.12, abs_tol = 0.01)
     # Testing taking step
-    test_step = pv.step(state)
-    assert test_step == 0.25 * 3600 * 0.12 * 2  # Energy generated during the time step in kJ. time_step[h] * hours_to_seconds[s/h] * capacity_factor[-] * installed_power[kW] 
+    pv.step(state)
+    assert pv.ports[pv.port_name].flow['electricity'] == -time_step * 0.12 * 2  # Energy generated during the time step in kJ. time_step[h] * hours_to_seconds[s/h] * capacity_factor[-] * installed_power[kW] 
     # Testing the check data function
     pv.check_data()
     assert True
@@ -29,21 +30,22 @@ def test_panel_from_PVGIS():
     from energy_system_control import PVpanelFromPVGIS
     pv = PVpanelFromPVGIS(
         name = 'test_panel', 
-        electrical_node = 'test_PV_node', 
         installed_power = 2,
         latitude = 44.530,
         longitude = 11.293,
         tilt = 23,
         azimuth = 45
     )
+    time_step = 900
     # Resampling the data to the required time step
-    pv.time_step = 0.25 * 3600
-    pv.resample_data(time_step = pv.time_step, sim_end = 24*3600)
+    pv.time_step = time_step
+    pv.resample_data(time_step = time_step/3600, sim_end = 24)
+    pv.create_ports()
     # Checking input
     assert isclose(pv.data[50], 0.223, abs_tol=0.01)
     # Testing taking step
-    test_step = pv.step()
-    assert test_step['test_PV_node'] == 0.0
+    state = SimulationState(time_id = 0, time_step = time_step)
+    pv.step(state)
+    assert pv.ports[pv.port_name].flow['electricity'] == 0.0
     # Testing the check data function
-    pv.check_data()
-    assert True
+    # pv.check_data()

@@ -37,27 +37,26 @@ def test_base_controller():
         ('inverter_ESS_port', 'battery_electricity_port')
     ]
     env_base = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
-    time_step = 0.25
-    env_base.run(time_step = time_step, time_end = 24.0*7)  # simulate 6 hours
-    df_ports, df_controllers, df_sensors = env_base.to_dataframe()
-    df_ports.to_csv(os.path.join(__TEST__, 'PLAYGROUND', 'test_rule_based_1_results_ports.csv'), sep = ";")
-    df_sensors.to_csv(os.path.join(__TEST__, 'PLAYGROUND', 'test_rule_based_1_results_sensors.csv'), sep = ";")
-    electricity_to_grid_base = df_ports.loc[df_ports['electric_grid_electricity_port:electricity'] > 0, 'electric_grid_electricity_port:electricity'].sum() / 3600
-    electricity_from_grid_base = -df_ports.loc[df_ports['electric_grid_electricity_port:electricity'] < 0, 'electric_grid_electricity_port:electricity'].sum() / 3600
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 0.25)
+    sim = esc.Simulator(env_base, sim_config)
+    results = sim.run()
+    electricity_to_grid_base = results.get_cumulated_electricity('electric_grid_electricity_port', unit = "kWh", sign = "only positive")
+    electricity_from_grid_base = results.get_cumulated_electricity('electric_grid_electricity_port', unit = "kWh", sign = "only negative")
     assert math.isclose(electricity_to_grid_base, 6, abs_tol = 2)
     assert math.isclose(electricity_from_grid_base, 3, abs_tol = 2)
 
+    # Preparing the "optimal control" test run
     controllers = [
         esc.HeatPumpRuleBasedController('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 'PV_power_sensor', 40, 10, 0.600),
         esc.InverterController('inverter_controller', 'inverter', 'battery')
     ]
     env_opti = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
-    time_step = 0.25
-    env_opti.run(time_step = time_step, time_end = 24.0*7)  # simulate 6 hours
-    df_ports, df_controllers, df_sensors = env_opti.to_dataframe()
-    df_ports.to_csv(os.path.join(__TEST__, 'PLAYGROUND', 'test_rule_based_2_results_ports.csv'), sep = ";")
-    df_sensors.to_csv(os.path.join(__TEST__, 'PLAYGROUND', 'test_rule_based_2_results_sensors.csv'), sep = ";")
-    electricity_to_grid_opti = df_ports.loc[df_ports['electric_grid_electricity_port:electricity'] > 0, 'electric_grid_electricity_port:electricity'].sum() / 3600
-    electricity_from_grid_opti = -df_ports.loc[df_ports['electric_grid_electricity_port:electricity'] < 0, 'electric_grid_electricity_port:electricity'].sum() / 3600
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 0.25)
+    sim = esc.Simulator(env_opti, sim_config)
+    results = sim.run()
+    electricity_to_grid_opti = results.get_cumulated_electricity('electric_grid_electricity_port', unit = "kWh", sign = "only positive")
+    electricity_from_grid_opti = results.get_cumulated_electricity('electric_grid_electricity_port', unit = "kWh", sign = "only negative")
+
+    # Compare the results
     assert electricity_to_grid_opti < electricity_to_grid_base
     assert electricity_from_grid_opti < electricity_from_grid_base

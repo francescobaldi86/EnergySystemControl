@@ -5,7 +5,6 @@ __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
 def test_1():
-    # One node: house thermal mass
     components = [
         esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_max = 1.5, COP = 3.2),

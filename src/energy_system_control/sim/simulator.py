@@ -135,7 +135,7 @@ class Simulator:
 
     def _get_controller_actions(self):
         for controller_name in self.env.ordered_controllers:
-            self.env.controllers[controller_name].get_obs(self.env)
+            self.env.controllers[controller_name].get_obs(self.env, self.state)
             actions = self.env.controllers[controller_name].get_action(self.state)
             # After a controller has been simulated, its controlled component is immediately simulted as well
             for component_name, action in actions.items():
@@ -175,6 +175,6 @@ class Simulator:
         for sensor_name, sensor in self.env.sensors.items():
             col = self.env.signal_registry_sensors.col_index(sensor_name, "")
             if not sensor.current_measurement:
-                sensor.get_measurement(self.env)  # This is needed in case no other component has used the sensor
+                sensor.get_measurement(self.env, self.state)  # This is needed in case no other component has used the sensor
             sim_data.sensors[time_id, col] = sensor.current_measurement
         return sim_data

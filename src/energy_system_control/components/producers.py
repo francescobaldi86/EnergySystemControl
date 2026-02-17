@@ -19,10 +19,10 @@ class Producer(Component):
 class ConstantPowerProducer(Producer):
     def __init__(self, name: str, production_type: str, power: float):
         super().__init__(name, production_type)
-        self.power = power  # Since it is a demand, the power is always negative
+        self.power = power  # 
     
     def step(self, state: SimulationState, action = None): 
-        self.ports[self.port_name].flow[self.production_type] = self.power * state.time_step
+        self.ports[self.port_name].flow[self.production_type] = -self.power * state.time_step  # Since it is a producer, the net energy flow is always negative
 
 
 class PVpanel(Producer):

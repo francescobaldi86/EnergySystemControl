@@ -249,7 +249,7 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         return vector_with_heat_input_layers
 
     def identify_layer_by_height(self, height: float|int|None, default: int, output_type: str = 'vector'):
-        layer_id = self.number_of_layers - height // self.layer_height - 1 if height else default
+        layer_id = int(self.number_of_layers - height // self.layer_height - 1) if height else default
         if output_type == 'vector':
             output = np.zeros(self.number_of_layers, dtype=np.int16)
             output[layer_id] = 1
@@ -262,7 +262,7 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         change_in_water_mass_flow = not math.isclose(self.water_mass_flow_t, -self.ports[self.hot_water_output_port_name].flow['mass'] / state.time_step, abs_tol = 1e-4)
         self.water_mass_flow_t = -self.ports[self.hot_water_output_port_name].flow['mass'] / state.time_step
         self.update_A_matrix(change_in_water_mass_flow)
-        C = self.create_C_vector()
+        C = self.create_C_vector(state)
         D = -(self.matrix_B * self.T_layer + C)
         self.T_layer = solve_banded((1, 1), self.matrix_A, D)  
         self.temperature = self.T_layer.mean()
@@ -311,7 +311,8 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         # Method to calculate the internal heat exchange between layers. 
         # The output is a numpy array where each element represents the heat exchanged across the i-th interface. 
         # Calculate the relationship between the temperatures across different layers. Each element is 1 if the temperature below the interface is higher than the temperature above the interface
-        relative_temperature_layers_state = self.T_layer[1:] > self.T_layer[:-1]
+        relative_temperature_layers_state = np.array([0] * (self.number_of_layers + 1), dtype=bool)
+        relative_temperature_layers_state[1:-1] = self.T_layer[1:] > self.T_layer[:-1]
         # Compare the relative temperature layers state with the existing one. Only recalculate the internal heat exchange coefficient vector if changes happen
         if any(relative_temperature_layers_state != self.relative_temperature_layers_state):
             self.relative_temperature_layers_state = relative_temperature_layers_state
@@ -320,12 +321,12 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         heat_exchange_between_layers = self.internal_heat_exchange_coefficient * self.surface_cross_section * (self.T_layer[1:] - self.T_layer[:-1]) * 1e-3  # [W/m2K] * [m2] * [K] * [kW/W] --> kW
         return heat_exchange_between_layers
     
-    def set_inherited_fluid_port_values(self):
-        T_port = self.T_layer[np.nonzero(self.hot_water_output_location==1)]
+    def set_inherited_fluid_port_values(self, state):
+        T_port = self.T_layer[np.nonzero(self.hot_water_output_location==1)][0]
         self.ports[self.hot_water_output_port_name].T = T_port
         return self.hot_water_output_port_name, T_port
     
-    def set_inherited_heat_port_values(self):
+    def set_inherited_heat_port_values(self, state):
         T_heating_port = self.T_layer[self.main_heating_source_location==1].max()
         self.ports[self.main_heat_input_port_name].T = T_heating_port
         return self.main_heat_input_port_name, T_heating_port
@@ -334,7 +335,7 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         self.water_mass_flow_t = 0.0
         self.T_layer = self.T_layer = np.array([self.T_0 - 0.01 * x for x in range(self.number_of_layers)], dtype=np.float32)
         self.relative_temperature_layers_state = np.zeros(self.number_of_layers + 1, dtype=np.int16)
-        self.internal_heat_exchange_coefficient = np.ones(self.number_of_layers-1, dtype=np.float32) * WATER.k
+        self.internal_heat_exchange_coefficient = np.ones(self.number_of_layers - 1, dtype=np.float32) * WATER.k
         self.matrix_B = np.array([-self.layer_mass * WATER.cp / state.time_step] * self.number_of_layers, dtype=np.float32)
         self.update_A_matrix(True)
         super().initialize(state)

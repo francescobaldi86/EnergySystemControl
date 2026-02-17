@@ -32,8 +32,8 @@ class Controller():
         self.controlled_component_names = controlled_components
         self.sensor_names = sensors
 
-    def get_obs(self, environment):
-        self.obs = {var: sensor.get_measurement(environment) for var, sensor in self.sensors.items()}
+    def get_obs(self, environment, state):
+        self.obs = {var: sensor.get_measurement(environment, state) for var, sensor in self.sensors.items()}
 
     def load_controlled_components(self, components):
         self.controlled_components = {name: components[name] for name in self.controlled_component_names}
