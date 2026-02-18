@@ -1,10 +1,11 @@
+from typing import List, Dict, Any
+from abc import ABC, abstractmethod
 from energy_system_control.helpers import *
-from typing import List, Dict
 from energy_system_control.components.base import Component
 from energy_system_control.core.base_classes import Sensor
 from energy_system_control.sim.state import SimulationState
 
-class Controller():
+class Controller(ABC):
     name: str
     time: float
     time_id: int
@@ -32,16 +33,18 @@ class Controller():
         self.controlled_component_names = controlled_components
         self.sensor_names = sensors
 
-    def get_obs(self, environment, state):
+    def get_obs(self, environment, state) -> Dict[str, Any]:
         self.obs = {var: sensor.get_measurement(environment, state) for var, sensor in self.sensors.items()}
+        return self.obs
 
-    def load_controlled_components(self, components):
+    def load_controlled_components(self, components: Dict[str, Any]):
         self.controlled_components = {name: components[name] for name in self.controlled_component_names}
     
-    def load_sensors(self, sensors):
+    def load_sensors(self, sensors: Dict[str, Any]):
         self.sensors = {var: sensors[sensor_name] for var, sensor_name in self.sensor_names.items()}
 
-    def get_action(self):
+    @abstractmethod
+    def get_action(self) -> Dict[str, Any]:
         return None
     
     def initialize(self):
