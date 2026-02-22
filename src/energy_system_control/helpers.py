@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from typing import List, Dict, Any
 
 def resample_with_interpolation(df, target_freq, sim_end: float | None = None, var_type: str = 'extensive'):
     """
@@ -73,6 +74,29 @@ def C2K(T):
 
 def K2C(T):
     return T - 273.15
+
+def find_object_of_type(object_type: Any, object_pool: List[Any] | Dict[str, Any]) -> Any:
+    """
+    Finds and returns the first component of the specified type in the list of components.
+
+    Args:
+        object_type (Object): The type of component to search for.
+        object_pool (List[Object] or Dict[str, Object]): The list (or dict) of objects to search through.
+
+    Returns:
+        Object: The first object found of the specified type. Returns None if nothing is found
+
+    """
+    if isinstance(object_pool, dict):
+        object_pool = [v for k, v in object_pool.items()]
+    for object in object_pool:
+        if isinstance(object, object_type):
+            return object
+    return None
+
+def check_datetime_index(df: pd.DataFrame):
+        if not isinstance(df.index, pd.DatetimeIndex):
+            raise ValueError("DataFrame index must be a DatetimeIndex")
 
 class NodeImbalanceError(Exception):
     pass

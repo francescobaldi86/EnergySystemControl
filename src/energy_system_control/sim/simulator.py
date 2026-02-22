@@ -4,6 +4,7 @@ from typing import Any
 import numpy as np
 
 from energy_system_control.core.base_environment import Environment  # or move Environment to core/model.py
+from energy_system_control.core.base_classes import InitContext
 from .config import SimulationConfig
 from .state import SimulationState
 from energy_system_control.helpers import C2K
@@ -29,11 +30,10 @@ class Simulator:
             self.env.signal_registry_sensors,
         )
 
-        # Initialize units / reset components, controllers, sensors
-        self._initialize_units()
-
         # Read any time series data once
         self._read_timeseries_data()
+        # Initialize units / reset components, controllers, sensors
+        self._initialize_units()        
 
         # Main loop
         while self.state.time < (self.cfg.time_end_h * 3600.0 - 1e-9):
@@ -51,22 +51,18 @@ class Simulator:
         return simulation_results
     
     def _initialize_units(self):
-        env = self.env
-        time_step = self.cfg.time_step_s
-        for _, component in env.components.items():
-            component.time_step = time_step
-            component.initialize(self.state)
-        for _, controller in env.controllers.items():
-            controller.time_step = time_step
-            controller.initialize()
-        for _, sensor in env.sensors.items():
-            sensor.time_step = time_step
-            sensor.initialize()
+        ctx = InitContext(environment=self.env, state=self.state)
+        for _, component in self.env.components.items():
+            component.initialize(ctx)
+        for _, sensor in self.env.sensors.items():
+            sensor.initialize(ctx)
+        for _, controller in self.env.controllers.items():
+            controller.initialize(ctx)
 
     def _read_timeseries_data(self):
         for _, component in self.env.components.items():
             if callable(getattr(component, 'resample_data', None)):
-                component.resample_data(self.cfg.time_step_h, self.cfg.time_end_h)
+                component.resample_data(self.cfg.time_step_h, self.cfg.time_end_h + self.cfg.prediction_horizon_margin_h)
 
     def _step(self, sim_data: SimulationData) -> None:
         env = self.env  # just a shorthand

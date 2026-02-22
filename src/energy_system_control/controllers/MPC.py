@@ -1,20 +1,26 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Dict, Any, Sequence, Optional, Tuple, Literal
+from abc import abstractmethod
+from typing import Dict, Any, Sequence, Optional, Tuple, Literal, List
 import numpy as np
 import pandas as pd
 import cvxpy as cp
 from energy_system_control.controllers.base import Controller
+from energy_system_control.controllers.predictors import Predictor
+from energy_system_control.core.base_classes import InitContext
+from energy_system_control.components.demands import HotWaterDemand, ElectricityDemand
+from energy_system_control.components.producers import PVpanel
+from energy_system_control.components.storage import HotWaterStorage, Battery
+from energy_system_control.components.utilities import HeatSource, ColdWaterGrid, ElectricityGrid, Inverter, ResistanceHeater
+from energy_system_control.components.heat_pumps import HeatPump
+from energy_system_control.components.base import Component
+from energy_system_control.core.base_classes import Sensor
+from energy_system_control.sim.state import SimulationState
+from energy_system_control.helpers import find_object_of_type
+from energy_system_control.constants import WATER
+from energy_system_control.sensors.sensors import SOCSensor, TankTemperatureSensor
 
 SolverName = Literal["OSQP", "HIGHS"]
-
-@dataclass(frozen=True, slots=True)
-class LinearDiscreteModel:
-    # x_{k+1} = A x_k + B u_k + E w_k + g
-    A: np.ndarray
-    B: np.ndarray
-    E: Optional[np.ndarray] = None
-    g: Optional[np.ndarray] = None
 
 class MPCController(Controller):
     """
@@ -32,130 +38,227 @@ class MPCController(Controller):
     def __init__(
         self,
         name: str,
-        controlled_components: list[str],
+        controlled_components: List[str],
         sensors: Dict[str, str],
-        *,
-        predictor=None,
-        horizon_steps: int,
-        solver: SolverName = "OSQP",
-        warm_start: bool = True,
+        predictors: Dict[str, str],
+        horizon: float,
+        solver: SolverName = "HIGHS",
     ):
         super().__init__(name, controlled_components, sensors)
-        if horizon_steps <= 0:
+        if horizon <= 0:
             raise ValueError("horizon_steps must be > 0")
-        self.N = int(horizon_steps)
-        self.predictor = predictor
+        self.horizon = horizon 
+        self.predictors = predictors
         self.solver = solver
-        self.warm_start = warm_start
 
-        self._problem: Optional[cp.Problem] = None
-        self._x = None
-        self._u = None
-        self._w = None
-        self._params: Dict[str, Any] = {}
+    def get_obs(self, environment, state) -> Dict[str, Any]:
+        """Gets observations"""
+        super().get_obs(environment, state)
+        self.predictions = {var: predictor.predict(state.time, state.time_step, self.horizon, state.dt) for var, predictor in self.predictor.items()}
 
-    # ----- hooks to implement in concrete MPC controllers -----
+    def initialize_perfect_predictors(self, environment):
+        for _, predictor in self.predictors.items():
+            predictor.initialize(environment)
 
-    def get_model(self, environment, state) -> LinearDiscreteModel:
-        raise NotImplementedError
-
-    def get_current_state(self, environment, state) -> np.ndarray:
-        raise NotImplementedError
-
-    def get_disturbance_forecast(
-        self,
-        environment,
-        state,
-        now: pd.Timestamp,
-        dt_s: float,
-    ) -> Optional[np.ndarray]:
-        """Return w with shape (nw, N) or None."""
+    @abstractmethod
+    def initialize():
         return None
 
-    def build_stage_constraints(self, environment, state, x, u, w, params) -> list:
-        """Add constraints beyond dynamics and initial condition."""
-        return []
 
-    def build_objective(self, environment, state, x, u, w, params) -> cp.Expression:
-        raise NotImplementedError
+class MPCController_HybridDHW(MPCController):
+    """
+    This class extends the MPCController class to provide an helpful framework for an MPC Controller of a system
+    that implements a Hybrid DHW system. Components are:
+    - Heat source (compulsory, Boiler or heat pump)
+    - Heat demand (compulsory)
+    - PV panels (compulsory)
+    - Inverter (compulsory)
+    - Grid (compulsory)
+    - Battery (optional)
+    - Thermal solar panels (optional)
+    """
 
-    def action_from_u0(self, u0: np.ndarray) -> Dict[str, Any]:
-        """Map first control move to simulator action dict."""
-        raise NotImplementedError
+    def __init__(self,
+                    name: str,
+                    horizon: float,
+                    sensors: Dict[str, str],
+                    PV_power_predictor: Predictor | None = None,
+                    heat_demand_predictor: Predictor | None = None,
+                    electricity_demand_predictor: Predictor | None = None,
+                    bounds_SOC: Tuple[float, float] = (0.3, 0.9),
+                    bounds_temperature: Tuple[float, float] = (313.15, 353.15)
+                    ):
+        self.PV_power_predictor = PV_power_predictor
+        self.heat_demand_predictor = heat_demand_predictor
+        self.electricity_demand_predictor = electricity_demand_predictor
+        self.predictors = [PV_power_predictor, heat_demand_predictor, electricity_demand_predictor]
+        self.predictors = [predictor for predictor in self.predictors if predictor is not None]
+        self.bounds_SOC = bounds_SOC
+        self.bounds_temperature = bounds_temperature
+        super().__init__(
+            name = name,
+            controlled_components = [],
+            sensors = sensors,
+            predictors = self.predictors,
+            horizon = horizon,
+            solver = cp.HIGHS)
+        
+    def load_controlled_components(self, components):
+        self.heat_pump = find_object_of_type(HeatPump, components)
+        self.pv_panel = find_object_of_type(PVpanel, components)
+        self.battery = find_object_of_type(Battery, components)
+        self.inverter = find_object_of_type(Inverter, components)
+        self.electricity_grid = find_object_of_type(ElectricityGrid, components)
+        self.water_grid = find_object_of_type(ColdWaterGrid, components)
+        self.hot_water_storage = find_object_of_type(HotWaterStorage, components)
+        self.resistance_heater = find_object_of_type(ResistanceHeater, components)
+        self.dhw_demand = find_object_of_type(HotWaterDemand, components)
+        self.electricity_demand = find_object_of_type(ElectricityDemand, components)
+        self.controlled_components = {}
+        if self.heat_pump is not None:
+            self.controlled_components[self.heat_pump.name] = self.heat_pump
+        if self.resistance_heater is not None:
+            self.controlled_components[self.resistance_heater.name] = self.resistance_heater
+        # Check consistency between predictors and components
+        if self.pv_panel and self.PV_power_predictor is None:
+            raise(BaseException, 'PV panel is present but no PV predictor is provided')
+        if self.dhw_demand and self.heat_demand_predictor is None:
+            raise(BaseException, 'Heat demand is present but no heat demand predictor is provided')
+        if self.electricity_demand and self.electricity_demand_predictor is None:
+            raise(BaseException, 'Electricity demand is present but no electricity demand predictor is provided')
+        
+    def initialize(self, ctx: InitContext):
+        # The optimization problem is initialized at the beginning, and then updated using parameters
+        # Initializing the predictors
+        for predictor in self.predictors:
+            predictor.initialize(ctx.environment)
+        self.get_obs(ctx.environment, ctx.state)
+        # Declaring variables
+        self.problem = MPCProblem()
+        problem = self.problem
+        
+        # Calculating first parameters
+        TIME_STEP = ctx.state.time_step / 3600
+        TIME_HORIZON = int(self.horizon // TIME_STEP)
+        problem.variables = {
+            'temperature_hot_water_storage': cp.Variable(TIME_HORIZON),
+            'energy_battery': cp.Variable(TIME_HORIZON),
+            'power_from_grid': cp.Variable(TIME_HORIZON),
+            'power_to_grid': cp.Variable(TIME_HORIZON),
+            'power_to_battery': cp.Variable(TIME_HORIZON),
+            'power_from_battery': cp.Variable(TIME_HORIZON),
+            'power_heat_pump': cp.Variable(TIME_HORIZON),
+            'status_heat_pump': cp.Variable(TIME_HORIZON, boolean=True),
+            'power_resistance': cp.Variable(TIME_HORIZON),
+            'status_resistance': cp.Variable(TIME_HORIZON, boolean=True)}
+        problem.constant_parameters = {
+            'DISPERSION_COEFFICIENT': self.hot_water_storage.convection_coefficient_losses,
+            'DISPERSION_SURFACE': self.hot_water_storage.surface,
+            'HEAT_CAPACITY_WATER': WATER.cp,
+            'MASS_STORAGE': self.hot_water_storage.volume * WATER.rho,
+            'EFFICIENCY_EES_CHA': self.battery.efficiency_charge * self.inverter.efficiency,
+            'EFFICIENCY_EES_DIS': self.battery.efficiency_discharge * self.inverter.efficiency,
+            'POWER_HP_EL': self.heat_pump.Qdot_design if self.heat_pump else 0.0,
+            'POWER_HP_TH': self.heat_pump.Qdot_design / self.heat_pump.COP_design if self.heat_pump else 0.0,
+            'POWER_RESISTANCE_EL': self.resistance_heater.power if self.resistance_heater else 0.0,
+            'POWER_RESISTANCE_TH': self.resistance_heater.power if self.resistance_heater else 0.0,
+            'ENERGY_COST': self.electricity_grid.cost_of_electricity_purchased,
+            'ENERGY_VALUE': self.electricity_grid.value_of_electricity_sold,
+            'POWER_BATTERY_MAX_CHA': abs(self.battery.max_charging_power),
+            'POWER_BATTERY_MAX_DIS': abs(self.battery.max_discharging_power),
+            'ENERGY_BATTERY_MAX': self.battery.max_capacity * self.bounds_SOC[1] if self.battery else 0.0,
+            'ENERGY_BATTERY_MIN': self.battery.max_capacity * self.bounds_SOC[0] if self.battery else 0.0,
+            'TEMPERATURE_STORAGE_MAX': self.bounds_temperature[1],
+            'TEMPERATURE_STORAGE_MIN': self.bounds_temperature[0]
+        }
+        problem.variable_parameters = {
+            'POWER_PV': cp.Parameter(TIME_HORIZON),
+            'EL_DEMAND': cp.Parameter(TIME_HORIZON),
+            'TH_DEMAND': cp.Parameter(TIME_HORIZON),
+            'TEMPERATURE_STORAGE_0': cp.Parameter(),
+            'SOC_0': cp.Parameter(),
+            'B_TES': cp.Parameter(TIME_HORIZON-1)
+        }
+        # Matrices and vectors for thermal storage temperature update
+        A_TES = np.zeros(shape=[TIME_HORIZON-1,TIME_HORIZON])
+        A_TES_main = np.array([problem.constant_parameters['DISPERSION_COEFFICIENT'] * problem.constant_parameters['DISPERSION_SURFACE'] * TIME_STEP / (problem.constant_parameters['MASS_STORAGE'] * WATER.cp) - 1] * TIME_HORIZON)
+        A_TES_above = np.array([1] * (TIME_HORIZON-1))
+        A_TES = np.diag(A_TES_main) + np.diag(A_TES_above, k=1)
+        problem.constant_parameters['A_TES'] = A_TES = A_TES[:-1, :]
+        problem.constant_parameters['B1_TES'] = TIME_STEP / (problem.constant_parameters['MASS_STORAGE'] * WATER.cp)
 
-    # ----- internal: build + solve -----
+        # Matrices and vectors for electrical storage energy update
+        A_EES = np.zeros(shape=[TIME_HORIZON-1,TIME_HORIZON])
+        A_EES = np.diag(np.ones(TIME_HORIZON-1), k=1) - np.diag(np.ones(TIME_HORIZON)) 
+        problem.constant_parameters['A_EES'] = A_EES = A_EES[:-1, :]
+        problem.constant_parameters['B1_EES_CHA'] = TIME_STEP * problem.constant_parameters['EFFICIENCY_EES_CHA']
+        problem.constant_parameters['B1_EES_DIS'] = TIME_STEP / problem.constant_parameters['EFFICIENCY_EES_DIS']
 
-    def _build_problem(self, model: LinearDiscreteModel, nx: int, nu: int, nw: int) -> None:
-        N = self.N
+        # Update problem parameters, with values available at start
+        self.update_problem_parameters(state = ctx.state)
+        constraints = [
+            problem.variables['power_heat_pump'] == problem.variables['status_heat_pump'] * problem.constant_parameters['POWER_HP_EL'],
+            problem.variables['power_resistance'] == problem.variables['status_resistance'] * problem.constant_parameters['POWER_RESISTANCE_EL'],
+            problem.variables['power_from_grid'] + problem.variable_parameters['POWER_PV'] + problem.variables['power_from_battery'] - problem.variables['power_to_grid'] - problem.variable_parameters['EL_DEMAND'] - problem.variables['power_to_battery'] - problem.variables['power_heat_pump'] - problem.variables['power_resistance'] == 0,
+            problem.variables['temperature_hot_water_storage'][0] == problem.variable_parameters['TEMPERATURE_STORAGE_0'],
+            problem.variables['energy_battery'][0] == problem.variable_parameters['SOC_0'] * problem.constant_parameters['ENERGY_BATTERY_MAX'],
+            A_TES @ problem.variables['temperature_hot_water_storage'] - problem.variables['status_heat_pump'][:-1] * problem.constant_parameters['POWER_HP_TH'] * problem.constant_parameters['B1_TES'] - problem.variables['status_resistance'][:-1] * problem.constant_parameters['POWER_RESISTANCE_TH'] * problem.constant_parameters['B1_TES'] + problem.variable_parameters['B_TES'] == 0,
+            A_EES @ problem.variables['energy_battery'] - problem.variables['power_to_battery'][:-1] * problem.constant_parameters['B1_EES_CHA'] + problem.variables['power_from_battery'][:-1] * problem.constant_parameters['B1_EES_DIS'] == 0,
+            problem.variables['temperature_hot_water_storage'] <= problem.constant_parameters['TEMPERATURE_STORAGE_MAX'],
+            problem.variables['temperature_hot_water_storage'] >= problem.constant_parameters ['TEMPERATURE_STORAGE_MIN'],
+            problem.variables['temperature_hot_water_storage'][0] >= problem.variable_parameters['TEMPERATURE_STORAGE_0'],
+            problem.variables['energy_battery'] <= problem.constant_parameters['ENERGY_BATTERY_MAX'],
+            problem.variables['energy_battery'] >= problem.constant_parameters['ENERGY_BATTERY_MIN'],
+            problem.variables['energy_battery'][-1] >= problem.variable_parameters['SOC_0'] * problem.constant_parameters['ENERGY_BATTERY_MAX'],
+            problem.variables['power_to_battery'] <= problem.constant_parameters['POWER_BATTERY_MAX_CHA'],
+            problem.variables['power_from_battery'] <= problem.constant_parameters['POWER_BATTERY_MAX_DIS'],
+            problem.variables['power_to_battery'] >= 0,
+            problem.variables['power_from_battery'] >= 0,
+            problem.variables['power_to_grid'] >= 0,
+            problem.variables['power_from_grid'] >= 0,
+        ]
+        objective = cp.Minimize(problem.constant_parameters['ENERGY_COST'] *np.ones([1,TIME_HORIZON]) @ problem.variables['power_from_grid'] - problem.constant_parameters['ENERGY_VALUE']*np.ones([1,TIME_HORIZON]) @ problem.variables['power_to_grid'])
+        self.problem.problem = cp.Problem(objective, constraints)
+    
+    def get_action(self, state):
+        action = {}
+        self.update_problem_parameters(state)
+        self.problem.problem.solve(self.solver)
+        if self.heat_pump:
+            action[self.heat_pump.name] = self.problem.variables['status_heat_pump'].value[0]
+        if self.resistance_heater:
+            action[self.resistance_heater.name] = self.problem.variables['status_resistance'].value[0]
+        return action
+    
+    def get_obs(self, environment, state) -> Dict[str, Any]:
+        self.obs = {}
+        for var_name, sensor in self.sensors.items():
+            if sensor:
+                self.obs[var_name] = sensor.get_measurement(environment, state)
+        return self.obs
 
-        x = cp.Variable((nx, N + 1))
-        u = cp.Variable((nu, N))
-        w = cp.Parameter((nw, N)) if nw > 0 else None
 
-        x0 = cp.Parameter(nx)
+    def update_problem_parameters(self, state):
+        # Method that updates problem parameters depending on the current state of the simulation
+        param = self.problem.variable_parameters
+        # Prediction of future heat demand
+        param['TH_DEMAND'].value = self.safe_predict(self.heat_demand_predictor, state)
+        param['POWER_PV'].value = self.safe_predict(self.PV_power_predictor, state)
+        param['EL_DEMAND'].value = self.safe_predict(self.electricity_demand_predictor, state)
+        param['TEMPERATURE_STORAGE_0'].value = self.obs['temperature_storage'] if 'temperature_storage' in self.obs.keys() else 273.15+50
+        param['SOC_0'].value = self.sensors['soc_battery'].get_measurement() if 'soc_battery' in self.obs.keys() else 0.5
+        param['B_TES'].value = param['TH_DEMAND'].value[:-1] * self.problem.constant_parameters['B1_TES']
+    
+    def safe_predict(self, predictor: Predictor | None, state: SimulationState):
+        if predictor:  # If no predictor is loaded, it takes "None" value
+            return predictor.predict(self.horizon, state)
+        else:  # If there is no predictor, we interpret it as that there is no demand
+            return np.zeros(int(self.horizon // (state.time_step/3600)))
 
-        # Model matrices as parameters (lets you update them if needed)
-        A = cp.Parameter((nx, nx))
-        B = cp.Parameter((nx, nu))
-        E = cp.Parameter((nx, nw)) if nw > 0 else None
-        g = cp.Parameter(nx)
-
-        self._x, self._u, self._w = x, u, w
-        self._params = {"x0": x0, "A": A, "B": B, "g": g}
-        if nw > 0:
-            self._params["E"] = E
-
-        constraints = [x[:, 0] == x0]
-        for k in range(N):
-            if nw > 0:
-                constraints += [x[:, k+1] == A @ x[:, k] + B @ u[:, k] + E @ w[:, k] + g]
-            else:
-                constraints += [x[:, k+1] == A @ x[:, k] + B @ u[:, k] + g]
-
-        # Allow subclasses to add constraints/objective terms
-        constraints += self.build_stage_constraints(None, None, x, u, w, self._params)
-        obj = self.build_objective(None, None, x, u, w, self._params)
-
-        self._problem = cp.Problem(cp.Minimize(obj), constraints)
-
-    def get_action(self, state) -> Dict[str, Any]:
-        # We assume environment is available through sensors/obs, but it's cleaner
-        # if simulator passes env. Since it doesn't, we use the sensors obs already stored.
-        # Better: store env reference in controller when loaded, but keeping minimal change:
-        dt_s = float(state.time_step)
-        now = state.time
-
-        model = self.get_model(env, state)
-        x0_val = self.get_current_state(env, state).astype(float).ravel()
-
-        nx = x0_val.shape[0]
-        nu = model.B.shape[1]
-        nw = 0 if model.E is None else model.E.shape[1]
-
-        if self._problem is None:
-            self._build_problem(model, nx, nu, nw)
-
-        # Update parameters
-        self._params["x0"].value = x0_val
-        self._params["A"].value = model.A
-        self._params["B"].value = model.B
-        self._params["g"].value = np.zeros(nx) if model.g is None else model.g
-
-        if nw > 0:
-            self._params["E"].value = model.E
-            w_val = self.get_disturbance_forecast(env, state, now=now, dt_s=dt_s)
-            if w_val is None:
-                raise ValueError("Model expects disturbances (E not None) but no disturbance forecast provided.")
-            if w_val.shape != (nw, self.N):
-                raise ValueError(f"w forecast has shape {w_val.shape}, expected {(nw, self.N)}")
-            self._w.value = w_val
-
-        # Solve
-        self._problem.solve(solver=self.solver, warm_start=self.warm_start)
-        if self._problem.status not in ("optimal", "optimal_inaccurate"):
-            raise RuntimeError(f"MPC solve failed: {self._problem.status}")
-
-        u0 = np.asarray(self._u.value)[:, 0].ravel()
-        actions = self.action_from_u0(u0)
-        self.previous_action = actions
-        return actions
+@dataclass
+class MPCProblem:
+    constraints: List | None = None
+    variables: Dict[str, cp.Variable] | None = None
+    constant_parameters: Dict[str, float] | None = None
+    variable_parameters: Dict[str, cp.Parameter] | None = None
+    problem: cp.Problem | None = None

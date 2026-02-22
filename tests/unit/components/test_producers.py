@@ -3,6 +3,10 @@ import numpy as np
 import pandas as pd
 from math import isclose
 from energy_system_control.sim.state import SimulationState
+import os
+
+__HERE__ = os.path.dirname(os.path.realpath(__file__))
+__TEST__ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
 def test_panel_with_custom_data():
     from energy_system_control import PVpanel
@@ -38,7 +42,6 @@ def test_panel_from_PVGIS():
     )
     time_step = 900
     # Resampling the data to the required time step
-    pv.time_step = time_step
     pv.resample_data(time_step = time_step/3600, sim_end = 24)
     pv.create_ports()
     # Checking input
@@ -49,3 +52,31 @@ def test_panel_from_PVGIS():
     assert pv.ports[pv.port_name].flow['electricity'] == 0.0
     # Testing the check data function
     # pv.check_data()
+
+def test_pv_panel_load_data_from_csv_file():
+    from energy_system_control import PVpanelFromData
+    test_pv = PVpanelFromData(
+        name = 'test_pv',
+        installed_power = 4, 
+        data_path = os.path.join(__TEST__, 'DATA'),
+        filename = 'pvgis_data.csv', 
+        column_name = 'P', 
+        skipfooter=11
+    )
+    time_step = 900
+    # Resampling the data to the required time step
+    test_pv.resample_data(time_step = time_step/3600, sim_end = 24)
+    test_pv.create_ports()
+
+def test_pv_panel_load_data_from_csv_pvgis_file():
+    from energy_system_control.components.producers import PVpanelFromPVGISData
+    test_pv = PVpanelFromPVGISData(
+        name = 'test_pv',
+        installed_power = 4, 
+        data_path = os.path.join(__TEST__, 'DATA'),
+        filename = 'pvgis_data.csv' 
+    )
+    time_step = 900
+    # Resampling the data to the required time step
+    test_pv.resample_data(time_step = time_step/3600, sim_end = 24)
+    test_pv.create_ports()

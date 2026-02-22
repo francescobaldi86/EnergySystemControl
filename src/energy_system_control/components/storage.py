@@ -1,5 +1,6 @@
 from energy_system_control.components.base import Component
 from energy_system_control.helpers import *
+from energy_system_control.core.base_classes import InitContext
 from energy_system_control.constants import WATER
 from energy_system_control.sim.state import SimulationState
 from typing import Dict, List
@@ -331,14 +332,15 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         self.ports[self.main_heat_input_port_name].T = T_heating_port
         return self.main_heat_input_port_name, T_heating_port
         
-    def initialize(self, state: SimulationState):
+    def initialize(self, ctx: InitContext):
+        state = ctx.state
         self.water_mass_flow_t = 0.0
         self.T_layer = self.T_layer = np.array([self.T_0 - 0.01 * x for x in range(self.number_of_layers)], dtype=np.float32)
         self.relative_temperature_layers_state = np.zeros(self.number_of_layers + 1, dtype=np.int16)
         self.internal_heat_exchange_coefficient = np.ones(self.number_of_layers - 1, dtype=np.float32) * WATER.k
         self.matrix_B = np.array([-self.layer_mass * WATER.cp / state.time_step] * self.number_of_layers, dtype=np.float32)
         self.update_A_matrix(True)
-        super().initialize(state)
+        super().initialize(ctx)
 
 
 class Battery(StorageUnit):

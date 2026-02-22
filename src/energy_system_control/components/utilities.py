@@ -37,7 +37,6 @@ class GenericUtility(Utility):
 
 class HeatSource(Component):
     # Partial class, implements a generic heat source
-    Qdot_out: float
     heat_output_port_name: str
     power_input_port_name: str
     source_type: str
@@ -61,12 +60,12 @@ class HeatSource(Component):
         return self.get_heat_output(state) / self.get_efficiency(state)
 
     def step(self, state: SimulationState, action):
-        self.ports[self.heat_output_port_name].flow['heat'] = -self.get_heat_output(state) * action * self.time_step
-        self.ports[self.power_input_port_name].flow[self.source_type] = self.get_power_input(state) * action * self.time_step
+        self.ports[self.heat_output_port_name].flow['heat'] = -self.get_heat_output(state) * action * state.time_step
+        self.ports[self.power_input_port_name].flow[self.source_type] = self.get_power_input(state) * action * state.time_step
 
 
-class SimplifiedHeatSource(HeatSource):
-    def __init__(self, name: str, thermal_node: str, source_node: str, Qdot_max: float, efficiency: float):
+class ResistanceHeater(HeatSource):
+    def __init__(self, name: str, Qdot_max: float, efficiency: float):
         """
         Model of heat pump based on a generic heat source with fixed heat output and fixed efficiency
 
@@ -83,7 +82,7 @@ class SimplifiedHeatSource(HeatSource):
         efficiency : float
             Efficiency [-] of the unit
         """
-        super().__init__(name = name, thermal_node = thermal_node, source_node = source_node)
+        super().__init__(name = name, source_type='electricity')
         self.Qdot_out = Qdot_max
         self.efficiency = efficiency
 
@@ -92,6 +91,7 @@ class SimplifiedHeatSource(HeatSource):
     
     def get_efficiency(self, state: SimulationState):
         return self.efficiency
+
 
 
 class BalancingUtility(Utility):
@@ -103,6 +103,15 @@ class BalancingUtility(Utility):
 
     def step(self, state: SimulationState, action):
         pass  # In theory, nothing is needed here!
+
+
+class ElectricityGrid(BalancingUtility):
+    cost_of_electricity_purchased: float
+    value_of_electricity_sold: float
+    def __init__(self, name: str, cost_of_electricity_purchased: float = 0.0, value_of_electricity_sold: float = 0.0):
+        super().__init__(name, 'electricity')
+        self.cost_of_electricity_purchased = cost_of_electricity_purchased
+        self.value_of_electricity_sold = value_of_electricity_sold
 
 
 class ColdWaterGrid(BalancingUtility):

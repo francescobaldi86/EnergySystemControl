@@ -1,6 +1,7 @@
 # tests/unit/test_components_battery.py
 import numpy as np
 import pytest, math
+from energy_system_control.core.base_classes import InitContext
 
 def test_battery_creation():
     from energy_system_control import LithiumIonBattery
@@ -31,7 +32,8 @@ def test_multinode_water_tank_creation():
     assert test_storage.height == 1.2
     assert test_storage.T_0 == 40.0 + 273.15
     test_storage.create_ports()
-    test_storage.initialize(SimulationState(time = 0.0, time_step = 900))
+    ctx = InitContext(environment = None, state = SimulationState(time = 0.0, time_step = 900))
+    test_storage.initialize(ctx)
     assert len(test_storage.T_layer) == 5
     assert test_storage.T_layer[0] > test_storage.T_layer[test_storage.number_of_layers-1]
     assert math.isclose(test_storage.layer_mass, 250/5, abs_tol=1)
@@ -44,7 +46,8 @@ def test_multinode_water_tank_internal_heating_flows():
                                          height_main_heat_input = 0.2,
                                          tank_height = 1.2)
     test_storage.create_ports()
-    test_storage.initialize(SimulationState(time = 0.0, time_step = 900))
+    ctx = InitContext(environment = None, state = SimulationState(time = 0.0, time_step = 900))
+    test_storage.initialize(ctx)
     test_flows = test_storage.calculate_heat_exchange_between_layers()
     assert True
 

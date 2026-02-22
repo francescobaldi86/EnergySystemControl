@@ -5,31 +5,48 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 from typing import Literal
+from energy_system_control.sim.state import SimulationState
+from energy_system_control.components.base import Component
 AlignMethod = Literal["raise", "ffill", "linear"]
 
 class Predictor(ABC):
+    variable_to_predict: str | None
+
+    def __init__(self, variable_to_predict: str):
+        self.variable_to_predict = variable_to_predict
+    
     @abstractmethod
     def predict(
         self,
-        time: float,  # Current simulation time
-        simulation_start_datetime: pd.Timestamp,
         horizon: float,  # In seconds
-        variables: Sequence[str],
-        dt: float,  # in seconds,
+        state: SimulationState
     ) -> pd.DataFrame:
         """
         Return predictions from (now, now+horizon] on a dt grid.
 
         Output: DataFrame indexed by target timestamps, columns = variables.
         """
+    
  
-@dataclass
 class OfflineForecastPredictor(Predictor):
     forecast_df: pd.DataFrame          # MultiIndex(issue_time, valid_time), columns=variables
-    issue_level: str = "issue_time"
-    valid_level: str = "valid_time"
-    align: AlignMethod = "ffill"
-    dt_native: pd.Timedelta = pd.Timedelta(hours=1)
+    issue_level: str
+    valid_level: str
+    align: AlignMethod
+
+    def __init__(self, 
+                 forecast_df: pd.DataFrame, 
+                 variable_to_predict: str,
+                 issue_level: str = "issue_time",
+                 valid_level: str = "valid_time",
+                 align: AlignMethod = "ffill"
+                 ):
+        super().__init__(variable_to_predict)
+        self.forecast_df = forecast_df
+        self.issue_level = issue_level
+        self.valid_level = valid_level
+        self.align = align
+
 
     def _select_issue_time(self, now: pd.Timestamp) -> pd.Timestamp:
         issue_times = self.forecast_df.index.get_level_values(self.issue_level).unique().sort_values()
@@ -40,11 +57,8 @@ class OfflineForecastPredictor(Predictor):
 
     def predict(
         self,
-        time: float,  # Current simulation time
-        simulation_start_datetime: pd.Timestamp,
-        horizon: float,  # In hours
-        variables: Sequence[str],
-        dt: float,  # in seconds,
+        horizon: float,  # In seconds
+        state: SimulationState
     ) -> pd.DataFrame:
         """
         Return predictions from (now, now+horizon] on a dt grid.
@@ -76,12 +90,12 @@ class OfflineForecastPredictor(Predictor):
         """
         
         # Determine best time for prediction
-        now = simulation_start_datetime + pd.Timedelta(seconds=time)
+        now = state.simulation_start_datetime + pd.Timedelta(seconds=state.time)
         issue = self._select_issue_time(now)
         # Build target grid: (now, now+horizon] at dt
-        start = now + pd.to_timedelta(dt, 'second')
+        start = now + pd.to_timedelta(state.time_step, 'second')
         end = now + pd.to_timedelta(horizon, 'hours')
-        target_index = pd.date_range(start=start, end=end, freq=pd.to_timedelta(dt, 'second'))
+        target_index = pd.date_range(start=start, end=end, freq=pd.to_timedelta(state.time_step, 'second'))
         # Slice forecast run
         run = self.forecast_df.xs(issue, level=self.issue_level)
         # Checking that the required horizon is available
@@ -93,16 +107,15 @@ class OfflineForecastPredictor(Predictor):
                 f"but requested [{start}, {end}]."
     )
         # Resample if needed
-        if dt == self.dt_native:
+        if state.time_step == self.dt_native:
             out = run.reindex(target_index)
         else:
             out = self._align_to_grid(run, target_index, method=self.align)
         # Ensure variables exist
-        missing = [v for v in variables if v not in out.columns]
-        if missing:
-            raise KeyError(f"Missing variables in forecast_df: {missing}")
+        if self.variable_to_predict not in out.columns:
+            raise KeyError(f"Missing variables in forecast_df: {self.variable_to_predict}")
 
-        return out.loc[target_index, list(variables)]
+        return out.loc[target_index, self.variable_to_predict]
     
     def _align_to_grid(
         self,
@@ -164,3 +177,73 @@ class OfflineForecastPredictor(Predictor):
         df["valid_time"] = pd.to_datetime(df["valid_time"])
         df = df.set_index(["issue_time", "valid_time"]).sort_index()
         return df
+
+
+class DailyProfilePredictor(Predictor):
+    profile: pd.DataFrame
+    original_frequency: float
+    """
+    This class implements a generic predictor that does the 
+    prediction based on a fixed daily profile. Very simple, but kind of useful
+    especially for testing
+    """
+    
+    def __init__(self, variable_to_predict: str, profile: pd.DataFrame):
+        self.check_raw_profile(profile)
+        self.profile = profile
+        self.profile.index = self.profile.index * 3600  # Converting profile indeces to seconds
+        self.original_frequency = self.profile.index.to_series().diff().median()
+        super().__init__(variable_to_predict=variable_to_predict)
+        
+    def predict(self, horizon, state):
+        """
+        Return predictions from (now, now+horizon] on a dt grid.
+
+        Parameters:
+        -----------
+        horizon : float
+            The prediction horizon in hours.
+        state : SimulationState
+            The current state of the simulation.
+
+        Returns:
+        --------
+        np.array
+            A Numpy array containing the predictions for the specified variable over the prediction horizon.
+        """
+        # Determine the current time
+        if state.simulation_start_datetime is None:
+            raise(ValueError("Simulation start datetime not set in state."))
+        now = state.simulation_start_datetime + pd.Timedelta(seconds=state.time)
+
+        # Build target grid: (now, now+horizon] at dt
+        start = now  #  + pd.to_timedelta(state.time_step, 'second')
+        end = now + pd.to_timedelta(horizon, 'hours')
+        target_index = pd.date_range(start=start, end=end, freq=pd.to_timedelta(state.time_step, 'second'))
+
+        # Repeat the daily profile to cover the prediction horizon
+        profile_start = start.normalize()
+        profile_repeated = pd.concat([self.profile] * (int(horizon * 3600 / (state.time_step * (self.profile.index[-1] - self.profile.index[0]))) + 1))
+
+        # Align the repeated profile to the target index
+        profile_repeated.index = pd.date_range(start=profile_start, periods=len(profile_repeated), freq=pd.to_timedelta(self.original_frequency, 'second'))
+        profile_repeated = profile_repeated.reindex(target_index, method='ffill')
+
+        return profile_repeated[self.variable_to_predict].values[:int(horizon * 3600 / state.time_step)]
+
+    def check_raw_profile(self, profile):
+        assert profile.index.min() == 0.0
+        assert profile.index.max() <= 24.0
+        assert profile.index.max() >= 23.0
+
+class PerfectTimeSeriesPredictor(Predictor):
+    read_component: str
+    def __init__(self, read_component: str, variable_to_predict: str = None):
+        super().__init__(variable_to_predict=variable_to_predict)
+        self.read_component = read_component
+
+    def initialize(self, environment):
+        self.data = environment.components[self.read_component].data
+
+    def predict(self, horizon, state):
+        return self.data[state.time_id: np.where(state.time_vector_for_prediction == state.time + horizon*3600)[0][0]] / state.time_step

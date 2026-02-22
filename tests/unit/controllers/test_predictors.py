@@ -173,3 +173,39 @@ def test_build_forecast_df_sets_multiindex_and_sorts():
     assert isinstance(df.index, pd.MultiIndex)
     assert df.index.names == ["issue_time", "valid_time"]
     assert df.sort_index().equals(df)
+
+@pytest.fixture
+def basic_daily_profile_predictor():
+    from energy_system_control.controllers.predictors import DailyProfilePredictor
+    # Create a sample profile
+    profile = pd.DataFrame(index = np.arange(start=0.0, stop=24.0, step=1.0), data={'power': np.random.rand(24)})
+    variable_to_predict = 'power'
+    
+    # Create a predictor instance
+    predictor = DailyProfilePredictor(
+        profile=profile,
+        variable_to_predict=variable_to_predict
+    )
+    return predictor
+
+def test_DailyProfilePredictor_setup(basic_daily_profile_predictor):
+    profile = pd.DataFrame(index = np.arange(start=0.0, stop=24.0, step=1.0), data={'power': np.random.rand(24)})
+    profile.index *= 3600.0
+    assert basic_daily_profile_predictor.variable_to_predict == 'power'
+
+def test_DailyProfilePredictor_predict(basic_daily_profile_predictor):
+    # Create a simulation state
+    from energy_system_control.sim.state import SimulationState
+    simulation_start_datetime = pd.to_datetime("2023-01-01 00:00")
+    state = SimulationState(
+        simulation_start_datetime=simulation_start_datetime,
+        time=0,
+        time_step = 900
+    )
+    # Call the predict method
+    horizon = 24  # 24 hours
+    predictions = basic_daily_profile_predictor.predict(horizon, state)
+
+    # Check the predictions
+    assert isinstance(predictions, np.ndarray)
+    assert len(predictions) == int(horizon * 3600 / state.time_step)

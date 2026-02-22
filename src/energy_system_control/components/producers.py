@@ -1,10 +1,11 @@
-from energy_system_control.components.base import Component
+from energy_system_control.components.base import Component, TimeSeriesData
 from energy_system_control.helpers import *
 from energy_system_control.sim.state import SimulationState
 from typing import List, Dict
 import os, yaml, csv, json, requests
 import numpy as np
 import pandas as pd
+from typing import Literal
 
 
 class Producer(Component):
@@ -26,32 +27,35 @@ class ConstantPowerProducer(Producer):
 
 
 class PVpanel(Producer):
-    installed_power: float
-    raw_data: pd.Series
-    data: pd.Series
-    def __init__(self, name: str, installed_power: float, raw_data: pd.Series):
+    ts: TimeSeriesData
+    def __init__(self, name: str, ts: TimeSeriesData):
         super().__init__(name, 'electricity')
-        self.installed_power = installed_power
-        self.raw_data = raw_data
-
-    def resample_data(self, time_step: float, sim_end: float):
-        # Resamples the raw data to the format required 
-        if hasattr(self, 'raw_data'):
-            target_freq = f"{int(time_step*3600)}s"
-            self.data = resample_with_interpolation(self.raw_data, target_freq, sim_end*3600.0, var_type="intensive")
+        self.ts = ts
 
     def step(self, state: SimulationState, action = None):
-        self.ports[self.port_name].flow['electricity'] = -self.data[state.time_id] * self.installed_power * state.time_step
-    
-    def check_data(self):
-        if self.raw_data.between(0, 1).sum() != len(self.raw_data):
-            raise ValueError(f'The data for the capacity factor of the PV {self.name} should be between 0 and 1. Please check it')
+        self.ports[self.port_name].flow['electricity'] = -self.ts.data[state.time_id] * state.time_step
+
 
 class PVpanelFromData(PVpanel):
-    def __init__(self, name: str, installed_power: float, data_path: str, filename: str, datetime_format: str = '%Y%m%D:%H%M'):
-        raw_data = pd.read_csv(os.path.join(data_path, filename), sep = ";", decimal = '.', parse_dates = True)
-        super().__init__(name, installed_power, raw_data)
-        self.check_data()
+    def __init__(self, name: str, data_path: str, filename: str, column_name: str = 'P', date_format: str = '%Y%m%d:%H%M', skipfooter: int = 0, var_unit: Literal['kW', 'W'] = 'W', rescale_factor: float | None = None):
+        temp = pd.read_csv(os.path.join(data_path, filename), sep = ";", decimal = '.', skipfooter = skipfooter, engine='python', index_col = 0)
+        temp['time'] = pd.to_datetime(raw_data.index, format=date_format, utc=True)
+        temp = raw_data.set_index('time')
+        temp = raw_data[column_name]
+        if rescale_factor:
+            raw_data *= rescale_factor
+        ts = TimeSeriesData(
+            raw = temp,
+            var_type = 'power',
+            var_unit = var_unit,
+        )
+        super().__init__(name, ts)
+
+
+class PVpanelFromPVGISData(PVpanelFromData):
+    def __init__(self, name: str, installed_power: float, data_path: str, filename: str):
+        super().__init__(name, installed_power, data_path, filename, column_name = 'P', date_format = '%Y%m%d:%H%M', skipfooter=11, unit = 'W')
+
 
 class PVpanelFromPVGIS(PVpanel):
     def __init__(self, name: str, installed_power: float, latitude: float, longitude: float, tilt: float, azimuth: float, loss: float = 14, years: list[int] = [2023]):
@@ -79,15 +83,20 @@ class PVpanelFromPVGIS(PVpanel):
         self.azimuth = azimuth
         self.loss = loss
         self.years = years
-        super().__init__(name, installed_power, raw_data=self.pvgis_api_call())
-        self.check_data()
+        self.installed_power = installed_power
+        ts = TimeSeriesData(
+            raw = self.pvgis_api_call(),
+            var_type = 'power',
+            unit = 'W'
+        )
+        super().__init__(name, installed_power, ts)
 
     def pvgis_api_call(self):
         url_base = f"https://re.jrc.ec.europa.eu/api/v5_3/seriescalc?"
         pvgis_params = dict(
             lat = self.latitude,
             lon = self.longitude,
-            peakpower = 1,
+            peakpower = self.installed_power,
             loss = self.loss,
             angle = self.tilt,
             azimuth = self.azimuth,
@@ -100,6 +109,6 @@ class PVpanelFromPVGIS(PVpanel):
         temp = pd.DataFrame(requests.get(url_pvcalc).json()['outputs']['hourly'])
         temp['time'] = pd.to_datetime(temp['time'], format="%Y%m%d:%H%M", utc=True)
         temp = temp.set_index('time')
-        return temp['P'] / 1000
+        return temp['P']
         # row_json = json.loads(response.text)   
         #https://re.jrc.ec.europa.eu/api/PVcalc?lat=45&lon=8&peakpower=1&loss=14

@@ -1,5 +1,14 @@
-from typing import Dict, List, Callable, Any
-from collections import defaultdict
+from typing import Dict, List, Callable, Any, Optional
+from dataclasses import dataclass
+
+@dataclass(frozen=True, slots=True)
+class InitContext:
+    environment: Any
+    state: Any
+    rng: Optional[Any] = None
+    logger: Optional[Any] = None
+    config: Optional[dict] = None
+
 
 class Node:
     name: str
@@ -30,8 +39,10 @@ class Sensor():
     def get_measurement(self):
         return self.current_measurement
     
-    def initialize(self):
-        self.current_measurement = None
+    def initialize(self, ctx: InitContext):
+        self.get_measurement(ctx.environment, ctx.state)
 
     def reset(self):
         self.current_measurement = None
+
+

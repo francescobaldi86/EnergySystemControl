@@ -2,7 +2,7 @@ from typing import List, Dict, Any
 from abc import ABC, abstractmethod
 from energy_system_control.helpers import *
 from energy_system_control.components.base import Component
-from energy_system_control.core.base_classes import Sensor
+from energy_system_control.core.base_classes import Sensor, InitContext
 from energy_system_control.sim.state import SimulationState
 
 class Controller(ABC):
@@ -47,7 +47,7 @@ class Controller(ABC):
     def get_action(self) -> Dict[str, Any]:
         return None
     
-    def initialize(self):
+    def initialize(self, ctx: InitContext):
         self.previous_action = {comp: 0 for comp in self.controlled_components}
 
 class HeaterControllerWithBandwidth(Controller):
