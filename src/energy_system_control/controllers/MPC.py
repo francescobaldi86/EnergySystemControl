@@ -5,6 +5,7 @@ from typing import Dict, Any, Sequence, Optional, Tuple, Literal, List
 import numpy as np
 import pandas as pd
 import cvxpy as cp
+import math
 from energy_system_control.controllers.base import Controller
 from energy_system_control.controllers.predictors import Predictor
 from energy_system_control.core.base_classes import InitContext
@@ -81,7 +82,8 @@ class MPCController_HybridDHW(MPCController):
     def __init__(self,
                     name: str,
                     horizon: float,
-                    sensors: Dict[str, str],
+                    storage_temperature_sensor: str | None = None,
+                    battery_SOC_sensor: str | None = None,
                     PV_power_predictor: Predictor | None = None,
                     heat_demand_predictor: Predictor | None = None,
                     electricity_demand_predictor: Predictor | None = None,
@@ -93,6 +95,8 @@ class MPCController_HybridDHW(MPCController):
         self.electricity_demand_predictor = electricity_demand_predictor
         self.predictors = [PV_power_predictor, heat_demand_predictor, electricity_demand_predictor]
         self.predictors = [predictor for predictor in self.predictors if predictor is not None]
+        sensors = {"temperature_storage": storage_temperature_sensor, "soc_battery": battery_SOC_sensor}
+        sensors = {k: v for k, v in sensors.items() if v is not None}
         self.bounds_SOC = bounds_SOC
         self.bounds_temperature = bounds_temperature
         super().__init__(
@@ -154,20 +158,20 @@ class MPCController_HybridDHW(MPCController):
         problem.constant_parameters = {
             'DISPERSION_COEFFICIENT': self.hot_water_storage.convection_coefficient_losses,
             'DISPERSION_SURFACE': self.hot_water_storage.surface,
-            'HEAT_CAPACITY_WATER': WATER.cp,
+            'HEAT_CAPACITY_WATER': WATER.cp / 3600,
             'MASS_STORAGE': self.hot_water_storage.volume * WATER.rho,
             'EFFICIENCY_EES_CHA': self.battery.efficiency_charge * self.inverter.efficiency,
             'EFFICIENCY_EES_DIS': self.battery.efficiency_discharge * self.inverter.efficiency,
             'POWER_HP_EL': self.heat_pump.Qdot_design if self.heat_pump else 0.0,
-            'POWER_HP_TH': self.heat_pump.Qdot_design / self.heat_pump.COP_design if self.heat_pump else 0.0,
+            'POWER_HP_TH': self.heat_pump.Qdot_design * self.heat_pump.COP_design if self.heat_pump else 0.0,
             'POWER_RESISTANCE_EL': self.resistance_heater.power if self.resistance_heater else 0.0,
             'POWER_RESISTANCE_TH': self.resistance_heater.power if self.resistance_heater else 0.0,
             'ENERGY_COST': self.electricity_grid.cost_of_electricity_purchased,
             'ENERGY_VALUE': self.electricity_grid.value_of_electricity_sold,
             'POWER_BATTERY_MAX_CHA': abs(self.battery.max_charging_power),
             'POWER_BATTERY_MAX_DIS': abs(self.battery.max_discharging_power),
-            'ENERGY_BATTERY_MAX': self.battery.max_capacity * self.bounds_SOC[1] if self.battery else 0.0,
-            'ENERGY_BATTERY_MIN': self.battery.max_capacity * self.bounds_SOC[0] if self.battery else 0.0,
+            'ENERGY_BATTERY_MAX': self.battery.max_capacity * self.bounds_SOC[1] / 3600 if self.battery else 0.0,
+            'ENERGY_BATTERY_MIN': self.battery.max_capacity * self.bounds_SOC[0] / 3600 if self.battery else 0.0,
             'TEMPERATURE_STORAGE_MAX': self.bounds_temperature[1],
             'TEMPERATURE_STORAGE_MIN': self.bounds_temperature[0]
         }
@@ -185,7 +189,7 @@ class MPCController_HybridDHW(MPCController):
         A_TES_above = np.array([1] * (TIME_HORIZON-1))
         A_TES = np.diag(A_TES_main) + np.diag(A_TES_above, k=1)
         problem.constant_parameters['A_TES'] = A_TES = A_TES[:-1, :]
-        problem.constant_parameters['B1_TES'] = TIME_STEP / (problem.constant_parameters['MASS_STORAGE'] * WATER.cp)
+        problem.constant_parameters['B1_TES'] = TIME_STEP / (problem.constant_parameters['MASS_STORAGE'] * problem.constant_parameters['HEAT_CAPACITY_WATER'])
 
         # Matrices and vectors for electrical storage energy update
         A_EES = np.zeros(shape=[TIME_HORIZON-1,TIME_HORIZON])
@@ -224,10 +228,23 @@ class MPCController_HybridDHW(MPCController):
         action = {}
         self.update_problem_parameters(state)
         self.problem.problem.solve(self.solver)
+        if self.problem.problem.status not in {'optimal', 'optimal_inaccurate'}:
+            raise ValueError(f'The optimisation solver could not find an optimal solution at time step {state.time_id} at simulation time {state.time}')
         if self.heat_pump:
-            action[self.heat_pump.name] = self.problem.variables['status_heat_pump'].value[0]
+            temp = self.problem.variables['status_heat_pump'].value[0]
+            temp_rounded = round(temp,0)
+            if math.isclose(temp, temp_rounded, abs_tol=1e-5):
+                action[self.heat_pump.name] = int(temp_rounded)
+            else:
+                raise ValueError(f'The heat pump status is not an integer at time step {state.time_id} at simulation time {state.time}. Optimal heat pump status is {temp}')
         if self.resistance_heater:
-            action[self.resistance_heater.name] = self.problem.variables['status_resistance'].value[0]
+            temp = self.problem.variables['status_resistance'].value[0]
+            temp_rounded = round(temp,0)
+            if math.isclose(temp, temp_rounded, abs_tol=1e-5):
+                action[self.resistance_heater.name] = int(temp_rounded)
+            else:
+                raise ValueError(f'The resistance status is not an integer at time step {state.time_id} at simulation time {state.time}. Optimal resistance status is {temp}')
+        self.previous_action = action
         return action
     
     def get_obs(self, environment, state) -> Dict[str, Any]:
@@ -238,7 +255,7 @@ class MPCController_HybridDHW(MPCController):
         return self.obs
 
 
-    def update_problem_parameters(self, state):
+    def update_problem_parameters(self, state: SimulationState):
         # Method that updates problem parameters depending on the current state of the simulation
         param = self.problem.variable_parameters
         # Prediction of future heat demand
@@ -246,7 +263,7 @@ class MPCController_HybridDHW(MPCController):
         param['POWER_PV'].value = self.safe_predict(self.PV_power_predictor, state)
         param['EL_DEMAND'].value = self.safe_predict(self.electricity_demand_predictor, state)
         param['TEMPERATURE_STORAGE_0'].value = self.obs['temperature_storage'] if 'temperature_storage' in self.obs.keys() else 273.15+50
-        param['SOC_0'].value = self.sensors['soc_battery'].get_measurement() if 'soc_battery' in self.obs.keys() else 0.5
+        param['SOC_0'].value = self.obs['soc_battery'] if 'soc_battery' in self.obs.keys() else 0.5
         param['B_TES'].value = param['TH_DEMAND'].value[:-1] * self.problem.constant_parameters['B1_TES']
     
     def safe_predict(self, predictor: Predictor | None, state: SimulationState):

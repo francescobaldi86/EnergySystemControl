@@ -35,15 +35,18 @@ class PVpanel(Producer):
     def step(self, state: SimulationState, action = None):
         self.ports[self.port_name].flow['electricity'] = -self.ts.data[state.time_id] * state.time_step
 
+    def resample_data(self, time_step_h: float, sim_end_h: float):
+        self.ts.resample(time_step_h=time_step_h, sim_end_h=sim_end_h)
+
 
 class PVpanelFromData(PVpanel):
     def __init__(self, name: str, data_path: str, filename: str, column_name: str = 'P', date_format: str = '%Y%m%d:%H%M', skipfooter: int = 0, var_unit: Literal['kW', 'W'] = 'W', rescale_factor: float | None = None):
         temp = pd.read_csv(os.path.join(data_path, filename), sep = ";", decimal = '.', skipfooter = skipfooter, engine='python', index_col = 0)
-        temp['time'] = pd.to_datetime(raw_data.index, format=date_format, utc=True)
-        temp = raw_data.set_index('time')
-        temp = raw_data[column_name]
+        temp['time'] = pd.to_datetime(temp.index, format=date_format, utc=True)
+        temp = temp.set_index('time')
+        temp = temp[column_name]
         if rescale_factor:
-            raw_data *= rescale_factor
+            temp *= rescale_factor
         ts = TimeSeriesData(
             raw = temp,
             var_type = 'power',
@@ -53,8 +56,8 @@ class PVpanelFromData(PVpanel):
 
 
 class PVpanelFromPVGISData(PVpanelFromData):
-    def __init__(self, name: str, installed_power: float, data_path: str, filename: str):
-        super().__init__(name, installed_power, data_path, filename, column_name = 'P', date_format = '%Y%m%d:%H%M', skipfooter=11, unit = 'W')
+    def __init__(self, name: str, data_path: str, filename: str, rescale_factor: float | None = None):
+        super().__init__(name, data_path=data_path, filename=filename, column_name = 'P', date_format = '%Y%m%d:%H%M', skipfooter=11, var_unit = 'W', rescale_factor=rescale_factor)
 
 
 class PVpanelFromPVGIS(PVpanel):

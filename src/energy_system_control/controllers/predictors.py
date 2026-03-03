@@ -11,8 +11,10 @@ AlignMethod = Literal["raise", "ffill", "linear"]
 
 class Predictor(ABC):
     variable_to_predict: str | None
+    name : str
 
-    def __init__(self, variable_to_predict: str):
+    def __init__(self, name: str, variable_to_predict: str):
+        self.name = name
         self.variable_to_predict = variable_to_predict
     
     @abstractmethod
@@ -34,14 +36,15 @@ class OfflineForecastPredictor(Predictor):
     valid_level: str
     align: AlignMethod
 
-    def __init__(self, 
+    def __init__(self,
+                 name: str, 
                  forecast_df: pd.DataFrame, 
                  variable_to_predict: str,
                  issue_level: str = "issue_time",
                  valid_level: str = "valid_time",
                  align: AlignMethod = "ffill"
                  ):
-        super().__init__(variable_to_predict)
+        super().__init__(name = name, variable_to_predict = variable_to_predict)
         self.forecast_df = forecast_df
         self.issue_level = issue_level
         self.valid_level = valid_level
@@ -188,12 +191,12 @@ class DailyProfilePredictor(Predictor):
     especially for testing
     """
     
-    def __init__(self, variable_to_predict: str, profile: pd.DataFrame):
+    def __init__(self, name: str, variable_to_predict: str, profile: pd.DataFrame):
         self.check_raw_profile(profile)
         self.profile = profile
         self.profile.index = self.profile.index * 3600  # Converting profile indeces to seconds
         self.original_frequency = self.profile.index.to_series().diff().median()
-        super().__init__(variable_to_predict=variable_to_predict)
+        super().__init__(name = name, variable_to_predict=variable_to_predict)
         
     def predict(self, horizon, state):
         """
@@ -238,12 +241,12 @@ class DailyProfilePredictor(Predictor):
 
 class PerfectTimeSeriesPredictor(Predictor):
     read_component: str
-    def __init__(self, read_component: str, variable_to_predict: str = None):
-        super().__init__(variable_to_predict=variable_to_predict)
+    def __init__(self, name: str, read_component: str, variable_to_predict: str = None):
+        super().__init__(name = name, variable_to_predict=variable_to_predict)
         self.read_component = read_component
 
     def initialize(self, environment):
-        self.data = environment.components[self.read_component].data
+        self.data = environment.components[self.read_component].ts.data
 
     def predict(self, horizon, state):
-        return self.data[state.time_id: np.where(state.time_vector_for_prediction == state.time + horizon*3600)[0][0]] / state.time_step
+        return self.data[state.time_id: np.where(state.time_vector_for_prediction == state.time + horizon*3600)[0][0]]

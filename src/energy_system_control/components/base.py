@@ -55,7 +55,7 @@ class TimeSeriesData:
     var_type: Literal['energy', 'power', 'volume', 'mass', 'temperature']
     var_unit: Literal['Wh', 'kWh', 'MWh', 'W', 'kW', 'MW', 'l', 'm3', 'kg', 'C', 'K']
     data: np.ndarray | None = None
-    energy_to_power_converter = {'Wh': 3.6, 'kWh': 3.6e3, 'J': 1.0e-3, 'kJ': 1.0}
+    energy_to_power_converter = {'Wh': 1e-3, 'kWh': 1.0, 'J': 1.0/3_600_000, 'kJ': 1.0/3600}
 
     def resample(self, time_step_h: float, sim_end_h: float):
         # Resamples the raw data to the format required 
