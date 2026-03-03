@@ -90,9 +90,9 @@ class PVpanelFromPVGIS(PVpanel):
         ts = TimeSeriesData(
             raw = self.pvgis_api_call(),
             var_type = 'power',
-            unit = 'W'
+            var_unit = 'W'
         )
-        super().__init__(name, installed_power, ts)
+        super().__init__(name, ts)
 
     def pvgis_api_call(self):
         url_base = f"https://re.jrc.ec.europa.eu/api/v5_3/seriescalc?"

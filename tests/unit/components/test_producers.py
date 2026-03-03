@@ -2,11 +2,36 @@
 import numpy as np
 import pandas as pd
 from math import isclose
+from energy_system_control.components.producers import PVpanel, PVpanelFromData, PVpanelFromPVGISData, PVpanelFromPVGIS
+from energy_system_control.components.base import TimeSeriesData
 from energy_system_control.sim.state import SimulationState
+from datetime import datetime, timedelta
 import os
 
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+
+# Base test for instantiation
+def test_pv_panel_instantiation():
+    ts = TimeSeriesData(raw=pd.Series([1000, 2000], index=[datetime(2023, 1, 1, 0, 0), datetime(2023, 1, 1, 1, 0)]), var_type='power', var_unit='W')
+    pv_panel = PVpanel(name="test_pv_panel", ts=ts)
+    assert isinstance(pv_panel, PVpanel)
+
+    # Test PVpanelFromData instantiation
+    data_path = os.path.join(__TEST__, 'DATA')
+    filename = "pvgis_data.csv"
+    col_name = 'P'
+    skip_footer = 11
+    pv_panel_from_data = PVpanelFromData(name="test_pv_panel_from_data", data_path=data_path, filename=filename, column_name=col_name, skipfooter=skip_footer)
+    assert isinstance(pv_panel_from_data, PVpanelFromData)
+
+    # Test PVpanelFromPVGISData instantiation
+    pv_panel_from_pvgis_data = PVpanelFromPVGISData(name="test_pv_panel_from_pvgis_data", data_path=data_path, filename=filename)
+    assert isinstance(pv_panel_from_pvgis_data, PVpanelFromPVGISData)
+
+    # Test PVpanelFromPVGIS instantiation
+    pv_panel_from_pvgis = PVpanelFromPVGIS(name="test_pv_panel_from_pvgis", installed_power=1000, latitude=45, longitude=8, tilt=30, azimuth=0)
+    assert isinstance(pv_panel_from_pvgis, PVpanelFromPVGIS)
 
 def test_panel_with_custom_data():
     from energy_system_control import PVpanel
