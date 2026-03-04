@@ -399,8 +399,6 @@ class Battery(StorageUnit):
     def step(self, state: SimulationState, action):
         # Just considering charging/discharging losses
         self.check_storage_state()
-        if abs(self.ports[self.port_name].flow['electricity']) > 100:
-            pass
         if self.ports[self.port_name].flow['electricity'] > 0:  # Charging
             self.SOC += self.ports[self.port_name].flow['electricity'] * self.efficiency_charge / self.max_capacity
         else:

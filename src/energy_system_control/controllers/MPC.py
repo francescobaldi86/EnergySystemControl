@@ -172,6 +172,7 @@ class MPCController_HybridDHW(MPCController):
             'POWER_BATTERY_MAX_DIS': abs(self.battery.max_discharging_power),
             'ENERGY_BATTERY_MAX': self.battery.max_capacity * self.bounds_SOC[1] / 3600 if self.battery else 0.0,
             'ENERGY_BATTERY_MIN': self.battery.max_capacity * self.bounds_SOC[0] / 3600 if self.battery else 0.0,
+            'CAPACITY_BATTERY': self.battery.max_capacity / 3600 if self.battery else 0.0,
             'TEMPERATURE_STORAGE_MAX': self.bounds_temperature[1],
             'TEMPERATURE_STORAGE_MIN': self.bounds_temperature[0]
         }
@@ -205,7 +206,7 @@ class MPCController_HybridDHW(MPCController):
             problem.variables['power_resistance'] == problem.variables['status_resistance'] * problem.constant_parameters['POWER_RESISTANCE_EL'],
             problem.variables['power_from_grid'] + problem.variable_parameters['POWER_PV'] + problem.variables['power_from_battery'] - problem.variables['power_to_grid'] - problem.variable_parameters['EL_DEMAND'] - problem.variables['power_to_battery'] - problem.variables['power_heat_pump'] - problem.variables['power_resistance'] == 0,
             problem.variables['temperature_hot_water_storage'][0] == problem.variable_parameters['TEMPERATURE_STORAGE_0'],
-            problem.variables['energy_battery'][0] == problem.variable_parameters['SOC_0'] * problem.constant_parameters['ENERGY_BATTERY_MAX'],
+            problem.variables['energy_battery'][0] == problem.variable_parameters['SOC_0'] * problem.constant_parameters['CAPACITY_BATTERY'],
             A_TES @ problem.variables['temperature_hot_water_storage'] - problem.variables['status_heat_pump'][:-1] * problem.constant_parameters['POWER_HP_TH'] * problem.constant_parameters['B1_TES'] - problem.variables['status_resistance'][:-1] * problem.constant_parameters['POWER_RESISTANCE_TH'] * problem.constant_parameters['B1_TES'] + problem.variable_parameters['B_TES'] == 0,
             A_EES @ problem.variables['energy_battery'] - problem.variables['power_to_battery'][:-1] * problem.constant_parameters['B1_EES_CHA'] + problem.variables['power_from_battery'][:-1] * problem.constant_parameters['B1_EES_DIS'] == 0,
             problem.variables['temperature_hot_water_storage'] <= problem.constant_parameters['TEMPERATURE_STORAGE_MAX'],
@@ -259,9 +260,9 @@ class MPCController_HybridDHW(MPCController):
         # Method that updates problem parameters depending on the current state of the simulation
         param = self.problem.variable_parameters
         # Prediction of future heat demand
-        param['TH_DEMAND'].value = self.safe_predict(self.heat_demand_predictor, state)
-        param['POWER_PV'].value = self.safe_predict(self.PV_power_predictor, state)
-        param['EL_DEMAND'].value = self.safe_predict(self.electricity_demand_predictor, state)
+        param['TH_DEMAND'].value = self.safe_predict(self.heat_demand_predictor, state)[:param['TH_DEMAND'].size]
+        param['POWER_PV'].value = self.safe_predict(self.PV_power_predictor, state)[:param['TH_DEMAND'].size]
+        param['EL_DEMAND'].value = self.safe_predict(self.electricity_demand_predictor, state)[:param['TH_DEMAND'].size]
         param['TEMPERATURE_STORAGE_0'].value = self.obs['temperature_storage'] if 'temperature_storage' in self.obs.keys() else 273.15+50
         param['SOC_0'].value = self.obs['soc_battery'] if 'soc_battery' in self.obs.keys() else 0.5
         param['B_TES'].value = param['TH_DEMAND'].value[:-1] * self.problem.constant_parameters['B1_TES']
