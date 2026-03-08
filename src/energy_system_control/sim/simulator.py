@@ -58,6 +58,8 @@ class Simulator:
             sensor.initialize(ctx)
         for _, controller in self.env.controllers.items():
             controller.initialize(ctx)
+        for _, predictor in self.env.predictors.items():
+            predictor.initialize(ctx)
 
     def _read_timeseries_data(self):
         for _, component in self.env.components.items():

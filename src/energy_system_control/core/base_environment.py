@@ -12,13 +12,14 @@ from energy_system_control.components.utilities import *
 from energy_system_control.components.storage import *
 from energy_system_control.sensors.sensors import *
 from energy_system_control.controllers.base import *
+from energy_system_control.controllers.predictors import *
 from energy_system_control.helpers import *
 
 
 
 
 class Environment:
-    def __init__(self, components: List[Component] = [], controllers: List[Controller] = [], sensors: List[Sensor] = [], connections = []):
+    def __init__(self, components: List[Component] = [], controllers: List[Controller] = [], sensors: List[Sensor] = [], connections = [], predictors: List[Predictor] = []):
         self.nodes: Dict[str, Node] = {}
         self.ports: Dict[str, Port] = {}
         self.connections: List[tuple] = connections
@@ -29,6 +30,7 @@ class Environment:
         self.controllers: Dict[str, Controller] = {controller.name: controller for controller in controllers}
         self.ordered_controllers: List[str] = [controller.name for controller in controllers]
         self.sensors: Dict[str, Sensor] = {sensor.name: sensor for sensor in sensors}
+        self.predictors: Dict[str, Predictor] = {predictor.name: predictor for predictor in predictors}
         self.signal_registry_ports = SignalRegistry()
         self.signal_registry_controllers = SignalRegistry()
         self.signal_registry_sensors = SignalRegistry()

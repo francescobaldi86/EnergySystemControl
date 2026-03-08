@@ -41,7 +41,6 @@ class MPCController(Controller):
         name: str,
         controlled_components: List[str],
         sensors: Dict[str, str],
-        predictors: Dict[str, str],
         horizon: float,
         solver: SolverName = "HIGHS",
     ):
@@ -49,17 +48,12 @@ class MPCController(Controller):
         if horizon <= 0:
             raise ValueError("horizon_steps must be > 0")
         self.horizon = horizon 
-        self.predictors = predictors
         self.solver = solver
 
     def get_obs(self, environment, state) -> Dict[str, Any]:
         """Gets observations"""
         super().get_obs(environment, state)
         self.predictions = {var: predictor.predict(state.time, state.time_step, self.horizon, state.dt) for var, predictor in self.predictor.items()}
-
-    def initialize_perfect_predictors(self, environment):
-        for _, predictor in self.predictors.items():
-            predictor.initialize(environment)
 
     @abstractmethod
     def initialize():
@@ -84,17 +78,15 @@ class MPCController_HybridDHW(MPCController):
                     horizon: float,
                     storage_temperature_sensor: str | None = None,
                     battery_SOC_sensor: str | None = None,
-                    PV_power_predictor: Predictor | None = None,
-                    heat_demand_predictor: Predictor | None = None,
-                    electricity_demand_predictor: Predictor | None = None,
+                    PV_power_predictor_name: str | None = None,
+                    heat_demand_predictor_name: str | None = None,
+                    electricity_demand_predictor_name: str | None = None,
                     bounds_SOC: Tuple[float, float] = (0.3, 0.9),
                     bounds_temperature: Tuple[float, float] = (313.15, 353.15)
                     ):
-        self.PV_power_predictor = PV_power_predictor
-        self.heat_demand_predictor = heat_demand_predictor
-        self.electricity_demand_predictor = electricity_demand_predictor
-        self.predictors = [PV_power_predictor, heat_demand_predictor, electricity_demand_predictor]
-        self.predictors = [predictor for predictor in self.predictors if predictor is not None]
+        self.PV_power_predictor_name = PV_power_predictor_name
+        self.heat_demand_predictor_name = heat_demand_predictor_name
+        self.electricity_demand_predictor_name = electricity_demand_predictor_name
         sensors = {"temperature_storage": storage_temperature_sensor, "soc_battery": battery_SOC_sensor}
         sensors = {k: v for k, v in sensors.items() if v is not None}
         self.bounds_SOC = bounds_SOC
@@ -103,7 +95,6 @@ class MPCController_HybridDHW(MPCController):
             name = name,
             controlled_components = [],
             sensors = sensors,
-            predictors = self.predictors,
             horizon = horizon,
             solver = cp.HIGHS)
         
@@ -124,18 +115,22 @@ class MPCController_HybridDHW(MPCController):
         if self.resistance_heater is not None:
             self.controlled_components[self.resistance_heater.name] = self.resistance_heater
         # Check consistency between predictors and components
-        if self.pv_panel and self.PV_power_predictor is None:
+        if self.pv_panel and self.PV_power_predictor_name is None:
             raise(BaseException, 'PV panel is present but no PV predictor is provided')
-        if self.dhw_demand and self.heat_demand_predictor is None:
+        if self.dhw_demand and self.heat_demand_predictor_name is None:
             raise(BaseException, 'Heat demand is present but no heat demand predictor is provided')
-        if self.electricity_demand and self.electricity_demand_predictor is None:
+        if self.electricity_demand and self.electricity_demand_predictor_name is None:
             raise(BaseException, 'Electricity demand is present but no electricity demand predictor is provided')
         
     def initialize(self, ctx: InitContext):
         # The optimization problem is initialized at the beginning, and then updated using parameters
-        # Initializing the predictors
-        for predictor in self.predictors:
-            predictor.initialize(ctx.environment)
+        # Connecting to the predictors:
+        self.PV_power_predictor = ctx.environment.predictors[self.PV_power_predictor_name] if self.PV_power_predictor_name is not None else None
+        self.heat_demand_predictor = ctx.environment.predictors[self.heat_demand_predictor_name] if self.heat_demand_predictor_name is not None else None
+        self.electricity_demand_predictor = ctx.environment.predictors[self.electricity_demand_predictor_name] if self.electricity_demand_predictor_name is not None else None
+        self.predictors = [self.PV_power_predictor, self.heat_demand_predictor, self.electricity_demand_predictor]
+        self.predictors = [predictor for predictor in self.predictors if predictor is not None]
+        # Getting first obs
         self.get_obs(ctx.environment, ctx.state)
         # Declaring variables
         self.problem = MPCProblem()

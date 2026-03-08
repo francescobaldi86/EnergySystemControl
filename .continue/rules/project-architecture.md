@@ -10,3 +10,4 @@ This is a Python package called energy_system_control. It is used to model compo
 * It uses a src layout.
 * The main setting file is a pyprojec.toml file
 * The testing framework adopted is pytest.
+* On this machine, the package is located in "C:\Users\francesco.baldi\OneDrive - enea.it\Documents\Software\Python\EnergySystemControl"

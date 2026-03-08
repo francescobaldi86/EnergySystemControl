@@ -5,6 +5,8 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 from typing import Literal
+from collections import deque
+from sklearn.neural_network import MLPRegressor
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.components.base import Component
 AlignMethod = Literal["raise", "ffill", "linear"]
@@ -16,6 +18,12 @@ class Predictor(ABC):
     def __init__(self, name: str, variable_to_predict: str):
         self.name = name
         self.variable_to_predict = variable_to_predict
+
+    def initialize(self):
+        return None
+    
+    def update(self):
+        return None
     
     @abstractmethod
     def predict(
@@ -31,10 +39,52 @@ class Predictor(ABC):
     
  
 class OfflineForecastPredictor(Predictor):
+    """
+    A predictor class that uses pre-computed forecast data to make predictions.
+
+    This class inherits from the Predictor base class and implements a predictor
+    that uses pre-computed forecast data stored in a DataFrame. The predictor
+    selects the most recent forecast available at the current time and uses it
+    to make predictions for the specified horizon.
+
+    Parameters
+    ----------
+    name : str
+        Name of the predictor.
+    forecast_df : pd.DataFrame
+        A DataFrame containing the forecast data. The DataFrame should have a
+        MultiIndex with levels for issue_time and valid_time, and columns for
+        the variables to predict.
+    variable_to_predict : str
+        The name of the variable to predict.
+    issue_level : str, optional
+        The name of the level in the MultiIndex that contains the issue times.
+        Defaults to "issue_time".
+    valid_level : str, optional
+        The name of the level in the MultiIndex that contains the valid times.
+        Defaults to "valid_time".
+    align : AlignMethod, optional
+        The alignment method to use when aligning the forecast data to the target
+        grid. Supported methods are "ffill" (forward fill) and "linear" (linear
+        interpolation). Defaults to "ffill".
+
+    Attributes
+    ----------
+    forecast_df : pd.DataFrame
+        The DataFrame containing the forecast data.
+    issue_level : str
+        The name of the level in the MultiIndex that contains the issue times.
+    valid_level : str
+        The name of the level in the MultiIndex that contains the valid times.
+    align : AlignMethod
+        The alignment method to use when aligning the forecast data to the target
+        grid.
+    """
     forecast_df: pd.DataFrame          # MultiIndex(issue_time, valid_time), columns=variables
     issue_level: str
     valid_level: str
     align: AlignMethod
+    dt_native_s: float
 
     def __init__(self,
                  name: str, 
@@ -49,9 +99,28 @@ class OfflineForecastPredictor(Predictor):
         self.issue_level = issue_level
         self.valid_level = valid_level
         self.align = align
+        self.dt_native_s = self.forecast_df.index.get_level_values(valid_level).to_series().diff().median().seconds
 
 
     def _select_issue_time(self, now: pd.Timestamp) -> pd.Timestamp:
+        """
+        Select the most recent forecast issue time that is available at or before the current time.
+
+        Parameters
+        ----------
+        now : pd.Timestamp
+            The current time.
+
+        Returns
+        -------
+        pd.Timestamp
+            The most recent forecast issue time that is available at or before the current time.
+
+        Raises
+        ------
+        ValueError
+            If no forecast is available at or before the current time.
+        """
         issue_times = self.forecast_df.index.get_level_values(self.issue_level).unique().sort_values()
         eligible = issue_times[issue_times <= now]
         if len(eligible) == 0:
@@ -70,14 +139,10 @@ class OfflineForecastPredictor(Predictor):
         -----------
         time : float
             Current simulation time, in seconds.
-        simulation_start_datetime : pd.Timestamp
-            The start datetime of the simulation.
         horizon : float
             The prediction horizon in hours.
-        variables : Sequence[str]
-            The variables to predict.
-        dt : float
-            The time step in seconds.
+        state : SimulationState
+            The current state of the simulation (instance of the SimulationState class)
 
         Returns:
         --------
@@ -110,7 +175,7 @@ class OfflineForecastPredictor(Predictor):
                 f"but requested [{start}, {end}]."
     )
         # Resample if needed
-        if state.time_step == self.dt_native:
+        if state.time_step == self.dt_native_s:
             out = run.reindex(target_index)
         else:
             out = self._align_to_grid(run, target_index, method=self.align)
@@ -239,14 +304,199 @@ class DailyProfilePredictor(Predictor):
         assert profile.index.max() <= 24.0
         assert profile.index.max() >= 23.0
 
+
 class PerfectTimeSeriesPredictor(Predictor):
     read_component: str
     def __init__(self, name: str, read_component: str, variable_to_predict: str = None):
         super().__init__(name = name, variable_to_predict=variable_to_predict)
         self.read_component = read_component
 
-    def initialize(self, environment):
-        self.data = environment.components[self.read_component].ts.data
+    def initialize(self, ctx):
+        self.data = ctx.environment.components[self.read_component].ts.data
 
     def predict(self, horizon, state):
         return self.data[state.time_id: np.where(state.time_vector_for_prediction == state.time + horizon*3600)[0][0]]
+    
+
+class ANNBasedPredictor(Predictor):
+    """
+    A predictor class that uses an Artificial Neural Network (ANN) to make predictions.
+
+    This class inherits from the Predictor base class and implements an ANN-based
+    prediction model. The predictor uses historical sensor data to train the ANN
+    and make predictions about future values, using past data plus the hour of the day 
+    as exogenous variable.
+
+    Parameters
+    ----------
+    prediction_horizon_h : float
+        The amount of time into the future to predict, in [h].
+    sensor_name : str
+        The name of the sensor whose values are being predicted.
+    window_size_h : float, optional
+        The length of past time steps to use as input features. Defaults to 144.
+    retrain_interval_h : float, optional
+        The interval of time that basses between model retraining. Defaults to 24.
+    min_sample_size_h : float, optional
+        The minimum length of time required to train the model. Defaults to 24.
+    **ann_kwargs
+        Additional keyword arguments to pass to the MLPRegressor.
+
+    Attributes
+    ----------
+    buffer : deque
+        A buffer to store recent sensor values.
+    time_buffer : deque
+        A buffer to store timestamps corresponding to sensor values.
+    step_counter : int
+        A counter to keep track of the number of steps.
+    model : MLPRegressor
+        The ANN model used for prediction.
+    is_trained : bool
+        A flag indicating whether the model has been trained.
+    """
+    def __init__(
+        self,
+        prediction_horizon_h,
+        sensor_name,
+        window_size_h=24,
+        retrain_interval_h=50,
+        min_sample_size_h=200,
+        **ann_kwargs
+    ):
+        """
+        Initialize the ANNBasedPredictor.
+
+        Parameters
+        ----------
+        prediction_horizon : int
+            The number of time steps into the future to predict.
+        sensor_name : str
+            The name of the sensor whose values are being predicted.
+        window_size : int, optional
+            The number of past time steps to use as input features. Defaults to 24.
+        retrain_interval : int, optional
+            The number of steps between model retraining. Defaults to 50.
+        min_samples : int, optional
+            The minimum number of samples required to train the model. Defaults to 200.
+        **ann_kwargs
+            Additional keyword arguments to pass to the MLPRegressor.
+        """
+        self.prediction_horizon_h = prediction_horizon_h
+        self.prediction_horizon = None
+        self.sensor_name = sensor_name
+        self.sensor = None
+        self.window_size_h = window_size_h
+        self.window_size = None
+        self.retrain_interval_h = retrain_interval_h
+        self.retrain_interval = None
+        self.min_sample_size_h = min_sample_size_h
+        self.min_sample_size = None
+
+        self.buffer = deque(maxlen=5000)
+        self.time_buffer = deque(maxlen=5000)
+
+        self.step_counter = 0
+        self.model = MLPRegressor(**ann_kwargs)
+        self.is_trained = False
+
+        # Check that sample sizes are consistent
+        if self.min_sample_size_h < self.window_size_h + self.prediction_horizon_h:
+            raise ValueError(f'The minimum sample size should be larger than the sum of the window size plus the prediction horizon.\n Values provided are:\n - min_sample_size: {self.min_sample_size_h} h\n - window_size: {self.window_size_h} h\n - prediction_horizon: {self.prediction_horizon_h} h')
+
+    def initialize(self, ctx):
+        self.window_size = self.window_size_h * 3600 // ctx.state.time_step
+        self.retrain_interval = self.retrain_interval_h * 3600 // ctx.state.time_step
+        self.min_sample_size = self.min_sample_size_h * 3600 // ctx.state.time_step
+        self.prediction_horizon = self.prediction_horizon_h * 3600 //ctx.state.time_step
+        self.sensor = ctx.environment.sensors[self.sensor_name]
+    
+    def update(self, time_s):
+        """
+        Update the predictor with a new sensor value and timestamp.
+
+        Parameters
+        ----------
+        time_s : float
+            The simulation time corresponding to the sensor value [s].
+        """
+        self.buffer.append(self.sensor.get_measurement())
+        self.time_buffer.append(time_s)
+        # If there are enough samples for training, and it's time to retrain, train the model
+        if self.time_buffer[-1] / 3600 >= self.min_sample_size_h:
+            if self.time_buffer[-1] / 3600 % self.retrain_interval_h == 0:
+                self._train()
+
+    def _train(self):
+        X, Y = self._prepare_data()
+        if len(X) == 0:
+            return
+
+        self.model.fit(X, Y)
+        self.is_trained = True
+    
+    def _prepare_data(self):
+        """
+        Prepare the data for training the ANN model.
+
+        Returns
+        -------
+        tuple
+            A tuple containing the input features (X) and target values (Y) for training.
+        """
+        values = np.array(self.buffer)
+        times = list(self.time_buffer)
+        X = []
+        Y = []
+        for i in range(len(values) - self.window_size - self.prediction_horizon):
+            # lagged values
+            lag_part = values[i:i+self.window_size]
+            # hour at prediction start
+            pred_time = times[i+self.window_size]
+            sin_h, cos_h = self._encode_hour(pred_time)
+            features = np.concatenate([lag_part, [sin_h, cos_h]])
+            target = values[
+                i+self.window_size:
+                i+self.window_size+self.prediction_horizon
+            ]
+            X.append(features)
+            Y.append(target)
+        return np.array(X), np.array(Y)
+    
+    def predict(self, horizon_h: float, state: SimulationState):
+        """
+        Make a prediction using the trained ANN model.
+
+        Parameters
+        ----------
+        current_time : pandas.Timestamp or datetime
+            The current timestamp.
+
+        Returns
+        -------
+        numpy.ndarray or None
+            The predicted values for the prediction horizon, or None if not enough data is available.
+        """
+        # check if the prediction horizon is the same as the internal one
+        if horizon_h != self.prediction_horizon_h:
+            raise ValueError(f'The required prediction horizon of {horizon_h} h is different from the internal prediction horizon of {self.prediction_horizon} h. Please check')
+        # Update predictor model
+        self.update(state.time)
+        # Provide base prediction if it's too early to have a real one
+        if not self.is_trained:
+            if len(self.buffer) == 0:
+                return np.zeros(self.prediction_horizon)
+            else:
+                last = self.buffer[-1]
+                return np.full(self.prediction_horizon, last)
+        # If model is trained, let's go baby!
+        latest_window = np.array(self.buffer)[-self.window_size:]
+        sin_h, cos_h = self._encode_hour(state.time)
+        features = np.concatenate([latest_window, [sin_h, cos_h]])
+        return self.model.predict(features.reshape(1, -1))[0]
+    
+    def _encode_hour(self, time):
+        hour = (time/3600) % 24
+        sin_hour = np.sin(2 * np.pi * hour / 24)
+        cos_hour = np.cos(2 * np.pi * hour / 24)
+        return sin_hour, cos_hour

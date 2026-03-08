@@ -2,7 +2,7 @@
 import pytest
 import energy_system_control as esc
 from energy_system_control.controllers.MPC import MPCController, MPCController_HybridDHW
-from energy_system_control.controllers.predictors import PerfectTimeSeriesPredictor
+from energy_system_control.controllers.predictors import PerfectTimeSeriesPredictor, ANNBasedPredictor
 import math, os
 import pandas as pd
 
@@ -64,16 +64,6 @@ def test_horizon_validation():
 
 def test_MPC_HybridDHW_application():
     # Test of a full system
-    components = [
-        esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
-        esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design= 3.2),
-        esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
-        esc.ElectricityGrid(name = 'electric_grid', cost_of_electricity_purchased=0.24, value_of_electricity_sold=0.06),
-        esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
-        esc.PVpanelFromPVGISData(name = 'pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename = 'pvgis_data.csv', rescale_factor = 3.0),
-        esc.LithiumIonBattery(name = 'battery', capacity = 2.0, SOC_0 = 0.5),
-        esc.Inverter(name = 'inverter')
-    ]
     controllers = [
         MPCController_HybridDHW('MPC_controller',
                                 storage_temperature_sensor = 'storage_tank_temperature_sensor',
@@ -83,11 +73,6 @@ def test_MPC_HybridDHW_application():
                                 horizon = 24),
         esc.InverterController('inverter_controller', 'inverter', 'battery')
                 ]
-    sensors = [
-        esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
-        esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
-        esc.SOCSensor('battery_SOC_sensor', 'battery')
-    ]
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
         ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
@@ -98,7 +83,7 @@ def test_MPC_HybridDHW_application():
         ('inverter_ESS_port', 'battery_electricity_port')
     ]
     # Create environment
-    env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
+    env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections)  # dt = 60 s
     # Create simulator object
     sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 1.0)
     sim = esc.Simulator(env, sim_config)
@@ -116,27 +101,16 @@ def test_MPC_HybridDHW_application():
     assert math.isclose(electricity_from_grid, 2, abs_tol = 2)
     assert math.isclose(electricity_to_grid, 13, abs_tol = 2)
     assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 315, abs_tol = 1)
+
+
+def test_MPC_without_perfect_forecast():
+    predictor = ANNBasedPredictor()
+    assert True
     
 
-def test_compare_mpc_to_other_controllers():
+def test_compare_mpc_to_other_controllers(test_components, test_sensors, test_predictors):
     # Prepare dataframe for comparison
     df_comp = pd.DataFrame(columns = ['baseline', 'rule-based', 'MPC'], index = ['Heat pump', 'From grid', 'To grid'])
-    components = [
-        esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
-        esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design= 3.2),
-        esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
-        esc.ElectricityGrid(name = 'electric_grid', cost_of_electricity_purchased=0.24, value_of_electricity_sold=0.06),
-        esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
-        esc.PVpanelFromPVGISData(name = 'pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename = 'pvgis_data.csv', rescale_factor = 3.0),
-        esc.LithiumIonBattery(name = 'battery', capacity = 2.0, SOC_0 = 0.5),
-        esc.Inverter(name = 'inverter')
-    ]
-    sensors = [
-        esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
-        esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
-        esc.SOCSensor('battery_SOC_sensor', 'battery'),
-        esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port'),
-    ]
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
         ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
@@ -148,26 +122,26 @@ def test_compare_mpc_to_other_controllers():
     ]
     controllers_dict = {
         'baseline': [
-            esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10),
+            esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', temperature_comfort = 40, temperature_bandwidth = 10),
             esc.InverterController('inverter_controller', 'inverter', 'battery')
                 ],
         'rule-based': [
-            esc.HeatPumpRuleBasedController('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 'PV_power_sensor', 40, 10, 0.600),
+            esc.HeatPumpRuleBasedController('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 'PV_power_sensor', temperature_comfort = 40, temperature_bandwidth = 10, power_PV_activation = 0.500),
             esc.InverterController('inverter_controller', 'inverter', 'battery')
                 ],
         'MPC': [
             MPCController_HybridDHW('MPC_controller',
                                     storage_temperature_sensor = 'storage_tank_temperature_sensor',
                                     battery_SOC_sensor = 'battery_SOC_sensor',
-                                    PV_power_predictor = PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'),
-                                    heat_demand_predictor = PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW'),
+                                    PV_power_predictor_name = 'pv_power_predictor',
+                                    heat_demand_predictor_name = 'dhw_demand_predictor',
                                     horizon = 24),
             esc.InverterController('inverter_controller', 'inverter', 'battery')
                 ]
     }
     for control_type in ['baseline', 'rule-based', 'MPC']:
         # Create environment
-        env = esc.Environment(components=components, controllers = controllers_dict[control_type], sensors=sensors, connections=connections)  # dt = 60 s
+        env = esc.Environment(components=test_components, controllers = controllers_dict[control_type], sensors=test_sensors, connections=connections, predictors=test_predictors)  # dt = 60 s
         # Create simulator object
         sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 0.5)
         sim = esc.Simulator(env, sim_config)
@@ -180,3 +154,33 @@ def test_compare_mpc_to_other_controllers():
     assert df_comp.loc['To grid', 'rule-based'] >= df_comp.loc['To grid', 'MPC']
     assert df_comp.loc['From grid', 'baseline'] >= df_comp.loc['From grid', 'rule-based']
     assert df_comp.loc['From grid', 'rule-based'] >= df_comp.loc['From grid', 'MPC']
+
+@pytest.fixture
+def test_components():
+    test_components = [
+        esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
+        esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design= 3.2),
+        esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
+        esc.ElectricityGrid(name = 'electric_grid', cost_of_electricity_purchased=0.24, value_of_electricity_sold=0.06),
+        esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
+        esc.PVpanelFromPVGISData(name = 'pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename = 'pvgis_data.csv', rescale_factor = 3.0),
+        esc.LithiumIonBattery(name = 'battery', capacity = 2.0, SOC_0 = 0.5),
+        esc.Inverter(name = 'inverter')
+    ]
+    return test_components
+
+@pytest.fixture
+def test_sensors():
+    test_sensors = [
+        esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
+        esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
+        esc.SOCSensor('battery_SOC_sensor', 'battery'),
+        esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port'),
+    ]
+    return test_sensors
+
+@pytest.fixture
+def test_predictors():
+    test_predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
+                       PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
+    return test_predictors
