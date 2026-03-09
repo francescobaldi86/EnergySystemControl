@@ -9,7 +9,7 @@ def test_base_controller():
     # In a first run, we use the "standard" controller, while in a second run we test what happens with a more optimised, rule-based controller
     components = [
         esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
-        esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_max = 1.5, COP = 3.2),
+        esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2),
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
         esc.BalancingUtility(name = 'electric_grid', utility_type = 'electricity'),
         esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),

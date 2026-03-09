@@ -88,7 +88,7 @@ def base_test_env_TES():
     from energy_system_control import MultiNodeHotWaterTank, IEAHotWaterDemand, HeatPumpConstantEfficiency, TankTemperatureSensor, BalancingUtility, ColdWaterGrid, HeaterControllerWithBandwidth, Environment
     components = [
         IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
-        HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_max = 1.5, COP = 3.2),
+        HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2),
         MultiNodeHotWaterTank(name = 'test_TES', max_temperature = 80, tank_volume = 250, number_of_layers=10, tank_height=1.5, height_main_heat_input=0.5, height_aux_heat_input=0.3, T_0=80),
         BalancingUtility(name = 'electric_grid', utility_type = 'electricity'),
         ColdWaterGrid(name = 'water_grid', utility_type = 'fluid')

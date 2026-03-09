@@ -35,25 +35,22 @@ def test_pv_panel_instantiation():
 
 def test_panel_with_custom_data():
     from energy_system_control import PVpanel
+    from energy_system_control.components.base import TimeSeriesData
     raw_data = pd.Series(index = [pd.to_datetime('2023-04-13 06:00') + pd.Timedelta(hours=x) for x in [0, 1, 2, 3, 4]], data = [0.12, 0.14, 0.16, 0.13, 0.11])
     pv = PVpanel(
         name = 'test_panel',  
-        installed_power = 2,
-        raw_data=raw_data
+        ts=TimeSeriesData(raw = raw_data, var_type = 'power', var_unit = 'kW')
     )
     time_step = 1800
     state = SimulationState(time_id = 0, time_step = time_step)
     # Resampling the data to the required time step
-    pv.resample_data(time_step = time_step/3600, sim_end = 24)
+    pv.resample_data(time_step_h = time_step/3600, sim_end_h = 24)
     pv.create_ports()
     # Checking input
-    assert isclose(pv.data[0], 0.12, abs_tol = 0.01)
+    assert isclose(pv.ts.data[0], 0.12, abs_tol = 0.01)
     # Testing taking step
     pv.step(state)
-    assert pv.ports[pv.port_name].flow['electricity'] == -time_step * 0.12 * 2  # Energy generated during the time step in kJ. time_step[h] * hours_to_seconds[s/h] * capacity_factor[-] * installed_power[kW] 
-    # Testing the check data function
-    pv.check_data()
-    assert True
+    assert pv.ports[pv.port_name].flow['electricity'] == -time_step * 0.12  # Energy generated during the time step in kJ
 
 def test_panel_from_PVGIS():
     from energy_system_control import PVpanelFromPVGIS
@@ -67,10 +64,10 @@ def test_panel_from_PVGIS():
     )
     time_step = 900
     # Resampling the data to the required time step
-    pv.resample_data(time_step = time_step/3600, sim_end = 24)
+    pv.resample_data(time_step_h = time_step/3600, sim_end_h = 24)
     pv.create_ports()
     # Checking input
-    assert isclose(pv.data[50], 0.223, abs_tol=0.01)
+    assert isclose(pv.ts.data[50], 0.446, abs_tol=0.01)
     # Testing taking step
     state = SimulationState(time_id = 0, time_step = time_step)
     pv.step(state)
@@ -82,7 +79,6 @@ def test_pv_panel_load_data_from_csv_file():
     from energy_system_control import PVpanelFromData
     test_pv = PVpanelFromData(
         name = 'test_pv',
-        installed_power = 4, 
         data_path = os.path.join(__TEST__, 'DATA'),
         filename = 'pvgis_data.csv', 
         column_name = 'P', 
@@ -90,18 +86,17 @@ def test_pv_panel_load_data_from_csv_file():
     )
     time_step = 900
     # Resampling the data to the required time step
-    test_pv.resample_data(time_step = time_step/3600, sim_end = 24)
+    test_pv.resample_data(time_step_h = time_step/3600, sim_end_h = 24)
     test_pv.create_ports()
 
 def test_pv_panel_load_data_from_csv_pvgis_file():
     from energy_system_control.components.producers import PVpanelFromPVGISData
     test_pv = PVpanelFromPVGISData(
         name = 'test_pv',
-        installed_power = 4, 
         data_path = os.path.join(__TEST__, 'DATA'),
         filename = 'pvgis_data.csv' 
     )
     time_step = 900
     # Resampling the data to the required time step
-    test_pv.resample_data(time_step = time_step/3600, sim_end = 24)
+    test_pv.resample_data(time_step_h = time_step/3600, sim_end_h = 24)
     test_pv.create_ports()

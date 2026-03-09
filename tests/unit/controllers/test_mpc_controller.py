@@ -10,8 +10,8 @@ __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
 class TestMPCController(MPCController):
-    def __init__(self, name, controlled_components, sensors, predictors, horizon, solver):
-        super().__init__(name, controlled_components, sensors, predictors, horizon, solver)
+    def __init__(self, name, controlled_components, sensors, horizon, solver):
+        super().__init__(name, controlled_components, sensors, horizon, solver)
 
     def get_action(self, state):
         # Implement the get_action method
@@ -27,7 +27,6 @@ def mock_controller():
         name="test_controller",
         controlled_components=["component1", "component2"],
         sensors={"sensor1": "value1", "sensor2": "value2"},
-        predictors={"predictor1": "value1", "predictor2": "value2"},
         horizon=10.0,
         solver='OSQP'
     )
@@ -36,7 +35,6 @@ def test_initialization(mock_controller):
     assert mock_controller.name == "test_controller"
     assert mock_controller.controlled_component_names == ["component1", "component2"]
     assert mock_controller.sensor_names == {"sensor1": "value1", "sensor2": "value2"}
-    assert mock_controller.predictors == {"predictor1": "value1", "predictor2": "value2"}
     assert mock_controller.horizon == 10.0
     assert mock_controller.solver == 'OSQP'
 
@@ -46,30 +44,29 @@ def test_get_obs(mock_controller):
     # Add assertions based on the expected behavior of get_obs
     assert True
 
-def test_initialize(controller):
-    result = controller.initialize()
+def test_initialize(mock_controller):
+    result = mock_controller.initialize()
     assert result is None
 
 def test_horizon_validation():
     with pytest.raises(ValueError):
-        MPCController(
+        TestMPCController(
             name="test_controller",
             controlled_components=["component1", "component2"],
             sensors={"sensor1": "value1", "sensor2": "value2"},
-            predictors={"predictor1": "value1", "predictor2": "value2"},
             horizon=0.0,
             solver='HIGHS'
         )
 
 
-def test_MPC_HybridDHW_application():
+def test_MPC_HybridDHW_application(test_components, test_sensors):
     # Test of a full system
     controllers = [
         MPCController_HybridDHW('MPC_controller',
                                 storage_temperature_sensor = 'storage_tank_temperature_sensor',
                                 battery_SOC_sensor = 'battery_SOC_sensor',
-                                PV_power_predictor = PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'),
-                                heat_demand_predictor = PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW'),
+                                PV_power_predictor_name = 'pv_power_predictor',
+                                heat_demand_predictor_name = 'dhw_demand_predictor',
                                 horizon = 24),
         esc.InverterController('inverter_controller', 'inverter', 'battery')
                 ]
@@ -82,8 +79,10 @@ def test_MPC_HybridDHW_application():
         ('inverter_grid_input_port', 'electric_grid_electricity_port'),
         ('inverter_ESS_port', 'battery_electricity_port')
     ]
+    predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
+                  PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
     # Create environment
-    env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections)  # dt = 60 s
+    env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
     # Create simulator object
     sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 1.0)
     sim = esc.Simulator(env, sim_config)
@@ -104,7 +103,7 @@ def test_MPC_HybridDHW_application():
 
 
 def test_MPC_without_perfect_forecast():
-    predictor = ANNBasedPredictor()
+    predictor = ANNBasedPredictor(prediction_horizon_h=12, sensor_name='test_sensor')
     assert True
     
 

@@ -56,10 +56,11 @@ class Simulator:
             component.initialize(ctx)
         for _, sensor in self.env.sensors.items():
             sensor.initialize(ctx)
-        for _, controller in self.env.controllers.items():
-            controller.initialize(ctx)
         for _, predictor in self.env.predictors.items():
             predictor.initialize(ctx)
+        for _, controller in self.env.controllers.items():
+            controller.initialize(ctx)
+        
 
     def _read_timeseries_data(self):
         for _, component in self.env.components.items():

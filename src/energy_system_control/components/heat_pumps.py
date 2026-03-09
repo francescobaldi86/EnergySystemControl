@@ -81,14 +81,15 @@ class HeatPumpLorentzEfficiency(HeatPump):
             raise ValueError('Exactly one between Wdot_design, COP_design and eta_lorentz must be provided, while you specified more than one')
         if Wdot_design:
             self.Wdot_design = Wdot_design
-            COP_design = Qdot_design / self.Wdot_design
+            self.COP_design = Qdot_design / self.Wdot_design
             self.eta_lorentz = self.COP_design * self.calculate_Carnot_COP(self.T_air_design, self.T_water_design)
         elif COP_design:
+            self.COP_design = COP_design
             self.Wdot_design = Qdot_design / self.COP_design
             self.eta_lorentz = self.COP_design / self.calculate_Carnot_COP(self.T_air_design, self.T_water_design)
         elif eta_lorentz:
             self.eta_lorentz = eta_lorentz
-            COP_design = self.eta_lorentz * self.calculate_Carnot_COP(self.T_air_design, self.T_water_design)
+            self.COP_design = self.eta_lorentz * self.calculate_Carnot_COP(self.T_air_design, self.T_water_design)
             self.Wdot_design = Qdot_design / self.COP_design
         self.Qdot_design = self.Wdot_design * self.COP_design
         super().__init__(name = name, Qdot_design = self.Qdot_design, COP_design = self.COP_design)
@@ -101,9 +102,9 @@ class HeatPumpLorentzEfficiency(HeatPump):
 
     def _get_heat_output(self, T_air, T_water):
         if self.heat_capacity_loss != 0.0:
-            return self.Qdot_out * (1 - self.heat_capacity_loss * ((T_water - T_air) - (self.T_water_design - self.T_air_design)))
+            return self.Qdot_design * (1 - self.heat_capacity_loss * ((T_water - T_air) - (self.T_water_design - self.T_air_design)))
         else:
-            return self.Qdot_out
+            return self.Qdot_design
         
     def get_efficiency(self, state: SimulationState):
         return self._get_efficiency(state.environmental_data['Temperature ambient'], self.ports[self.heat_output_port_name].T)

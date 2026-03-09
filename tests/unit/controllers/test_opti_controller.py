@@ -9,7 +9,7 @@ def test_opti_controller():
     # In a first run, we use the "standard" controller, while in a second run we test what happens with a more optimised, rule-based controller
     components = [
         esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
-        esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_max = 1.5, COP_design = 3.2, heat_capacity_loss = 0.01),
+        esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2, heat_capacity_loss = 0.01),
         esc.MultiNodeHotWaterTank(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45),
         esc.BalancingUtility(name = 'electric_grid', utility_type = 'electricity'),
         esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
@@ -25,8 +25,7 @@ def test_opti_controller():
         esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
         esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
         esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port'),
-        esc.SOCSensor('battery_SOC_sensor', 'battery'),
-        esc.FlowTemperatureSensor('DHW_temperature_sensor', 'demand_DHW_fluid_port')
+        esc.SOCSensor('battery_SOC_sensor', 'battery')
     ]
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),

@@ -6,6 +6,5 @@
     "python.testing.pytestEnabled": true,
     "python.defaultInterpreterPath": "C:\\Users\\francesco.baldi\\AppData\\Local\\miniconda3\\envs\\EnergySystemControl-dev\\python.exe",
     "python-envs.defaultEnvManager": "ms-python.python:conda",
-    "python-envs.defaultPackageManager": "ms-python.python:conda",
-    "python-envs.pythonProjects": []
+    "python-envs.defaultPackageManager": "ms-python.python:conda"
 }

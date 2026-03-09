@@ -14,7 +14,7 @@ def test_fixed_efficiency_heat_pump_creation():
 
 
 def test_system_with_fixed_efficiecy_heat_pump(base_environment_info):
-    base_environment_info['components'].append(esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_max = 1.5, COP = 3.2))
+    base_environment_info['components'].append(esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2))
     base_environment_info['connections'] +=[
         ('hot_water_storage_main_heat_input_port', 'heat_pump_heat_output_port'),
         ('heat_pump_electricity_input_port', 'electric_grid_electricity_port')]
@@ -32,29 +32,29 @@ def test_system_with_fixed_efficiecy_heat_pump(base_environment_info):
 
 def test_lorentz_heat_pump_creation():
     # Test creation from COP design, in baseline conditions
-    hp = esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_max = 1.5, COP_design = 3.2)
+    hp = esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2)
     assert math.isclose(hp.Wdot_design, 1.5 / 3.2, abs_tol = 0.001)
     assert math.isclose(hp.eta_lorentz, 0.433, abs_tol = 0.001)
     # Creation from COP design, changing temperature using design data from reference Immergas HP
-    hp_immergas = esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_max = 1.3, COP_design = 3.0, T_water_design = 50)
+    hp_immergas = esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_design = 1.3, COP_design = 3.0, T_water_design = 50)
     assert math.isclose(hp_immergas.eta_lorentz, 0.485, abs_tol = 0.001)
     # Creation from COP design, changing temperature using design data from reference Bosch HP. Also testing off design conditions
-    hp_bosch = esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_max = 1.3, COP_design = 2.5*1.36, T_water_design = 46)
+    hp_bosch = esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_design = 1.3, COP_design = 2.5*1.36, T_water_design = 46)
     assert math.isclose(hp_bosch.eta_lorentz, 0.514, abs_tol = 0.001)
     assert math.isclose(hp_bosch._get_efficiency(C2K(14), C2K(46)), 3.97, abs_tol = 0.01)
     assert math.isclose(hp_bosch._get_efficiency(C2K(2), C2K(46)), 3.08, abs_tol = 0.01)
     # Test creation from Lorentz efficiency
-    hp_bosch = esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_max = 1.3, eta_lorentz = 0.514, T_water_design = 46)
+    hp_bosch = esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_design = 1.3, eta_lorentz = 0.514, T_water_design = 46)
     assert math.isclose(hp_bosch.COP_design, 2.5*1.36, abs_tol = 0.001)
 
 def test_lorentz_heat_pump_variable_heat_output():
     # Tests the possibility of having the heat output variable with temperatures
-    hp = esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_max = 1.5, COP_design = 3.2, heat_capacity_loss=0.01)
+    hp = esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2, heat_capacity_loss=0.01)
     assert hp._get_heat_output(C2K(0), C2K(50)) < hp._get_heat_output(C2K(0), C2K(40))
     assert hp._get_heat_output(C2K(0), C2K(50)) < hp._get_heat_output(C2K(10), C2K(50))
 
 def test_system_with_lorentz_heat_pump_from_COP(base_environment_info):
-    base_environment_info['components'].append(esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_max = 1.5, COP_design = 3.2))
+    base_environment_info['components'].append(esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2))
     base_environment_info['connections'] +=[
         ('hot_water_storage_main_heat_input_port', 'heat_pump_heat_output_port'),
         ('heat_pump_electricity_input_port', 'electric_grid_electricity_port')]
