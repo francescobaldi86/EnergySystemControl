@@ -9,17 +9,11 @@ import math
 from energy_system_control.controllers.base import Controller
 from energy_system_control.controllers.predictors import Predictor
 from energy_system_control.core.base_classes import InitContext
-from energy_system_control.components.demands import HotWaterDemand, ElectricityDemand
-from energy_system_control.components.producers import PVpanel
-from energy_system_control.components.storage import HotWaterStorage, Battery
-from energy_system_control.components.utilities import HeatSource, ColdWaterGrid, ElectricityGrid, Inverter, ResistanceHeater
-from energy_system_control.components.heat_pumps import HeatPump
-from energy_system_control.components.base import Component
-from energy_system_control.core.base_classes import Sensor
+from energy_system_control import HotWaterDemand, HotWaterStorage, ElectricityDemand, PVpanel, Battery, Inverter, ColdWaterGrid, HeatPump, ResistanceHeater, ColdWaterGrid, ElectricityGrid, Inverter, ResistanceHeater
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.helpers import find_object_of_type
 from energy_system_control.constants import WATER
-from energy_system_control.sensors.sensors import SOCSensor, TankTemperatureSensor
+
 
 SolverName = Literal["OSQP", "HIGHS"]
 

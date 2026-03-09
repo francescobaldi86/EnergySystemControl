@@ -9,7 +9,8 @@ import pandas as pd
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
-class TestMPCController(MPCController):
+class MockMPCController(MPCController):
+    """Concrete implementation of MPCController for testing purposes."""
     def __init__(self, name, controlled_components, sensors, horizon, solver):
         super().__init__(name, controlled_components, sensors, horizon, solver)
 
@@ -23,7 +24,7 @@ class TestMPCController(MPCController):
 
 @pytest.fixture
 def mock_controller():
-    return TestMPCController(
+    return MockMPCController(
         name="test_controller",
         controlled_components=["component1", "component2"],
         sensors={"sensor1": "value1", "sensor2": "value2"},
@@ -50,7 +51,7 @@ def test_initialize(mock_controller):
 
 def test_horizon_validation():
     with pytest.raises(ValueError):
-        TestMPCController(
+        MockMPCController(
             name="test_controller",
             controlled_components=["component1", "component2"],
             sensors={"sensor1": "value1", "sensor2": "value2"},

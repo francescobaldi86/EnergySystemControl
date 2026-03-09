@@ -14,12 +14,23 @@ from energy_system_control.sensors.sensors import *
 from energy_system_control.controllers.base import *
 from energy_system_control.controllers.predictors import *
 from energy_system_control.helpers import *
+from energy_system_control.io.data_provider import EnvironmentalDataProvider
+from energy_system_control.sim.config import SimulationConfig
 
 
 
 
 class Environment:
-    def __init__(self, components: List[Component] = [], controllers: List[Controller] = [], sensors: List[Sensor] = [], connections = [], predictors: List[Predictor] = []):
+    def __init__(self, 
+                 components: List[Component] = [], 
+                 controllers: List[Controller] = [], 
+                 sensors: List[Sensor] = [], 
+                 connections = [], 
+                 predictors: List[Predictor] = [],
+                 environmental_data_provider: EnvironmentalDataProvider | None = None,
+                 latitude: float | None = None,
+                 longitude: float | None = None
+                 ):
         self.nodes: Dict[str, Node] = {}
         self.ports: Dict[str, Port] = {}
         self.connections: List[tuple] = connections
@@ -31,6 +42,9 @@ class Environment:
         self.ordered_controllers: List[str] = [controller.name for controller in controllers]
         self.sensors: Dict[str, Sensor] = {sensor.name: sensor for sensor in sensors}
         self.predictors: Dict[str, Predictor] = {predictor.name: predictor for predictor in predictors}
+        self.environmental_data_provider = environmental_data_provider
+        self.latitude = latitude
+        self.longitude = longitude
         self.signal_registry_ports = SignalRegistry()
         self.signal_registry_controllers = SignalRegistry()
         self.signal_registry_sensors = SignalRegistry()
@@ -40,6 +54,11 @@ class Environment:
         self.connect_ports()
         self.load_components_and_sensors_to_controllers()
         self.create_data_registry()
+
+    def initialize(self, state: SimulationState):
+        if self.environmental_data_provider:
+            if hasattr(self.environmental_data_provider, "initialize"):
+                self.environmental_data_provider.initialize(state)
 
     def add_component(self, component_name, component_type, **kwargs):
         if component_type not in Component.registry:

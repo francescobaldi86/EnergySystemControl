@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import pvlib
 from typing import List, Dict, Any
 
 def resample_with_interpolation(df, target_freq, sim_end: float | None = None, var_type: str = 'extensive'):
@@ -55,25 +56,78 @@ def resample_with_interpolation(df, target_freq, sim_end: float | None = None, v
     if target_step >= original_step: # --- Downsampling ---
         match var_type:
             case 'extensive':
-                return df.resample(target_freq).agg('sum').values
+                return df.resample(target_freq).agg('sum').to_numpy()
             case 'intensive':
-                return df.resample(target_freq).agg('mean').values
+                return df.resample(target_freq).agg('mean').to_numpy()
     else:  # --- Upsampling ---
         match var_type:
             case 'extensive':
                 output = df.resample(target_freq).ffill()
                 output = output * (target_step / original_step)
-                return output.values
+                return output.to_numpy()
             case 'intensive':
                 output = df.reindex(pd.date_range(df.index[0], df.index[-1], freq = target_freq, tz=df.index.tz))
-                return output.interpolate(method='time').values
+                return output.interpolate(method='time').to_numpy()
 
 
 def C2K(T):
-    return T + 273.15
+    """
+    Convert temperature from Celsius to Kelvin.
+    
+    Parameters
+    ----------
+    T : float, int, list, or np.ndarray
+        Temperature value(s) in Celsius.
+    
+    Returns
+    -------
+    float, int, list, or np.ndarray
+        Temperature in Kelvin, preserving the input type.
+        
+    Examples
+    --------
+    >>> C2K(0)
+    273.15
+    >>> C2K([0, 25, 100])
+    [273.15, 298.15, 373.15]
+    >>> C2K(np.array([0, 25]))
+    array([273.15, 298.15])
+    """
+    if isinstance(T, list):
+        result = np.asarray(T) + 273.15
+        return result.tolist()
+    else:
+        return T + 273.15
+
 
 def K2C(T):
-    return T - 273.15
+    """
+    Convert temperature from Kelvin to Celsius.
+    
+    Parameters
+    ----------
+    T : float, int, list, or np.ndarray
+        Temperature value(s) in Kelvin.
+    
+    Returns
+    -------
+    float, int, list, or np.ndarray
+        Temperature in Celsius, preserving the input type.
+        
+    Examples
+    --------
+    >>> K2C(273.15)
+    0.0
+    >>> K2C([273.15, 298.15, 373.15])
+    [0.0, 25.0, 100.0]
+    >>> K2C(np.array([273.15, 298.15]))
+    array([0., 25.])
+    """
+    if isinstance(T, list):
+        result = np.asarray(T) - 273.15
+        return result.tolist()
+    else:
+        return T - 273.15
 
 def find_object_of_type(object_type: Any, object_pool: List[Any] | Dict[str, Any]) -> Any:
     """
@@ -97,6 +151,43 @@ def find_object_of_type(object_type: Any, object_pool: List[Any] | Dict[str, Any
 def check_datetime_index(df: pd.DataFrame):
         if not isinstance(df.index, pd.DatetimeIndex):
             raise ValueError("DataFrame index must be a DatetimeIndex")
+        
+
+def calculate_solar_angles(latitude: float, longitude: float, timestamps: pd.DatetimeIndex):
+    """
+    Calculate solar zenith and azimuth for a location and timestamps.
+
+    Parameters
+    ----------
+    latitude : float
+        Latitude in degrees (positive north)
+    longitude : float
+        Longitude in degrees (positive east)
+    timestamps : pd.DatetimeIndex
+        Times for which to compute solar positions (timezone-aware is preferred)
+
+    Returns
+    -------
+    zenith : pd.Series
+        Solar zenith angle in degrees
+    azimuth : pd.Series
+        Solar azimuth angle in degrees
+    """
+    # Assume UTC if no timezone
+    if timestamps.tz is None:
+        timestamps = timestamps.tz_localize('UTC')
+    
+    solpos = pvlib.solarposition.get_solarposition(
+        time=timestamps,
+        latitude=latitude,
+        longitude=longitude
+    )
+
+    zenith = solpos['zenith']
+    azimuth = solpos['azimuth']
+
+    return zenith, azimuth
+
 
 class NodeImbalanceError(Exception):
     pass

@@ -105,7 +105,7 @@ class HotWaterStorage(StorageUnit):
         self.SOC = self.temperature_to_SOC(state)
 
     def calculate_losses(self, state: SimulationState):
-        ambient_temperature = self.T_amb if self.located_inside else state.environmental_data['Temperature ambient']
+        ambient_temperature = self.T_amb if self.located_inside else state.environmental_data.temperature_ambient
         losses = -self.convection_coefficient_losses * self.surface * (self.temperature - ambient_temperature) * 1e-3
         return losses
     
@@ -119,7 +119,7 @@ class HotWaterStorage(StorageUnit):
     
     def temperature_to_SOC(self, state: SimulationState):
         try:
-            T_cold_water = state.environmental_data['Temperature cold water']
+            T_cold_water = state.environmental_data.temperature_cold_water
         except (AttributeError, KeyError):
             T_cold_water = C2K(20)
         return (self.temperature - T_cold_water) / (self.max_temperature - T_cold_water)
@@ -297,7 +297,7 @@ class MultiNodeHotWaterTank(HotWaterStorage):
             self.matrix_A = A
         
     def create_C_vector(self, state: SimulationState):
-        ambient_temperature = self.T_amb if self.located_inside else state.environmental_data['Temperature ambient']
+        ambient_temperature = self.T_amb if self.located_inside else state.environmental_data.temperature_ambient
         total_heat_from_main_heating_source = self.ports[self.main_heat_input_port_name].flow['heat'] / state.time_step
         total_heat_from_aux_heating_source = self.ports[self.aux_heat_input_port_name].flow['heat'] / state.time_step
         # Calculating useful vectors

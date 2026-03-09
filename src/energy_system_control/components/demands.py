@@ -75,7 +75,7 @@ class HotWaterDemand(TimeSeriesDemand):
         super().__init__(name, self.demand_type, **kwargs)
 
     def step(self, state: SimulationState, action = None):
-        T_cold_water = state.environmental_data['Temperature cold water']
+        T_cold_water = state.environmental_data.temperature_cold_water
         T_hot_water = self.ports[self.port_name].T 
         demand_kW = self.ts.data[state.time_id]  # This calculates the required power in kW (note: time step is in [s], read value in [kWh], hence the 3600)
         mdot_dhw_th = demand_kW / WATER.cp / (313.25 - T_cold_water)  # Theroetical hot water mass flow, in kg/s

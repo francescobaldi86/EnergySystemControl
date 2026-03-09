@@ -2,12 +2,13 @@
 from dataclasses import dataclass
 from typing import Any
 import numpy as np
+import pandas as pd
 
 from energy_system_control.core.base_environment import Environment  # or move Environment to core/model.py
-from energy_system_control.core.base_classes import InitContext
+from energy_system_control.core.base_classes import InitContext, EnvironmentalData
 from .config import SimulationConfig
 from .state import SimulationState
-from energy_system_control.helpers import C2K
+from energy_system_control.helpers import C2K, calculate_solar_angles
 from energy_system_control.core.ports import FluidPort, HeatPort
 from energy_system_control.sim.simulation_data import SimulationData  # wherever it lives
 from energy_system_control.sim.results import SimulationResults
@@ -19,7 +20,8 @@ class Simulator:
 
     def run(self) -> SimulationData:
         self.state = SimulationState()
-        self.state.init_time_vector(self.cfg)
+        self.state.initialize(self.cfg)
+        self.env.initialize(self.state)  # This allows the environment to initialize the provider if needed
 
         # Prepare simulation data storage
         sim_data = SimulationData()
@@ -29,7 +31,6 @@ class Simulator:
             self.env.signal_registry_controllers,
             self.env.signal_registry_sensors,
         )
-
         # Read any time series data once
         self._read_timeseries_data()
         # Initialize units / reset components, controllers, sensors
@@ -63,12 +64,15 @@ class Simulator:
         
 
     def _read_timeseries_data(self):
+        # Read timeseries data from components
         for _, component in self.env.components.items():
             if callable(getattr(component, 'resample_data', None)):
                 component.resample_data(self.cfg.time_step_h, self.cfg.time_end_h + self.cfg.prediction_horizon_margin_h)
 
     def _step(self, sim_data: SimulationData) -> None:
         env = self.env  # just a shorthand
+        # Update environmental data (this is time-varying state)
+        self.state.environmental_data = self._update_environmental_data()
 
         # Reset port flows and sensor measurements
         for _, port in env.ports.items():
@@ -78,13 +82,7 @@ class Simulator:
 
         # Initialize control actions and list of components to simulate
         self.state.control_actions = {}
-        self.components_to_simulate = list(env.components.keys())
-
-        # Update environmental data (this is time-varying state)
-        self.state.environmental_data = self._update_environmental_data()
-
-        # Let components see environment data, if needed
-        self._update_environmental_data()
+        self.components_to_simulate = list(env.components.keys())      
 
         # Assign fluid port values
         self._propagate_port_values()
@@ -110,10 +108,19 @@ class Simulator:
         sim_data = self._save_simulation_data(sim_data)
 
     def _update_environmental_data(self):
-        self.state.environmental_data = {
-            "Temperature cold water": C2K(15),
-            "Temperature ambient": C2K(20),
-        }
+        env_data = self.state.environmental_data
+
+        # Example: overwrite with forecast / time series if available
+        if self.env.environmental_data_provider:
+            env_data = self.env.environmental_data_provider.get_environmental_data(self.state.time_id, self.state.simulation_start_datetime + pd.to_timedelta(self.state.time, unit='s'))
+
+        # Automatically compute solar angles if not available
+        if env_data.solar_zenith is None or env_data.solar_azimuth is None:
+            if self.env.latitude and self.env.longitude:
+                dt = self.state.simulation_start_datetime + pd.to_timedelta(self.state.time, unit='s')
+                env_data.solar_zenith, env_data.solar_azimuth = calculate_solar_angles(self.env.latitude, self.env.longitude, dt)
+
+        return env_data
 
     def _propagate_port_values(self):
         env = self.env

@@ -31,6 +31,9 @@ addopts = "-ra -q"
 testpaths = [
     "tests",
 ]
+markers = [
+    "integration: marks tests as integration tests that require external resources (e.g., network calls)",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 from math import isclose
-from energy_system_control.components.producers import PVpanel, PVpanelFromData, PVpanelFromPVGISData, PVpanelFromPVGIS
+from energy_system_control.components.pv_panels import PVpanel, PVpanelFromData, PVpanelFromPVGISData, PVpanelFromPVGIS
 from energy_system_control.components.base import TimeSeriesData
 from energy_system_control.sim.state import SimulationState
 from datetime import datetime, timedelta
@@ -90,7 +90,6 @@ def test_pv_panel_load_data_from_csv_file():
     test_pv.create_ports()
 
 def test_pv_panel_load_data_from_csv_pvgis_file():
-    from energy_system_control.components.producers import PVpanelFromPVGISData
     test_pv = PVpanelFromPVGISData(
         name = 'test_pv',
         data_path = os.path.join(__TEST__, 'DATA'),
