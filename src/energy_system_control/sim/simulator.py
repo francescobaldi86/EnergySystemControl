@@ -126,10 +126,10 @@ class Simulator:
         env = self.env
         for _, component in env.components.items():
             port_name, T = component.set_inherited_fluid_port_values(self.state)
-            if port_name:
+            if port_name and env.ports[port_name].connected_port is not None:
                 env.ports[env.ports[port_name].connected_port].T = T
             port_name, T = component.set_inherited_heat_port_values(self.state)
-            if port_name:
+            if port_name and env.ports[port_name].connected_port is not None:
                 env.ports[env.ports[port_name].connected_port].T = T
 
     def _simulate_components_of_type(self, type: str):

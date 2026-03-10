@@ -39,6 +39,7 @@ class FluidPort(Port):
     T: float
     def __init__(self, name):
         super().__init__(name, ['mass', 'heat'])
+        self.T = None
         
     def reset_state_value(self):
         self.T = None

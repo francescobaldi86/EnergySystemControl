@@ -10,7 +10,7 @@ from .components.utilities import ResistanceHeater, BalancingUtility, GenericUti
 from .components.heat_pumps import HeatPumpConstantEfficiency, HeatPumpLorentzEfficiency, HeatPump
 from .controllers.base import HeaterControllerWithBandwidth, InverterController
 from .controllers.rule_based import HeatPumpRuleBasedController
-from .sensors.sensors import Sensor, PowerSensor, ElectricPowerSensor, FlowTemperatureSensor, SOCSensor, TankTemperatureSensor
+from .sensors.sensors import Sensor, PowerSensor, ElectricPowerSensor, FlowTemperatureSensor, SOCSensor, TankTemperatureSensor, HotWaterDemandSensor
 
 __all__ = [
     "Environment",
@@ -22,5 +22,5 @@ __all__ = [
     "HeatPumpLorentzEfficiency", "HeatPumpConstantEfficiency", "HeatPump",
     "HeaterControllerWithBandwidth", "InverterController",
     "HeatPumpRuleBasedController", 
-    "Sensor", "FlowTemperatureSensor", "PowerSensor", "TankTemperatureSensor", "SOCSensor", "ElectricPowerSensor",
+    "Sensor", "FlowTemperatureSensor", "PowerSensor", "TankTemperatureSensor", "SOCSensor", "ElectricPowerSensor", "HotWaterDemandSensor",
 ]

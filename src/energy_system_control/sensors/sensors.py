@@ -73,3 +73,51 @@ class TankTemperatureSensor(Sensor):
                     output_type = 'layer_id')
             self.current_measurement = environment.components[self.component_name].T_layer[self.sensor_height_id]
         return super().get_measurement()
+
+
+class HotWaterDemandSensor(Sensor):
+    """
+    Sensor that measures the net heat flow from a hot water demand component.
+    
+    This sensor reads the mass flow and temperature difference between the hot water
+    supplied and the cold water return, and returns the net power in kW.
+    The net heat flow is calculated as: Q_net = mdot * cp * (T_hot - T_cold)
+    
+    Parameters
+    ----------
+    name : str
+        Name of the sensor
+    component_name : str
+        Name of the hot water demand component to measure
+    """
+    component_name: str
+    port_name: str
+    
+    def __init__(self, name: str, component_name: str):
+        super().__init__(name)
+        self.component_name = component_name
+        # The port name follows the pattern: {component_name}_fluid_port
+        self.port_name = f'{component_name}_fluid_port'
+
+    def get_measurement(self, environment, state):
+        from energy_system_control.constants import WATER
+        
+        # Get the mass flow and heat flow from the port
+        mass_flow_kg = environment.ports[self.port_name].flow['mass']  # in kg
+        heat_flow_kJ = environment.ports[self.port_name].flow['heat']  # in kJ
+        
+        # Get temperatures
+        T_hot_water = environment.ports[self.port_name].T  # Hot water temperature in K
+        T_cold_water = state.environmental_data.temperature_cold_water  # Cold water temperature in K
+        
+        # Handle case where temperature might not be set yet
+        if T_hot_water is None or T_cold_water is None:
+            self.current_measurement = 0.0
+        else:
+            # Calculate net heat flow: Q_net = mass_flow * cp * (T_hot - T_cold)
+            # Q_net_kJ = mass_flow_kg * WATER.cp * (T_hot_water - T_cold_water)
+            # Convert to power in kW
+            Q_net_kJ = mass_flow_kg * WATER.cp * (T_hot_water - T_cold_water)
+            self.current_measurement = Q_net_kJ / state.time_step
+        
+        return super().get_measurement()
