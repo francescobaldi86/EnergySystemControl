@@ -359,6 +359,7 @@ class ANNBasedPredictor(Predictor):
         self,
         prediction_horizon_h,
         sensor_name,
+        name=None,
         window_size_h=24,
         retrain_interval_h=50,
         min_sample_size_h=200,
@@ -369,19 +370,28 @@ class ANNBasedPredictor(Predictor):
 
         Parameters
         ----------
-        prediction_horizon : int
-            The number of time steps into the future to predict.
+        prediction_horizon_h : float
+            The number of hours into the future to predict.
         sensor_name : str
             The name of the sensor whose values are being predicted.
-        window_size : int, optional
-            The number of past time steps to use as input features. Defaults to 24.
-        retrain_interval : int, optional
-            The number of steps between model retraining. Defaults to 50.
-        min_samples : int, optional
-            The minimum number of samples required to train the model. Defaults to 200.
+        name : str, optional
+            The name of this predictor. Defaults to sensor_name if not provided.
+        window_size_h : float, optional
+            The length of past time steps to use as input features. Defaults to 24.
+        retrain_interval_h : float, optional
+            The interval of time between model retraining. Defaults to 50.
+        min_sample_size_h : float, optional
+            The minimum length of time required to train the model. Defaults to 200.
         **ann_kwargs
             Additional keyword arguments to pass to the MLPRegressor.
         """
+        # If no name provided, use sensor_name
+        if name is None:
+            name = sensor_name
+            
+        # Initialize the base Predictor class
+        super().__init__(name=name, variable_to_predict=sensor_name)
+        
         self.prediction_horizon_h = prediction_horizon_h
         self.prediction_horizon = None
         self.sensor_name = sensor_name

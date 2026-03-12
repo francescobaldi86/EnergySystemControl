@@ -1,5 +1,6 @@
 from typing import Dict, List, Callable, Any, Optional
 from dataclasses import dataclass
+from abc import ABC, abstractmethod
 
 @dataclass(frozen=True, slots=True)
 class InitContext:
@@ -30,7 +31,7 @@ class Node:
         self.flow = {name: 0.0 for name in self.layers}
 
 
-class Sensor():
+class Sensor(ABC):
     name: str
     current_measurement: float
     def __init__(self, name):
@@ -38,6 +39,10 @@ class Sensor():
 
     def get_measurement(self):
         return self.current_measurement
+    
+    @abstractmethod
+    def measure(self, environment, state):
+        pass
     
     def initialize(self, ctx: InitContext):
         self.get_measurement(ctx.environment, ctx.state)

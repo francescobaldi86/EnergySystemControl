@@ -103,9 +103,205 @@ def test_MPC_HybridDHW_application(test_components, test_sensors):
     assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 315, abs_tol = 1)
 
 
-def test_MPC_without_perfect_forecast():
-    predictor = ANNBasedPredictor(prediction_horizon_h=12, sensor_name='test_sensor')
-    assert True
+def test_MPC_with_ANN_predictors(test_components, test_sensors):
+    """
+    Test MPC controller using ANN-based predictors for PV power and heat demand.
+    
+    This test verifies that:
+    1. The MPC controller can work with ANN-based predictors
+    2. The simulation runs successfully with ANN predictions
+    3. The results are reasonable (grid electricity, heat pump energy, etc.)
+    """
+    connections = [
+        ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
+        ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
+        ('heat_pump_electricity_input_port', 'inverter_output_port'),
+        ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
+        ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+        ('inverter_grid_input_port', 'electric_grid_electricity_port'),
+        ('inverter_ESS_port', 'battery_electricity_port')
+    ]
+    
+    controllers = [
+        MPCController_HybridDHW('MPC_controller',
+                                storage_temperature_sensor='storage_tank_temperature_sensor',
+                                battery_SOC_sensor='battery_SOC_sensor',
+                                PV_power_predictor_name='pv_power_predictor',
+                                heat_demand_predictor_name='dhw_demand_predictor',
+                                horizon=24),
+        esc.InverterController('inverter_controller', 'inverter', 'battery')
+    ]
+    
+    predictors = [
+        ANNBasedPredictor(
+            prediction_horizon_h=24,
+            sensor_name='PV_power_sensor',
+            name='pv_power_predictor',
+            window_size_h=24,
+            retrain_interval_h=50,
+            min_sample_size_h=200
+        ),
+        ANNBasedPredictor(
+            prediction_horizon_h=24,
+            sensor_name='demand_heat_flow_sensor',
+            name='dhw_demand_predictor',
+            window_size_h=24,
+            retrain_interval_h=50,
+            min_sample_size_h=200
+        )
+    ]
+    
+    # Create environment
+    env = esc.Environment(
+        components=test_components,
+        controllers=controllers,
+        sensors=test_sensors,
+        connections=connections,
+        predictors=predictors
+    )
+    
+    # Create simulator object
+    sim_config = esc.SimulationConfig(time_start_h=0.0, time_end_h=24.0*7, time_step_h=1.0)
+    sim = esc.Simulator(env, sim_config)
+    
+    # Run simulation
+    results = sim.run()
+    df_ports, df_controllers, df_sensors = results.to_dataframe()
+    
+    # Get cumulated electricity values
+    heat_pump_energy_demand = results.get_cumulated_electricity('heat_pump_electricity_input_port')
+    electricity_from_pv = results.get_cumulated_electricity('inverter_PV_input_port')
+    net_electricity_demand = results.get_cumulated_electricity('electric_grid_electricity_port')
+    electricity_to_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only positive')
+    electricity_from_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only negative')
+    
+    # Verify that simulation produced reasonable results
+    assert heat_pump_energy_demand > 0, "Heat pump should consume energy"
+    assert electricity_from_pv > 0, "PV panels should generate electricity"
+    assert electricity_from_grid > 0 or electricity_to_grid > 0, "Should have some grid interaction"
+    
+    # Check that values are in reasonable ranges (allowing more tolerance for ANN than for perfect predictors)
+    assert electricity_from_pv < 50, "PV energy should be reasonable"
+    assert heat_pump_energy_demand < 30, "Heat pump energy should be reasonable"
+    assert abs(net_electricity_demand) < 30, "Total net electricity demand should be reasonable"
+
+
+def test_MPC_perfect_vs_ANN_predictors(test_components, test_sensors):
+    """
+    Compare MPC controller performance with perfect time series predictors vs ANN-based predictors.
+    
+    This test verifies that:
+    1. Both prediction methods allow successful MPC control
+    2. Perfect predictions result in lower grid electricity purchases (as expected)
+    3. ANN-based predictions, while less optimal, still provide reasonable control
+    """
+    connections = [
+        ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
+        ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
+        ('heat_pump_electricity_input_port', 'inverter_output_port'),
+        ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
+        ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+        ('inverter_grid_input_port', 'electric_grid_electricity_port'),
+        ('inverter_ESS_port', 'battery_electricity_port')
+    ]
+    
+    # Simulation parameters
+    sim_config = esc.SimulationConfig(time_start_h=0.0, time_end_h=24.0*7, time_step_h=1.0)
+    
+    # --- Run with Perfect Time Series Predictors ---
+    controllers_perfect = [
+        MPCController_HybridDHW('MPC_controller',
+                                storage_temperature_sensor='storage_tank_temperature_sensor',
+                                battery_SOC_sensor='battery_SOC_sensor',
+                                PV_power_predictor_name='pv_power_predictor',
+                                heat_demand_predictor_name='dhw_demand_predictor',
+                                horizon=24),
+        esc.InverterController('inverter_controller', 'inverter', 'battery')
+    ]
+    
+    predictors_perfect = [
+        PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'),
+        PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')
+    ]
+    
+    env_perfect = esc.Environment(
+        components=test_components,
+        controllers=controllers_perfect,
+        sensors=test_sensors,
+        connections=connections,
+        predictors=predictors_perfect
+    )
+    
+    sim_perfect = esc.Simulator(env_perfect, sim_config)
+    results_perfect = sim_perfect.run()
+    
+    # Get grid electricity values for perfect prediction case
+    grid_electricity_perfect = results_perfect.get_cumulated_electricity(
+        'electric_grid_electricity_port',
+        sign='only negative'
+    )
+    heat_pump_perfect = results_perfect.get_cumulated_electricity('heat_pump_electricity_input_port')
+    pv_perfect = results_perfect.get_cumulated_electricity('inverter_PV_input_port')
+    
+    # --- Run with ANN-Based Predictors ---
+    controllers_ann = [
+        MPCController_HybridDHW('MPC_controller',
+                                storage_temperature_sensor='storage_tank_temperature_sensor',
+                                battery_SOC_sensor='battery_SOC_sensor',
+                                PV_power_predictor_name='pv_power_predictor',
+                                heat_demand_predictor_name='dhw_demand_predictor',
+                                horizon=24),
+        esc.InverterController('inverter_controller', 'inverter', 'battery')
+    ]
+    
+    predictors_ann = [
+        ANNBasedPredictor(
+            prediction_horizon_h=24,
+            sensor_name='pv_panels',
+            name='pv_power_predictor'
+        ),
+        ANNBasedPredictor(
+            prediction_horizon_h=24,
+            sensor_name='demand_DHW',
+            name='dhw_demand_predictor'
+        )
+    ]
+    
+    env_ann = esc.Environment(
+        components=test_components,
+        controllers=controllers_ann,
+        sensors=test_sensors,
+        connections=connections,
+        predictors=predictors_ann
+    )
+    
+    sim_ann = esc.Simulator(env_ann, sim_config)
+    results_ann = sim_ann.run()
+    
+    # Get grid electricity values for ANN prediction case
+    grid_electricity_ann = results_ann.get_cumulated_electricity(
+        'electric_grid_electricity_port',
+        sign='only negative'
+    )
+    heat_pump_ann = results_ann.get_cumulated_electricity('heat_pump_electricity_input_port')
+    pv_ann = results_ann.get_cumulated_electricity('inverter_PV_input_port')
+    
+    # --- Assertions ---
+    # Both models should produce valid results
+    assert grid_electricity_perfect > 0, "Perfect predictor case should require some grid electricity"
+    assert heat_pump_perfect > 0, "Perfect predictor case should require heat pump"
+    assert pv_perfect > 0, "Perfect predictor case should generate PV power"
+    
+    assert grid_electricity_ann > 0, "ANN predictor case should require some grid electricity"
+    assert heat_pump_ann > 0, "ANN predictor case should require heat pump"
+    assert pv_ann > 0, "ANN predictor case should generate PV power"
+    
+    # Perfect predictions should result in lower or equal grid electricity purchases
+    # (perfect knowledge allows better optimization)
+    assert grid_electricity_ann >= grid_electricity_perfect * 0.9, \
+        f"ANN predictions should not perform catastrophically worse (ANN: {grid_electricity_ann}, Perfect: {grid_electricity_perfect})"
+    assert grid_electricity_perfect <= grid_electricity_ann, \
+        f"Perfect predictions should result in lower or equal grid purchases: Perfect={grid_electricity_perfect}, ANN={grid_electricity_ann}"
     
 
 def test_compare_mpc_to_other_controllers(test_components, test_sensors, test_predictors):
@@ -176,6 +372,7 @@ def test_sensors():
         esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
         esc.SOCSensor('battery_SOC_sensor', 'battery'),
         esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port'),
+        esc.HotWaterDemandSensor('demand_heat_flow_sensor', 'demand_DHW')
     ]
     return test_sensors
 

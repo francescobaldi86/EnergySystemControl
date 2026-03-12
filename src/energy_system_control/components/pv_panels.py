@@ -21,6 +21,28 @@ class PVpanel(Producer):
 
 
 class PVpanelFromData(PVpanel):
+    """
+    PV panel model that uses data from a file to calculate power output.
+
+    Parameters
+    ----------
+    name : str
+        Name of the PV panel
+    data_path : str
+        Path to the directory containing the data file
+    filename : str
+        Name of the data file
+    column_name : str
+        Name of the column in the data file containing the power data. Defaults to 'P'.
+    date_format : str
+        Format of the date in the data file. Defaults to '%Y%m%d:%H%M'.
+    skipfooter : int
+        Number of rows to skip at the end of the data file. Defaults to 0.
+    var_unit : Literal['kW', 'W']
+        Unit of the power data in the data file. Defaults to 'W'.
+    rescale_factor : float | None
+        Factor to rescale the power data. Defaults to None.
+    """
     def __init__(self, name: str, data_path: str, filename: str, column_name: str = 'P', date_format: str = '%Y%m%d:%H%M', skipfooter: int = 0, var_unit: Literal['kW', 'W'] = 'W', rescale_factor: float | None = None):
         temp = pd.read_csv(os.path.join(data_path, filename), sep = ";", decimal = '.', skipfooter = skipfooter, engine='python', index_col = 0)
         temp['time'] = pd.to_datetime(temp.index, format=date_format, utc=True)
