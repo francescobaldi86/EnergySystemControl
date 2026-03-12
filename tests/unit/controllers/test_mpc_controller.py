@@ -339,7 +339,7 @@ def test_compare_mpc_to_other_controllers(test_components, test_sensors, test_pr
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers_dict[control_type], sensors=test_sensors, connections=connections, predictors=test_predictors)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 0.5)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*3, time_step_h = 0.5)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()

@@ -7,9 +7,9 @@ class FlowTemperatureSensor(Sensor):
         super().__init__(name)
         self.port_name = port_name
 
-    def get_measurement(self, environment, state):
+    def measure(self, environment, state):
         self.current_measurement = environment.ports[self.port_name].T
-        return super().get_measurement()
+        return self.current_measurement
 
 
 class PowerSensor(Sensor):
@@ -30,9 +30,9 @@ class PowerSensor(Sensor):
         self.port_name = port_name
         self.flow_type = flow_type
 
-    def get_measurement(self, environment, state):
+    def measure(self, environment, state):
         self.current_measurement = environment.ports[self.port_name].flow[self.flow_type] / state.time_step
-        return super().get_measurement()
+        return self.current_measurement
 
 
 class ElectricPowerSensor(PowerSensor):
@@ -47,9 +47,9 @@ class SOCSensor(Sensor):
         super().__init__(name)
         self.component_name = component_name
 
-    def get_measurement(self, environment, state):
+    def measure(self, environment, state):
         self.current_measurement = environment.components[self.component_name].SOC
-        return super().get_measurement()
+        return self.current_measurement
 
 
 class TankTemperatureSensor(Sensor):
@@ -62,7 +62,7 @@ class TankTemperatureSensor(Sensor):
         self.sensor_height = sensor_height
         self.sensor_height_id = None
 
-    def get_measurement(self, environment, state):
+    def measure(self, environment, state):
         if isinstance(environment.components[self.component_name], HotWaterStorage):
             self.current_measurement = environment.components[self.component_name].temperature
         elif isinstance(environment.components[self.component_name], MultiNodeHotWaterTank):
@@ -72,7 +72,7 @@ class TankTemperatureSensor(Sensor):
                     default = environment.components[self.component_name].number_of_layers // 2 - 1, 
                     output_type = 'layer_id')
             self.current_measurement = environment.components[self.component_name].T_layer[self.sensor_height_id]
-        return super().get_measurement()
+        return self.current_measurement
 
 
 class HotWaterDemandSensor(Sensor):
@@ -99,7 +99,7 @@ class HotWaterDemandSensor(Sensor):
         # The port name follows the pattern: {component_name}_fluid_port
         self.port_name = f'{component_name}_fluid_port'
 
-    def get_measurement(self, environment, state):
+    def measure(self, environment, state):
         from energy_system_control.constants import WATER
         
         # Get the mass flow and heat flow from the port
@@ -120,4 +120,4 @@ class HotWaterDemandSensor(Sensor):
             Q_net_kJ = mass_flow_kg * WATER.cp * (T_hot_water - T_cold_water)
             self.current_measurement = Q_net_kJ / state.time_step
         
-        return super().get_measurement()
+        return self.current_measurement

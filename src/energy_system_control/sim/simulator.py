@@ -74,11 +74,12 @@ class Simulator:
         # Update environmental data (this is time-varying state)
         self.state.environmental_data = self._update_environmental_data()
 
+        for _, sensor in env.sensors.items():
+            sensor.measure(environment=env, state=self.state)  # We measure all sensors at the beginning of the step to make sure that controllers have access to the most recent measurements when they calculate their actions. This also ensures that we have sensor data for the initial state of the simulation.
         # Reset port flows and sensor measurements
         for _, port in env.ports.items():
             port.reset_flow_data()
-        for _, sensor in env.sensors.items():
-            sensor.current_measurement = None
+        
 
         # Initialize control actions and list of components to simulate
         self.state.control_actions = {}
@@ -180,7 +181,5 @@ class Simulator:
         # We also create a registry for each sensor
         for sensor_name, sensor in self.env.sensors.items():
             col = self.env.signal_registry_sensors.col_index(sensor_name, "")
-            if not sensor.current_measurement:
-                sensor.get_measurement(self.env, self.state)  # This is needed in case no other component has used the sensor
             sim_data.sensors[time_id, col] = sensor.current_measurement
         return sim_data

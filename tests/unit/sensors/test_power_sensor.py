@@ -134,7 +134,7 @@ class TestElectricPowerSensor:
         
         sim_config = esc.SimulationConfig(
             time_start_h=0.0,
-            time_end_h=1.0,
+            time_end_h=10.0,
             time_step_h=0.5
         )
         

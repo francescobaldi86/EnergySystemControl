@@ -13,7 +13,7 @@ class MockSensor(Sensor):
         self.measurements = measurements
         self.index = 0
 
-    def get_measurement(self, environment=None, state=None):
+    def measure(self, environment=None, state=None):
         if self.index < len(self.measurements):
             self.current_measurement = self.measurements[self.index]
             self.index += 1
@@ -60,6 +60,7 @@ def init_context(simulation_state):
     measurements = np.random.rand(50)  # 50 random measurements
     mock_sensor = MockSensor("test_sensor", measurements)
     mock_environmnent = MockEnvironmnent(sensors = {'test_sensor': mock_sensor})
+    mock_sensor.measure(environment=mock_environmnent, state=simulation_state)  # Initialize the first measurement
     return InitContext(environment = mock_environmnent, state = simulation_state)
     
 

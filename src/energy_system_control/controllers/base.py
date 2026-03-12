@@ -34,7 +34,7 @@ class Controller(ABC):
         self.sensor_names = sensors
 
     def get_obs(self, environment, state) -> Dict[str, Any]:
-        self.obs = {var: sensor.get_measurement(environment, state) for var, sensor in self.sensors.items()}
+        self.obs = {var: sensor.get_measurement() for var, sensor in self.sensors.items()}
         return self.obs
 
     def load_controlled_components(self, components: Dict[str, Any]):

@@ -45,7 +45,7 @@ class Sensor(ABC):
         pass
     
     def initialize(self, ctx: InitContext):
-        self.get_measurement(ctx.environment, ctx.state)
+        self.measure(ctx.environment, ctx.state)
 
     def reset(self):
         self.current_measurement = None

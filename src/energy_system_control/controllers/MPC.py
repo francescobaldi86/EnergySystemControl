@@ -241,7 +241,7 @@ class MPCController_HybridDHW(MPCController):
         self.obs = {}
         for var_name, sensor in self.sensors.items():
             if sensor:
-                self.obs[var_name] = sensor.get_measurement(environment, state)
+                self.obs[var_name] = sensor.get_measurement()
         return self.obs
 
 
