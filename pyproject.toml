@@ -16,7 +16,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
 ]
-dependencies = ["numpy", "pandas", "matplotlib", "dataclasses", "pytest", "pyyaml", "requests", "xlsxwriter"]
+dependencies = ["numpy", "pandas", "matplotlib", "dataclasses", "pytest", "pyyaml", "requests", "xlsxwriter", "pvlib", "cvxpy"]
 
 [project.urls]
 "Homepage" = "https://github.com/francescobaldi86/EnergySystemControl"
