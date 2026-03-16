@@ -257,13 +257,19 @@ def test_MPC_perfect_vs_ANN_predictors(test_components, test_sensors):
     predictors_ann = [
         ANNBasedPredictor(
             prediction_horizon_h=24,
-            sensor_name='pv_panels',
-            name='pv_power_predictor'
+            sensor_name='PV_power_sensor',
+            name='pv_power_predictor',
+            window_size_h=24,
+            retrain_interval_h=50,
+            min_sample_size_h=200
         ),
         ANNBasedPredictor(
             prediction_horizon_h=24,
-            sensor_name='demand_DHW',
-            name='dhw_demand_predictor'
+            sensor_name='demand_heat_flow_sensor',
+            name='dhw_demand_predictor',
+            window_size_h=24,
+            retrain_interval_h=50,
+            min_sample_size_h=200
         )
     ]
     

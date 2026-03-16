@@ -76,7 +76,8 @@ class MPCController_HybridDHW(MPCController):
                     heat_demand_predictor_name: str | None = None,
                     electricity_demand_predictor_name: str | None = None,
                     bounds_SOC: Tuple[float, float] = (0.3, 0.9),
-                    bounds_temperature: Tuple[float, float] = (313.15, 353.15)
+                    bounds_temperature: Tuple[float, float] = (313.15, 353.15),
+                    cost_of_temperature_violation: float = 1000.0
                     ):
         self.PV_power_predictor_name = PV_power_predictor_name
         self.heat_demand_predictor_name = heat_demand_predictor_name
@@ -85,6 +86,7 @@ class MPCController_HybridDHW(MPCController):
         sensors = {k: v for k, v in sensors.items() if v is not None}
         self.bounds_SOC = bounds_SOC
         self.bounds_temperature = bounds_temperature
+        self.cost_of_temperature_violation = cost_of_temperature_violation
         super().__init__(
             name = name,
             controlled_components = [],
@@ -143,7 +145,8 @@ class MPCController_HybridDHW(MPCController):
             'power_heat_pump': cp.Variable(TIME_HORIZON),
             'status_heat_pump': cp.Variable(TIME_HORIZON, boolean=True),
             'power_resistance': cp.Variable(TIME_HORIZON),
-            'status_resistance': cp.Variable(TIME_HORIZON, boolean=True)}
+            'status_resistance': cp.Variable(TIME_HORIZON, boolean=True),
+            'slack_temperature': cp.Variable(TIME_HORIZON)}
         problem.constant_parameters = {
             'DISPERSION_COEFFICIENT': self.hot_water_storage.convection_coefficient_losses,
             'DISPERSION_SURFACE': self.hot_water_storage.surface,
@@ -163,7 +166,8 @@ class MPCController_HybridDHW(MPCController):
             'ENERGY_BATTERY_MIN': self.battery.max_capacity * self.bounds_SOC[0] / 3600 if self.battery else 0.0,
             'CAPACITY_BATTERY': self.battery.max_capacity / 3600 if self.battery else 0.0,
             'TEMPERATURE_STORAGE_MAX': self.bounds_temperature[1],
-            'TEMPERATURE_STORAGE_MIN': self.bounds_temperature[0]
+            'TEMPERATURE_STORAGE_MIN': self.bounds_temperature[0],
+            'COST_OF_TEMPERATURE_VIOLATION': self.cost_of_temperature_violation
         }
         problem.variable_parameters = {
             'POWER_PV': cp.Parameter(TIME_HORIZON),
@@ -199,7 +203,7 @@ class MPCController_HybridDHW(MPCController):
             A_TES @ problem.variables['temperature_hot_water_storage'] - problem.variables['status_heat_pump'][:-1] * problem.constant_parameters['POWER_HP_TH'] * problem.constant_parameters['B1_TES'] - problem.variables['status_resistance'][:-1] * problem.constant_parameters['POWER_RESISTANCE_TH'] * problem.constant_parameters['B1_TES'] + problem.variable_parameters['B_TES'] == 0,
             A_EES @ problem.variables['energy_battery'] - problem.variables['power_to_battery'][:-1] * problem.constant_parameters['B1_EES_CHA'] + problem.variables['power_from_battery'][:-1] * problem.constant_parameters['B1_EES_DIS'] == 0,
             problem.variables['temperature_hot_water_storage'] <= problem.constant_parameters['TEMPERATURE_STORAGE_MAX'],
-            problem.variables['temperature_hot_water_storage'] >= problem.constant_parameters ['TEMPERATURE_STORAGE_MIN'],
+            problem.variables['temperature_hot_water_storage'] >= problem.constant_parameters ['TEMPERATURE_STORAGE_MIN'] - problem.variables['slack_temperature'],
             problem.variables['temperature_hot_water_storage'][0] >= problem.variable_parameters['TEMPERATURE_STORAGE_0'],
             problem.variables['energy_battery'] <= problem.constant_parameters['ENERGY_BATTERY_MAX'],
             problem.variables['energy_battery'] >= problem.constant_parameters['ENERGY_BATTERY_MIN'],
@@ -210,8 +214,9 @@ class MPCController_HybridDHW(MPCController):
             problem.variables['power_from_battery'] >= 0,
             problem.variables['power_to_grid'] >= 0,
             problem.variables['power_from_grid'] >= 0,
+            problem.variables['slack_temperature'] >= 0,
         ]
-        objective = cp.Minimize(problem.constant_parameters['ENERGY_COST'] *np.ones([1,TIME_HORIZON]) @ problem.variables['power_from_grid'] - problem.constant_parameters['ENERGY_VALUE']*np.ones([1,TIME_HORIZON]) @ problem.variables['power_to_grid'])
+        objective = cp.Minimize(problem.constant_parameters['ENERGY_COST'] *np.ones([1,TIME_HORIZON]) @ problem.variables['power_from_grid'] - problem.constant_parameters['ENERGY_VALUE']*np.ones([1,TIME_HORIZON]) @ problem.variables['power_to_grid'] + problem.constant_parameters['COST_OF_TEMPERATURE_VIOLATION'] * cp.sum(problem.variables['slack_temperature']))
         self.problem.problem = cp.Problem(objective, constraints)
     
     def get_action(self, state):

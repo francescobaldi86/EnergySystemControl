@@ -418,7 +418,7 @@ class ANNBasedPredictor(Predictor):
         self.window_size = self.window_size_h * 3600 // ctx.state.time_step
         self.retrain_interval = self.retrain_interval_h * 3600 // ctx.state.time_step
         self.min_sample_size = self.min_sample_size_h * 3600 // ctx.state.time_step
-        self.prediction_horizon = self.prediction_horizon_h * 3600 //ctx.state.time_step
+        self.prediction_horizon = int(self.prediction_horizon_h * 3600 // ctx.state.time_step)  # Prediction horizon in number of steps
         self.sensor = ctx.environment.sensors[self.sensor_name]
     
     def update(self, time_s):
@@ -489,7 +489,7 @@ class ANNBasedPredictor(Predictor):
         """
         # check if the prediction horizon is the same as the internal one
         if horizon_h != self.prediction_horizon_h:
-            raise ValueError(f'The required prediction horizon of {horizon_h} h is different from the internal prediction horizon of {self.prediction_horizon} h. Please check')
+            raise ValueError(f'The required prediction horizon of {horizon_h} h is different from the internal prediction horizon of {self.prediction_horizon_h} h. Please check')
         # Update predictor model
         self.update(state.time)
         # Provide base prediction if it's too early to have a real one
