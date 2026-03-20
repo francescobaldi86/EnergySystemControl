@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "energy_system_control"
-version = "0.1.0"
+version = "1.0.1"
 description = "A package to model small energy systems and implement different types of control systems"
 authors = [
   { name="Francesco Baldi", email="francesco.baldi86@gmail.com" }
