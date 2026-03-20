@@ -2,7 +2,7 @@
 import pytest
 import energy_system_control as esc
 from energy_system_control.controllers.MPC import MPCController, MPCController_HybridDHW
-from energy_system_control.controllers.predictors import PerfectTimeSeriesPredictor, ANNBasedPredictor
+from energy_system_control.controllers.predictors import PerfectTimeSeriesPredictor, ProfileARPredictor
 import math, os
 import pandas as pd
 
@@ -103,7 +103,7 @@ def test_MPC_HybridDHW_application(test_components, test_sensors):
     assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 315, abs_tol = 1)
 
 
-def test_MPC_with_ANN_predictors(test_components, test_sensors):
+def test_MPC_with_hybrid_AR_predictors(test_components, test_sensors):
     """
     Test MPC controller using ANN-based predictors for PV power and heat demand.
     
@@ -133,21 +133,15 @@ def test_MPC_with_ANN_predictors(test_components, test_sensors):
     ]
     
     predictors = [
-        ANNBasedPredictor(
+        ProfileARPredictor(
             prediction_horizon_h=24,
             sensor_name='PV_power_sensor',
-            name='pv_power_predictor',
-            window_size_h=24,
-            retrain_interval_h=50,
-            min_sample_size_h=200
+            name='pv_power_predictor'
         ),
-        ANNBasedPredictor(
+        ProfileARPredictor(
             prediction_horizon_h=24,
             sensor_name='demand_heat_flow_sensor',
-            name='dhw_demand_predictor',
-            window_size_h=24,
-            retrain_interval_h=50,
-            min_sample_size_h=200
+            name='dhw_demand_predictor'
         )
     ]
     
@@ -186,7 +180,7 @@ def test_MPC_with_ANN_predictors(test_components, test_sensors):
     assert abs(net_electricity_demand) < 30, "Total net electricity demand should be reasonable"
 
 
-def test_MPC_perfect_vs_ANN_predictors(test_components, test_sensors):
+def test_MPC_perfect_vs_HybridAR_predictors(test_components, test_sensors):
     """
     Compare MPC controller performance with perfect time series predictors vs ANN-based predictors.
     
@@ -254,22 +248,16 @@ def test_MPC_perfect_vs_ANN_predictors(test_components, test_sensors):
         esc.InverterController('inverter_controller', 'inverter', 'battery')
     ]
     
-    predictors_ann = [
-        ANNBasedPredictor(
+    predictors_ar = [
+        ProfileARPredictor(
             prediction_horizon_h=24,
             sensor_name='PV_power_sensor',
-            name='pv_power_predictor',
-            window_size_h=24,
-            retrain_interval_h=50,
-            min_sample_size_h=200
+            name='pv_power_predictor'
         ),
-        ANNBasedPredictor(
+        ProfileARPredictor(
             prediction_horizon_h=24,
             sensor_name='demand_heat_flow_sensor',
-            name='dhw_demand_predictor',
-            window_size_h=24,
-            retrain_interval_h=50,
-            min_sample_size_h=200
+            name='dhw_demand_predictor'
         )
     ]
     
@@ -278,7 +266,7 @@ def test_MPC_perfect_vs_ANN_predictors(test_components, test_sensors):
         controllers=controllers_ann,
         sensors=test_sensors,
         connections=connections,
-        predictors=predictors_ann
+        predictors=predictors_ar
     )
     
     sim_ann = esc.Simulator(env_ann, sim_config)

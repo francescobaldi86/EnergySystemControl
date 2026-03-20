@@ -7,9 +7,13 @@ import pandas as pd
 from typing import Literal
 from collections import deque
 from sklearn.neural_network import MLPRegressor
+from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor, ExtraTreesRegressor
+from sklearn.preprocessing import StandardScaler
+from sklearn.multioutput import MultiOutputRegressor
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.components.base import Component
 AlignMethod = Literal["raise", "ffill", "linear"]
+ANNModelType = Literal["pure regressor", "regressor-classifier"]
 
 class Predictor(ABC):
     variable_to_predict: str | None
@@ -318,7 +322,7 @@ class PerfectTimeSeriesPredictor(Predictor):
         return self.data[state.time_id: np.where(state.time_vector_for_prediction == state.time + horizon*3600)[0][0]]
     
 
-class ANNBasedPredictor(Predictor):
+class MLBasedPredictor(Predictor):
     """
     A predictor class that uses an Artificial Neural Network (ANN) to make predictions.
 
@@ -334,11 +338,11 @@ class ANNBasedPredictor(Predictor):
     sensor_name : str
         The name of the sensor whose values are being predicted.
     window_size_h : float, optional
-        The length of past time steps to use as input features. Defaults to 144.
+        The length of past time  to use as input features. Defaults to 144. [h]
     retrain_interval_h : float, optional
-        The interval of time that basses between model retraining. Defaults to 24.
+        The interval of time that passes between model retraining. Defaults to 24. [h]
     min_sample_size_h : float, optional
-        The minimum length of time required to train the model. Defaults to 24.
+        The minimum length of time required to train the model. Defaults to 24. [h]
     **ann_kwargs
         Additional keyword arguments to pass to the MLPRegressor.
 
@@ -357,13 +361,15 @@ class ANNBasedPredictor(Predictor):
     """
     def __init__(
         self,
-        prediction_horizon_h,
-        sensor_name,
-        name=None,
-        window_size_h=24,
-        retrain_interval_h=50,
-        min_sample_size_h=200,
-        **ann_kwargs
+        prediction_horizon_h: float,
+        sensor_name: str,
+        name: str = None,
+        model_type: Literal["ann", "tree"] = "tree",   # 'ann' or 'tree'
+        window_size_h: float = 24,
+        buffer_size_h: float = 144,
+        retrain_interval_h: float = 50,
+        min_sample_size_h: float = 200,
+        **model_kwargs
     ):
         """
         Initialize the ANNBasedPredictor.
@@ -385,21 +391,29 @@ class ANNBasedPredictor(Predictor):
         **ann_kwargs
             Additional keyword arguments to pass to the MLPRegressor.
         """
-        # If no name provided, use sensor_name
+
         if name is None:
             name = sensor_name
-            
-        # Initialize the base Predictor class
+
         super().__init__(name=name, variable_to_predict=sensor_name)
-        
+
+        self.model_type = model_type
+
         self.prediction_horizon_h = prediction_horizon_h
         self.prediction_horizon = None
+
         self.sensor_name = sensor_name
         self.sensor = None
+
         self.window_size_h = window_size_h
         self.window_size = None
+
+        self.buffer_size_h = buffer_size_h
+        self.buffer_size = None
+
         self.retrain_interval_h = retrain_interval_h
         self.retrain_interval = None
+
         self.min_sample_size_h = min_sample_size_h
         self.min_sample_size = None
 
@@ -407,106 +421,444 @@ class ANNBasedPredictor(Predictor):
         self.time_buffer = deque(maxlen=5000)
 
         self.step_counter = 0
-        self.model = MLPRegressor(**ann_kwargs)
         self.is_trained = False
 
-        # Check that sample sizes are consistent
+        # --- Model selection ---
+        if self.model_type == "ann":
+            self.model = MLPRegressor(**model_kwargs)
+            self.x_scaler = StandardScaler()
+            self.y_scaler = StandardScaler()
+        elif self.model_type == "tree":
+            self.model = MultiOutputRegressor(HistGradientBoostingRegressor(**model_kwargs))
+            self.x_scaler = None
+            self.y_scaler = None
+        elif self.model_type == "rf":
+            self.model = MultiOutputRegressor(RandomForestRegressor(**model_kwargs))
+            self.x_scaler = None
+            self.y_scaler = None
+        elif self.model_type == "et":
+            self.model = MultiOutputRegressor(ExtraTreesRegressor(**model_kwargs))
+            self.x_scaler = None
+            self.y_scaler = None
+        else:
+            raise ValueError(f"Unknown model_type: {model_type}")
+
+        # Consistency check
         if self.min_sample_size_h < self.window_size_h + self.prediction_horizon_h:
-            raise ValueError(f'The minimum sample size should be larger than the sum of the window size plus the prediction horizon.\n Values provided are:\n - min_sample_size: {self.min_sample_size_h} h\n - window_size: {self.window_size_h} h\n - prediction_horizon: {self.prediction_horizon_h} h')
+            raise ValueError("min_sample_size must be >= window + horizon")
+
+    # ------------------------------------------------------------------
 
     def initialize(self, ctx):
-        self.window_size = self.window_size_h * 3600 // ctx.state.time_step
-        self.retrain_interval = self.retrain_interval_h * 3600 // ctx.state.time_step
-        self.min_sample_size = self.min_sample_size_h * 3600 // ctx.state.time_step
-        self.prediction_horizon = int(self.prediction_horizon_h * 3600 // ctx.state.time_step)  # Prediction horizon in number of steps
-        self.sensor = ctx.environment.sensors[self.sensor_name]
-    
-    def update(self, time_s):
-        """
-        Update the predictor with a new sensor value and timestamp.
+        self.step_counter = 0
 
-        Parameters
-        ----------
-        time_s : float
-            The simulation time corresponding to the sensor value [s].
-        """
+        dt = ctx.state.time_step
+
+        self.window_size = int(self.window_size_h * 3600 // dt)
+        self.retrain_interval = int(self.retrain_interval_h * 3600 // dt)
+        self.min_sample_size = int(self.min_sample_size_h * 3600 // dt)
+        self.prediction_horizon = int(self.prediction_horizon_h * 3600 // dt)
+        self.buffer_size = int(self.buffer_size_h * 3600 // dt)
+
+        self.sensor = ctx.environment.sensors[self.sensor_name]
+
+    # ------------------------------------------------------------------
+
+    def update(self, time_s):
         self.buffer.append(self.sensor.get_measurement())
         self.time_buffer.append(time_s)
-        # If there are enough samples for training, and it's time to retrain, train the model
-        if self.time_buffer[-1] / 3600 >= self.min_sample_size_h:
-            if self.time_buffer[-1] / 3600 % self.retrain_interval_h == 0:
-                self._train()
+
+        self.step_counter += 1
+
+        if (
+            len(self.buffer) >= self.min_sample_size
+            and self.step_counter % self.retrain_interval == 0
+        ):
+            self._train()
+
+    # ------------------------------------------------------------------
+
+    def _prepare_data(self):
+        values = np.array(self.buffer)[-self.buffer_size:]
+        times = list(self.time_buffer)[-self.buffer_size:]
+
+        X, Y = [], []
+
+        for i in range(len(values) - self.window_size - self.prediction_horizon):
+            lag_part = values[i : i + self.window_size]
+
+            future_times = [
+                times[i + self.window_size + k]
+                for k in range(self.prediction_horizon)
+            ]
+
+            future_time_features = []
+            for t in future_times:
+                sin_h, cos_h = self._encode_hour(t)
+                future_time_features.extend([sin_h, cos_h])
+
+            features = np.concatenate([lag_part, future_time_features])
+
+            target = values[
+                i + self.window_size : i + self.window_size + self.prediction_horizon
+            ]
+
+            X.append(features)
+            Y.append(target)
+
+        return np.array(X), np.array(Y)
+
+    # ------------------------------------------------------------------
 
     def _train(self):
         X, Y = self._prepare_data()
+
         if len(X) == 0:
             return
 
-        self.model.fit(X, Y)
-        self.is_trained = True
-    
-    def _prepare_data(self):
-        """
-        Prepare the data for training the ANN model.
+        # Shuffle
+        idx = np.random.permutation(len(X))
+        X = X[idx]
+        Y = Y[idx]
 
-        Returns
-        -------
-        tuple
-            A tuple containing the input features (X) and target values (Y) for training.
-        """
-        values = np.array(self.buffer)
-        times = list(self.time_buffer)
-        X = []
-        Y = []
-        for i in range(len(values) - self.window_size - self.prediction_horizon):
-            # lagged values
-            lag_part = values[i:i+self.window_size]
-            # hour at prediction start
-            pred_time = times[i+self.window_size]
-            sin_h, cos_h = self._encode_hour(pred_time)
-            features = np.concatenate([lag_part, [sin_h, cos_h]])
-            target = values[
-                i+self.window_size:
-                i+self.window_size+self.prediction_horizon
-            ]
-            X.append(features)
-            Y.append(target)
-        return np.array(X), np.array(Y)
-    
+        # --- ANN ---
+        if self.model_type == "ann":
+            X_scaled = self.x_scaler.fit_transform(X)
+            Y_scaled = self.y_scaler.fit_transform(Y)
+
+            self.model.fit(X_scaled, Y_scaled)
+
+        # --- TREE ---
+        else:
+            self.model.fit(X, Y)
+
+        self.is_trained = True
+
+    # ------------------------------------------------------------------
+
     def predict(self, horizon_h: float, state: SimulationState):
+
+        if horizon_h != self.prediction_horizon_h:
+            raise ValueError("Prediction horizon mismatch")
+
+        self.update(state.time)
+
+        # fallback
+        if not self.is_trained:
+            last = self.buffer[-1] if len(self.buffer) else 0
+            return np.full(self.prediction_horizon, last)
+
+        latest_window = np.array(self.buffer)[-self.window_size:]
+
+        future_times = [
+            state.time + k * state.time_step
+            for k in range(self.prediction_horizon)
+        ]
+
+        future_time_features = []
+        for t in future_times:
+            sin_h, cos_h = self._encode_hour(t)
+            future_time_features.extend([sin_h, cos_h])
+
+        features = np.concatenate([latest_window, future_time_features]).reshape(1, -1)
+
+        # --- ANN ---
+        if self.model_type == "ann":
+            features_scaled = self.x_scaler.transform(features)
+            pred_scaled = self.model.predict(features_scaled)
+            pred = self.y_scaler.inverse_transform(pred_scaled)[0]
+
+        # --- TREE ---
+        else:
+            pred = self.model.predict(features)[0]
+
+        # enforce non-negativity
+        pred = np.maximum(pred, 0)
+
+        return pred
+
+    # ------------------------------------------------------------------
+
+    def _encode_hour(self, time):
+        hour = (time / 3600) % 24
+        return (
+            np.sin(2 * np.pi * hour / 24),
+            np.cos(2 * np.pi * hour / 24),
+        )
+
+
+
+class AutocorrPredictor(Predictor):
+    """
+    Autocorrelation-based predictor.
+
+    This predictor forecasts future values based on the autocorrelation
+    of past values at user-specified lags.
+
+    Parameters
+    ----------
+    sensor_name : str
+        Name of the sensor whose values are being predicted.
+    prediction_horizon_h : float
+        Number of hours to predict into the future.
+    lags_h : list of float
+        List of lags to use in hours. Example: [1, 24, 168] for 1h, 24h, 1 week.
+    """
+    def __init__(
+        self,
+        sensor_name: str,
+        prediction_horizon_h: float,
+        lags_h: list,
+        name: str = None
+    ):
+        if name is None:
+            name = sensor_name
+        super().__init__(name=name, variable_to_predict=sensor_name)
+
+        self.sensor_name = sensor_name
+        self.prediction_horizon_h = prediction_horizon_h
+        self.lags_h = lags_h
+
+        # Internal
+        self.buffer = deque(maxlen=10000)  # store past values
+        self.time_buffer = deque(maxlen=10000)
+        self.prediction_horizon = None
+        self.lags_steps = None
+        self.sensor = None
+
+    # ---------------- Initialization ----------------
+    def initialize(self, ctx):
+        dt = ctx.state.time_step  # seconds per simulation step
+        self.sensor = ctx.environment.sensors[self.sensor_name]
+        self.prediction_horizon = int(self.prediction_horizon_h * 3600 // dt)
+        # convert user-specified lags in hours to steps
+        self.lags_steps = [int(lag_h * 3600 // dt) for lag_h in self.lags_h]
+
+    # ---------------- Update ----------------
+    def update(self, time_s):
+        """Append new measurement."""
+        self.buffer.append(self.sensor.get_measurement())
+        self.time_buffer.append(time_s)
+
+    # ---------------- Predict ----------------
+    def predict(self, horizon_h: float, state):
         """
-        Make a prediction using the trained ANN model.
+        Predict future values using weighted average based on autocorrelation.
 
         Parameters
         ----------
-        current_time : pandas.Timestamp or datetime
-            The current timestamp.
+        horizon_h : float
+            Prediction horizon in hours.
+        state : SimulationState
+            Current simulation state (provides current time).
 
         Returns
         -------
-        numpy.ndarray or None
-            The predicted values for the prediction horizon, or None if not enough data is available.
+        np.ndarray
+            Predicted values for each step in the horizon.
         """
-        # check if the prediction horizon is the same as the internal one
         if horizon_h != self.prediction_horizon_h:
-            raise ValueError(f'The required prediction horizon of {horizon_h} h is different from the internal prediction horizon of {self.prediction_horizon_h} h. Please check')
-        # Update predictor model
+            raise ValueError(
+                f"Prediction horizon mismatch: requested {horizon_h}, "
+                f"model uses {self.prediction_horizon_h}"
+            )
+
+        # append latest measurement
         self.update(state.time)
-        # Provide base prediction if it's too early to have a real one
+
+        # fallback if not enough data
+        max_lag = max(self.lags_steps)
+        if len(self.buffer) < max_lag:
+            # repeat last known value
+            last_val = self.buffer[-1] if self.buffer else 0
+            return np.full(self.prediction_horizon, last_val)
+
+        # Simple approach: for each horizon step, predict as average of past lags
+        pred = np.zeros(self.prediction_horizon)
+        buffer_array = np.array(self.buffer)
+        for h in range(self.prediction_horizon):
+            values = []
+            for lag in self.lags_steps:
+                idx = -lag + h  # shift by horizon step
+                if idx < 0:
+                    values.append(buffer_array[idx])
+            pred[h] = np.mean(values)
+
+        # enforce non-negativity
+        pred = np.maximum(pred, 0)
+        return pred
+
+
+class ProfileARPredictor(Predictor):
+    """
+    Predictor based on:
+    - Average weekly profile
+    - Autoregressive residual correction
+
+    Parameters
+    ----------
+    prediction_horizon_h : float
+    sensor_name : str
+    residual_lags_h : list of float
+        Lags (in hours) for residual AR model (e.g. [1, 24])
+    """
+
+    def __init__(
+        self,
+        prediction_horizon_h: float,
+        sensor_name: str,
+        residual_lags_h: list = [1, 24],
+        name: str = None,
+        buffer_size_h: float = 24 * 14,  # 2 weeks default
+    ):
+        if name is None:
+            name = sensor_name
+
+        super().__init__(name=name, variable_to_predict=sensor_name)
+
+        self.sensor_name = sensor_name
+        self.prediction_horizon_h = prediction_horizon_h
+        self.residual_lags_h = residual_lags_h
+        self.buffer_size_h = buffer_size_h
+
+        # Internal
+        self.buffer = deque(maxlen=10000)
+        self.time_buffer = deque(maxlen=10000)
+
+        self.sensor = None
+        self.prediction_horizon = None
+        self.residual_lags = None
+        self.buffer_size = None
+
+        self.profile = None
+        self.ar_coeffs = None
+
+        self.is_trained = False
+
+    # ------------------------------------------------------------------
+
+    def initialize(self, ctx):
+        dt = ctx.state.time_step
+
+        self.sensor = ctx.environment.sensors[self.sensor_name]
+
+        self.prediction_horizon = int(self.prediction_horizon_h * 3600 // dt)
+        self.buffer_size = int(self.buffer_size_h * 3600 // dt)
+
+        # convert residual lags to steps
+        self.residual_lags = [
+            int(lag_h * 3600 // dt) for lag_h in self.residual_lags_h
+        ]
+
+    # ------------------------------------------------------------------
+
+    def update(self, time_s):
+        self.buffer.append(self.sensor.get_measurement())
+        self.time_buffer.append(time_s)
+
+        if len(self.buffer) >= self.buffer_size:
+            self._train()
+
+    # ------------------------------------------------------------------
+
+    def _train(self):
+        values = np.array(self.buffer)[-self.buffer_size:]
+        times = np.array(self.time_buffer)[-self.buffer_size:]
+
+        dt = times[1] - times[0]
+        steps_per_day = int(86400 // dt)
+
+        # --- 1. Build weekly profile ---
+        # index: (day_of_week, step_in_day)
+        profile = {}
+
+        for v, t in zip(values, times):
+            day = int((t // 86400) % 7)
+            step = int((t % 86400) // dt)
+
+            profile.setdefault((day, step), []).append(v)
+
+        # average
+        self.profile = {
+            k: np.mean(v_list) for k, v_list in profile.items()
+        }
+
+        # --- 2. Compute residuals ---
+        residuals = []
+        for v, t in zip(values, times):
+            day = int((t // 86400) % 7)
+            step = int((t % 86400) // dt)
+
+            base = self.profile.get((day, step), 0)
+            residuals.append(v - base)
+
+        residuals = np.array(residuals)
+
+        # --- 3. Fit AR model ---
+        max_lag = max(self.residual_lags)
+
+        X, Y = [], []
+
+        for i in range(max_lag, len(residuals)):
+            x = [residuals[i - lag] for lag in self.residual_lags]
+            X.append(x)
+            Y.append(residuals[i])
+
+        X = np.array(X)
+        Y = np.array(Y)
+
+        if len(X) > 0:
+            # least squares solution
+            self.ar_coeffs = np.linalg.lstsq(X, Y, rcond=None)[0]
+            self.is_trained = True
+
+    # ------------------------------------------------------------------
+
+    def predict(self, horizon_h: float, state):
+
+        if horizon_h != self.prediction_horizon_h:
+            raise ValueError("Prediction horizon mismatch")
+
+        self.update(state.time)
+
+        # fallback
         if not self.is_trained:
-            if len(self.buffer) == 0:
-                return np.zeros(self.prediction_horizon)
-            else:
-                last = self.buffer[-1]
-                return np.full(self.prediction_horizon, last)
-        # If model is trained, let's go baby!
-        latest_window = np.array(self.buffer)[-self.window_size:]
-        sin_h, cos_h = self._encode_hour(state.time)
-        features = np.concatenate([latest_window, [sin_h, cos_h]])
-        return self.model.predict(features.reshape(1, -1))[0]
-    
-    def _encode_hour(self, time):
-        hour = (time/3600) % 24
-        sin_hour = np.sin(2 * np.pi * hour / 24)
-        cos_hour = np.cos(2 * np.pi * hour / 24)
-        return sin_hour, cos_hour
+            last = self.buffer[-1] if len(self.buffer) else 0
+            return np.full(self.prediction_horizon, last)
+
+        dt = state.time_step
+
+        # prepare residual history
+        residuals = []
+        for v, t in zip(self.buffer, self.time_buffer):
+            day = int((t // 86400) % 7)
+            step = int((t % 86400) // dt)
+            base = self.profile.get((day, step), 0)
+            residuals.append(v - base)
+
+        residuals = list(residuals)
+
+        pred = []
+
+        for k in range(self.prediction_horizon):
+            t_future = state.time + k * dt
+
+            day = int((t_future // 86400) % 7)
+            step = int((t_future % 86400) // dt)
+
+            base = self.profile.get((day, step), 0)
+
+            # --- AR residual prediction ---
+            r_pred = 0
+            for coeff, lag in zip(self.ar_coeffs, self.residual_lags):
+                idx = -lag
+                if len(residuals) + idx >= 0:
+                    r_pred += coeff * residuals[idx]
+
+            # update residual history (recursive)
+            residuals.append(r_pred)
+
+            y_pred = base + r_pred
+            pred.append(max(y_pred, 0))  # enforce non-negative
+
+        return np.array(pred)
