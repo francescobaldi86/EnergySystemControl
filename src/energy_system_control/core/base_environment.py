@@ -111,6 +111,7 @@ class Environment:
         for name, controller in self.controllers.items():
             controller.load_controlled_components(self.components)
             controller.load_sensors(self.sensors)
+            controller.load_predictors(self.predictors)
 
     def read_timeseries_data(self):
         for _, component in self.components.items():

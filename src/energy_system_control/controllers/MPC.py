@@ -35,19 +35,15 @@ class MPCController(Controller):
         name: str,
         controlled_components: List[str],
         sensors: Dict[str, str],
+        predictors: Dict[str, str],
         horizon: float,
         solver: SolverName = "HIGHS",
     ):
-        super().__init__(name, controlled_components, sensors)
+        super().__init__(name, controlled_components, sensors, predictors)
         if horizon <= 0:
             raise ValueError("horizon_steps must be > 0")
         self.horizon = horizon 
         self.solver = solver
-
-    def get_obs(self, environment, state) -> Dict[str, Any]:
-        """Gets observations"""
-        super().get_obs(environment, state)
-        self.predictions = {var: predictor.predict(state.time, state.time_step, self.horizon, state.dt) for var, predictor in self.predictor.items()}
 
     @abstractmethod
     def initialize():
@@ -84,6 +80,8 @@ class MPCController_HybridDHW(MPCController):
         self.electricity_demand_predictor_name = electricity_demand_predictor_name
         sensors = {"temperature_storage": storage_temperature_sensor, "soc_battery": battery_SOC_sensor}
         sensors = {k: v for k, v in sensors.items() if v is not None}
+        predictors = {"pv_power": PV_power_predictor_name, "heat_demand": heat_demand_predictor_name, "electricity_demand": electricity_demand_predictor_name}
+        predictors = {k: v for k, v in predictors.items() if v is not None}
         self.bounds_SOC = bounds_SOC
         self.bounds_temperature = bounds_temperature
         self.cost_of_temperature_violation = cost_of_temperature_violation
@@ -91,6 +89,7 @@ class MPCController_HybridDHW(MPCController):
             name = name,
             controlled_components = [],
             sensors = sensors,
+            predictors = predictors,
             horizon = horizon,
             solver = cp.HIGHS)
         
@@ -158,8 +157,8 @@ class MPCController_HybridDHW(MPCController):
             'POWER_HP_TH': self.heat_pump.Qdot_design * self.heat_pump.COP_design if self.heat_pump else 0.0,
             'POWER_RESISTANCE_EL': self.resistance_heater.power if self.resistance_heater else 0.0,
             'POWER_RESISTANCE_TH': self.resistance_heater.power if self.resistance_heater else 0.0,
-            'ENERGY_COST': self.electricity_grid.cost_of_electricity_purchased,
-            'ENERGY_VALUE': self.electricity_grid.value_of_electricity_sold,
+            'ENERGY_COST': self.electricity_grid.cost_of_energy_purchased,
+            'ENERGY_VALUE': self.electricity_grid.value_of_energy_sold,
             'POWER_BATTERY_MAX_CHA': abs(self.battery.max_charging_power),
             'POWER_BATTERY_MAX_DIS': abs(self.battery.max_discharging_power),
             'ENERGY_BATTERY_MAX': self.battery.max_capacity * self.bounds_SOC[1] / 3600 if self.battery else 0.0,

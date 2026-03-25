@@ -11,8 +11,8 @@ __TEST__ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__fi
 
 class MockMPCController(MPCController):
     """Concrete implementation of MPCController for testing purposes."""
-    def __init__(self, name, controlled_components, sensors, horizon, solver):
-        super().__init__(name, controlled_components, sensors, horizon, solver)
+    def __init__(self, name, controlled_components, sensors, predictors, horizon, solver):
+        super().__init__(name, controlled_components, sensors, predictors, horizon, solver)
 
     def get_action(self, state):
         # Implement the get_action method
@@ -28,6 +28,7 @@ def mock_controller():
         name="test_controller",
         controlled_components=["component1", "component2"],
         sensors={"sensor1": "value1", "sensor2": "value2"},
+        predictors = {'predictor1': 'value3'},
         horizon=10.0,
         solver='OSQP'
     )
@@ -55,6 +56,7 @@ def test_horizon_validation():
             name="test_controller",
             controlled_components=["component1", "component2"],
             sensors={"sensor1": "value1", "sensor2": "value2"},
+            predictors = {'predictor1': 'value3'},
             horizon=0.0,
             solver='HIGHS'
         )

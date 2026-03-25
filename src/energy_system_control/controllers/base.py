@@ -4,6 +4,7 @@ from energy_system_control.helpers import *
 from energy_system_control.components.base import Component
 from energy_system_control.core.base_classes import Sensor, InitContext
 from energy_system_control.sim.state import SimulationState
+from energy_system_control.controllers.predictors import Predictor
 
 class Controller(ABC):
     name: str
@@ -12,11 +13,13 @@ class Controller(ABC):
     time_step: float
     controlled_component_names: List[str]
     sensor_names: Dict[str, str]
+    predictor_names: Dict[str, str]
     controlled_components: Dict[str, Component]
     sensors: Dict[str, Sensor]
+    predictors: Dict[str, Predictor]
     obs: dict
     previous_action: dict
-    def __init__(self, name, controlled_components: List[str], sensors: Dict[str, str]):
+    def __init__(self, name, controlled_components: List[str], sensors: Dict[str, str], predictors: Dict[str, str] = {}):
         """
         Class for a generic controller
 
@@ -32,9 +35,11 @@ class Controller(ABC):
         self.name = name
         self.controlled_component_names = controlled_components
         self.sensor_names = sensors
+        self.predictor_names = predictors
 
     def get_obs(self, environment, state) -> Dict[str, Any]:
         self.obs = {var: sensor.get_measurement() for var, sensor in self.sensors.items()}
+        self.predictions = {var: predictor.predict(state.time, state.time_step, self.horizon, state.dt) for var, predictor in self.predictors.items()}
         return self.obs
 
     def load_controlled_components(self, components: Dict[str, Any]):
@@ -42,6 +47,9 @@ class Controller(ABC):
     
     def load_sensors(self, sensors: Dict[str, Any]):
         self.sensors = {var: sensors[sensor_name] for var, sensor_name in self.sensor_names.items()}
+    
+    def load_predictors(self, predictors: Dict[str, Any]):
+        self.predictors = {var: predictors[predictor_name] for var, predictor_name in self.predictor_names.items()}
 
     @abstractmethod
     def get_action(self) -> Dict[str, Any]:

@@ -106,12 +106,12 @@ class BalancingUtility(Utility):
 
 
 class ElectricityGrid(BalancingUtility):
-    cost_of_electricity_purchased: float
-    value_of_electricity_sold: float
+    cost_of_energy_purchased: float
+    value_of_energy_sold: float
     def __init__(self, name: str, cost_of_electricity_purchased: float = 0.0, value_of_electricity_sold: float = 0.0):
         super().__init__(name, 'electricity')
-        self.cost_of_electricity_purchased = cost_of_electricity_purchased
-        self.value_of_electricity_sold = value_of_electricity_sold
+        self.cost_of_energy_purchased = cost_of_electricity_purchased
+        self.value_of_energy_sold = value_of_electricity_sold
 
 
 class ColdWaterGrid(BalancingUtility):
