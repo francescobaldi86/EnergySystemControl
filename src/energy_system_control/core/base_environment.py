@@ -52,7 +52,7 @@ class Environment:
         self.classify_components()
         self.create_ports()
         self.connect_ports()
-        self.load_components_and_sensors_to_controllers()
+        # self.load_components_and_sensors_to_controllers()
         self.create_data_registry()
 
     def initialize(self, state: SimulationState):
@@ -106,12 +106,6 @@ class Environment:
         for connection in self.connections:
             self.ports[connection[0]].connect_port(connection[1])
             self.ports[connection[1]].connect_port(connection[0])
-
-    def load_components_and_sensors_to_controllers(self):
-        for name, controller in self.controllers.items():
-            controller.load_controlled_components(self.components)
-            controller.load_sensors(self.sensors)
-            controller.load_predictors(self.predictors)
 
     def read_timeseries_data(self):
         for _, component in self.components.items():

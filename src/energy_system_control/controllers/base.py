@@ -37,9 +37,15 @@ class Controller(ABC):
         self.sensor_names = sensors
         self.predictor_names = predictors
 
+    def initialize(self, ctx: InitContext):
+        self.load_controlled_components(ctx.environment.components)
+        self.load_sensors(ctx.environment.sensors)
+        self.load_predictors(ctx.environment.predictors)
+        self.previous_action = {comp: 0 for comp in self.controlled_components}
+
     def get_obs(self, environment, state) -> Dict[str, Any]:
         self.obs = {var: sensor.get_measurement() for var, sensor in self.sensors.items()}
-        self.predictions = {var: predictor.predict(state.time, state.time_step, self.horizon, state.dt) for var, predictor in self.predictors.items()}
+        self.predictions = {var: predictor.predict(self.horizon, state) for var, predictor in self.predictors.items()}
         return self.obs
 
     def load_controlled_components(self, components: Dict[str, Any]):
@@ -55,8 +61,7 @@ class Controller(ABC):
     def get_action(self) -> Dict[str, Any]:
         return None
     
-    def initialize(self, ctx: InitContext):
-        self.previous_action = {comp: 0 for comp in self.controlled_components}
+    
 
 class HeaterControllerWithBandwidth(Controller):
     """

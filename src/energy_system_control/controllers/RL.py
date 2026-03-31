@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from itertools import product
 from typing import Any, Dict, Literal, List
 import numpy as np
 import pandas as pd
@@ -17,8 +18,24 @@ class RLAgent(ABC):
         pass
 
     @abstractmethod
-    def update(self, state, action, reward, next_state, done: bool):
+    def update(self, state, action, reward, next_state, next_action):
         pass
+
+class DiscreteActionRLAgent(RLAgent):
+    def __init__(self, actions: Dict[str, List[Any]]):
+        self.actions = actions
+        self._create_action_space()
+
+    def _create_action_space(self):
+        # Implementation for creating action space
+        for comp, values in self.actions.items():  # First check that the input is valid
+            if not isinstance(values, list):
+                raise ValueError(f"Actions for {comp} must be a list")
+        keys = list(self.actions.keys())
+        values = list(self.actions.values())
+        combinations = product(*values)
+        self.action_space = {i: dict(zip(keys, combo)) for i, combo in enumerate(combinations)}
+
 
 class TemporalAggregator:
     def __init__(self, n_blocks: int, agg_func: str = "mean"):
@@ -33,30 +50,32 @@ class TemporalAggregator:
         self.n_blocks = n_blocks
         self.agg_func = agg_func
 
-    def transform(self, df: pd.DataFrame) -> np.ndarray:
-        if len(df.columns) > 1:
-            raise ValueError("TemporalAggregator only supports single-column DataFrames")
-        values = df.values.flatten()
+    def transform(self, values: np.ndarray) -> np.ndarray:
+        if values.ndim != 1:
+            raise ValueError("TemporalAggregator only supports 1D arrays")
         n = len(values)
+        if n < self.n_blocks:
+            return values  # If there are fewer values than blocks, just return the original values
+        else:
+            block_size = n // self.n_blocks
+            reduced = []
 
-        block_size = n // self.n_blocks
-        reduced = []
 
-        for i in range(self.n_blocks):
-            start = i * block_size
-            end = (i + 1) * block_size if i < self.n_blocks - 1 else n
-            block = values[start:end]
+            for i in range(min(self.n_blocks, n)):  # in case n < n_blocks  
+                start = i * block_size
+                end = (i + 1) * block_size if i < self.n_blocks - 1 else n
+                block = values[start:end]
 
-            if self.agg_func == "mean":
-                reduced.append(np.mean(block))
-            elif self.agg_func == "sum":
-                reduced.append(np.sum(block))
-            elif self.agg_func == "max":
-                reduced.append(np.max(block))
-            else:
-                raise ValueError(f"Unknown aggregation: {self.agg_func}")
+                if self.agg_func == "mean":
+                    reduced.append(np.mean(block))
+                elif self.agg_func == "sum":
+                    reduced.append(np.sum(block))
+                elif self.agg_func == "max":
+                    reduced.append(np.max(block))
+                else:
+                    raise ValueError(f"Unknown aggregation: {self.agg_func}")
 
-        return np.array(reduced)
+            return np.array(reduced)
     
 
 class Discretizer:
@@ -71,7 +90,6 @@ class Discretizer:
         self.vmax = vmax
         self.n_bins = n_bins
         self.temporal_aggregator = temporal_aggregator
-
         self.bin_edges = np.linspace(vmin, vmax, n_bins + 1)
 
     def _digitize(self, values: np.ndarray) -> np.ndarray:
@@ -80,13 +98,11 @@ class Discretizer:
         return np.minimum(bin_idx, self.n_bins - 1)
 
     def discretize(self, value) -> np.ndarray:
-        if isinstance(value, pd.DataFrame):
+        if isinstance(value, np.ndarray):
             if self.temporal_aggregator is None:
                 raise ValueError("TemporalAggregator required for DataFrame input")
-
             values = self.temporal_aggregator.transform(value)
-
-        else:
+        else: # In case it's a float or int
             values = np.array([value])
 
         return self._digitize(values)
@@ -114,7 +130,6 @@ class StateDiscretizer:
 
     def transform(self, obs: dict = {}, predictions: dict = {}) -> tuple:
         state = []
-
         for var, discretizer in self.discretizers.items():
             if var in obs:
                 values = discretizer.discretize(obs[var])
@@ -122,46 +137,61 @@ class StateDiscretizer:
                 values = discretizer.discretize(predictions[var])
             else:
                 raise KeyError(f"{var} not found in obs or predictions")
-
             state.extend(values.tolist())
 
         return tuple(state)
 
 
 
-class QLearningAgent(RLAgent):
+class QLearningAgent(DiscreteActionRLAgent):
     def __init__(self, actions, alpha=0.1, gamma=0.99, epsilon=0.1):
+        super().__init__(actions)
+        self.q_table = defaultdict(lambda: np.zeros(len(self.action_space)))
+        self.alpha = alpha
+        self.gamma = gamma
+        self.epsilon = epsilon
+
+    def select_action(self, state):
+        if np.random.rand() < self.epsilon:
+            idx = np.random.randint(len(self.action_space))
+        else:
+            av = self.q_table[state]
+            idx = np.random.choice(np.flatnonzero(av == av.max()))
+
+        return self.action_space[idx]
+
+    def update(self, last_state, last_action, current_reward, next_state, next_action=None):
+        # a_idx = self.action_space.index(last_action)
+        a_idx = next(k for k, v in self.action_space.items() if v == last_action)
+        best_next = np.max(self.q_table[next_state])
+        td_target = current_reward + self.gamma * best_next
+        td_error = td_target - self.q_table[last_state][a_idx]
+        self.q_table[last_state][a_idx] += self.alpha * td_error
+
+class SARSAAgent(DiscreteActionRLAgent):
+    def __init__(self, actions, alpha=0.1, gamma=0.9, epsilon=0.1):
         self.q_table = defaultdict(lambda: np.zeros(len(actions)))
         self.actions = actions
         self.alpha = alpha
         self.gamma = gamma
         self.epsilon = epsilon
 
-    def _state_to_key(self, state):
-        return tuple(state.values())  # you may want something smarter
-
     def select_action(self, state):
-        key = self._state_to_key(state)
-
         if np.random.rand() < self.epsilon:
             idx = np.random.randint(len(self.actions))
         else:
-            idx = np.argmax(self.q_table[key])
-
-        return self.actions[idx]
-
-    def update(self, state, action, reward, next_state, done):
-        s = self._state_to_key(state)
-        s_next = self._state_to_key(next_state)
-
-        a_idx = self.actions.index(action)
-
-        best_next = np.max(self.q_table[s_next])
-
-        td_target = reward + self.gamma * best_next * (1 - done)
-        td_error = td_target - self.q_table[s][a_idx]
-
-        self.q_table[s][a_idx] += self.alpha * td_error
+            av = self.q_table[state]
+            idx = np.random.choice(np.flatnonzero(av == av.max()))
+        return self.action_space[idx]
+    
+    def update(self, last_state, last_action, current_reward, next_state, next_action):
+        # a_idx = self.action_space.index(last_action)
+        # next_a_idx = self.action_space.index(next_action)
+        a_idx = next(k for k, v in self.action_space.items() if v == last_action)
+        next_a_idx = next(k for k, v in self.action_space.items() if v == next_action)
+        td_target = current_reward + self.gamma * self.q_table[next_state][next_a_idx]
+        td_error = td_target - self.q_table[last_state][a_idx]
+        self.q_table[last_state][a_idx] += self.alpha * td_error
 
 
 class RLController(Controller):
@@ -169,55 +199,29 @@ class RLController(Controller):
         self,
         name,
         controlled_components,
-        sensors: List[str],
-        predictors: List[str],
+        sensors: Dict[str, str],
         agent: RLAgent,
         reward_function: RewardFunction,
+        predictors: Dict[str, str] = {},
+        prediction_horizon: int = 1
     ):
         super().__init__(name, controlled_components, sensors, predictors)
         self.agent = agent
         self.reward_function = reward_function
-
-
-    def load_sensors(self, sensors: Dict[str, Sensor], predictors: Dict[str, Predictor]):
-        super().load_sensors(sensors)
-        self.predictors = {var: predictors[predictor_name] for var, predictor_name in self.predictor_names.items()}
+        self.horizon = prediction_horizon
 
     def initialize(self, ctx: InitContext):
         super().initialize(ctx)
         self.last_state = None
         self.last_action = None
-        # Actualize the reward function requirements based on the sensors and predictors
-
-    def get_action(self, state: SimulationState):
-        state = self.get_state()
-
-        action = self.agent.select_action(state)
-
-        self.last_state = state
-        self.last_action = action
-
-        return action
+        # Initialize reward function if needed
+        self.reward_function.initialize(ctx)
     
-    def get_state(self):
-        state = {}
-        for sensor_name in self.sensors:
-            state[sensor_name] = self.env.sensors[sensor_name].get_value(self.env, self.env.state)
-        for predictor_name in self.predictors:
-            state[predictor_name] = self.env.controllers[predictor_name].get_prediction(self.env, self.env.state)
-        return state
-
-    def step(self, next_state, reward, done):
-        """
-        Call this AFTER environment transition
-        """
-        self.agent.update(
-            self.last_state,
-            self.last_action,
-            reward,
-            next_state,
-            done
-        )
+    def preprocess_state(self) -> List[float]:
+        # Transforms the state and prediction in a numpy array or similar structure that can be fed to the agent
+        sensor_measurements = list(self.obs.values()) 
+        predictions = list(self.predictions.values())
+        return sensor_measurements + predictions
         
     @classmethod
     def from_config(
@@ -240,29 +244,81 @@ class RLController(Controller):
         )
     
 
-class RLControllerValueBased(RLController):
-    def __init__(self, *args, state_discretizer: StateDiscretizer, **kwargs):  
-        super().__init__(*args, **kwargs)
+class RLControllerTabular(RLController):
+    def __init__(self,
+                name: str,
+                sensors: Dict[str, str],
+                predictors: Dict[str, str],
+                actions: Dict[str, List[Any]],
+                reward_function: RewardFunction, 
+                state_discretizer: StateDiscretizer,
+                agent_type: RLType,
+                agent_kwargs: dict = {}):
+        agent = make_agent(agent_type, actions=actions, **agent_kwargs)
+        controlled_components = list(actions.keys())
+        super().__init__(name = name, controlled_components=controlled_components, sensors=sensors, agent = agent, predictors=predictors, reward_function=reward_function)
         self.state_discretizer = state_discretizer
 
-    def get_action(self):
-        continuous_state = self.obs
-        discrete_state = self.state_discretizer.transform(continuous_state)
+    def preprocess_state(self):
+        return self.state_discretizer.transform(obs = self.obs, predictions=self.predictions)
 
-        action = self.agent.select_action(discrete_state)
 
-        self.last_state = discrete_state
+class QLearningController(RLControllerTabular):
+    def __init__(self,
+                name: str,
+                sensors: Dict[str, str],
+                actions: Dict[str, List[Any]],
+                reward_function: RewardFunction, 
+                state_discretizer: StateDiscretizer,
+                predictors: Dict[str, str] = {},
+                agent_kwargs: dict = {}):
+        super().__init__(name = name, sensors=sensors, predictors=predictors, actions=actions, reward_function=reward_function, state_discretizer=state_discretizer, agent_type="q_learning", agent_kwargs=agent_kwargs)
+
+    def get_action(self, state: SimulationState):
+        RL_state = self.preprocess_state()
+        reward = self.reward_function.compute(state)
+        if self.last_state is not None and self.last_action is not None:
+            self.agent.update(
+                last_state = self.last_state, 
+                last_action = self.last_action, 
+                current_reward = reward,
+                next_state = RL_state,
+                next_action = None) # In Q-learning the next action is not needed for the update)
+        action = self.agent.select_action(RL_state)
+        self.last_state = RL_state
         self.last_action = action
-
         return action
+    
+class SARSAController(RLControllerTabular):
+    def __init__(self,
+                name: str,
+                sensors: Dict[str, str],
+                predictors: Dict[str, str],
+                actions: Dict[str, List[Any]],
+                reward_function: RewardFunction, 
+                state_discretizer: StateDiscretizer,
+                agent_kwargs: dict = {}):
+        super().__init__(name = name, sensors=sensors, predictors=predictors, actions=actions, reward_function=reward_function, state_discretizer=state_discretizer, agent_type="sarsa", agent_kwargs=agent_kwargs)
 
-
-
-
+    def get_action(self, state: SimulationState):
+        RL_state = self.preprocess_state()
+        reward = self.reward_function.compute(state)
+        action = self.agent.select_action(RL_state)
+        if self.last_state is not None and self.last_action is not None:
+            self.agent.update(
+                last_state = self.last_state, 
+                last_action = self.last_action, 
+                current_reward = reward,
+                next_state = RL_state,
+                next_action = action) # In SARSA the next action is needed for the update)
+        self.last_state = RL_state
+        self.last_action = action
+        return action
 
 
 AGENT_REGISTRY = {
     "q_learning": QLearningAgent,
+    "sarsa": SARSAAgent,
 }
 
 def make_agent(agent_type: RLType, **kwargs) -> RLAgent:

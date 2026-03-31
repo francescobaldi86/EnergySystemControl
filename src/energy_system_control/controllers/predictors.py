@@ -34,7 +34,7 @@ class Predictor(ABC):
         self,
         horizon: float,  # In seconds
         state: SimulationState
-    ) -> pd.DataFrame:
+    ) -> np.array:
         """
         Return predictions from (now, now+horizon] on a dt grid.
 
@@ -135,7 +135,7 @@ class OfflineForecastPredictor(Predictor):
         self,
         horizon: float,  # In seconds
         state: SimulationState
-    ) -> pd.DataFrame:
+    ) -> np.array:
         """
         Return predictions from (now, now+horizon] on a dt grid.
 
@@ -150,8 +150,8 @@ class OfflineForecastPredictor(Predictor):
 
         Returns:
         --------
-        pd.DataFrame
-            A DataFrame containing the predictions for the specified variables over the prediction horizon.
+        np.array
+            An array containing the predictions for the specified variables over the prediction horizon.
 
         Raises:
         -------

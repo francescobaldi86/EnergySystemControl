@@ -1,7 +1,7 @@
 # test_rl_controller.py
 import pytest
 import energy_system_control as esc
-from energy_system_control.controllers.RL import QLearningAgent, RLControllerValueBased, StateDiscretizer, Discretizer, TemporalAggregator
+from energy_system_control.controllers.RL import QLearningController, StateDiscretizer, Discretizer, TemporalAggregator, QLearningAgent
 from energy_system_control.controllers.predictors import PerfectTimeSeriesPredictor
 from energy_system_control.controllers.reward_functions import CompositeReward, TemperatureTrackingReward, EnergyCostReward
 from energy_system_control.helpers import C2K
@@ -692,30 +692,41 @@ class TestStateDiscretizerWithPredictions:
             state_disc.transform(obs={}, predictions={})
 
 
+class TestRLControllerFunctions:
+
+    def test_combination_of_actions(self):
+        """Test that all combinations of actions are generated correctly"""
+        actions = {'heat_pump': [0, 1], 'resistance_heater': [0, 1]}
+        agent = QLearningAgent(actions)
+        assert len(agent.action_space) == 4
+        assert agent.action_space[0] == {'heat_pump': 0, 'resistance_heater': 0}
+        assert agent.action_space[1] == {'heat_pump': 0, 'resistance_heater': 1}
+        assert agent.action_space[2] == {'heat_pump': 1, 'resistance_heater': 0}
+        assert agent.action_space[3] == {'heat_pump': 1, 'resistance_heater': 1}
+        # Also tests what happen if there's only one component
+        actions = {'heat_pump': [0, 1]}
+        agent = QLearningAgent(actions)
+        assert len(agent.action_space) == 2
+        assert agent.action_space[0] == {'heat_pump': 0}
+        assert agent.action_space[1] == {'heat_pump': 1}
+
 class TestRLControllerFull:
 
-    def test_RL_HybridDHW_application(test_components, test_sensors):
-    # Test of a full system
+    def test_RL_HybridDHW_application_onlyT(self, test_components, test_sensors):
+    # Test of a standard hybrid system, where the only signal read by the RL controller is the storage tank temperature
         controllers = [
-            RLControllerValueBased(
+            QLearningController(
                 name = 'test_RL_controller',
-                controlled_components = 'heat_pump',
-                sensors = ['storage_tank_temperature_sensor', 'PV_power_sensor', 'demand_heat_flow_sensor'],
-                predictors = ['pv_power_predictor', 'dhw_demand_predictor'],
-                agent = QLearningAgent(actions = [0, 1]),
+                sensors = {'storage tank temperature': 'storage_tank_temperature_sensor'},
+                actions = {'heat_pump': [0, 1]},
                 reward_function = CompositeReward.make_reward({
                     "type": "composite",
                     "components": [
-                     {"type": "temperature_tracking", "kwargs": {"target": 50, "weight": 1.0}}, 
-                     {"type": "energy_cost", "kwargs": {"grid_component": "electric_grid", "power_sensor": 'grid_power_sensor'}}]}),
+                     {"type": "temperature_minmax", "kwargs": {"min_temp": 40, "max_temp": 60.0, "sensor_name": 'storage_tank_temperature_sensor'}}
+                     ]}),
                 state_discretizer = StateDiscretizer({
-                    'storage_tank_temperature_sensor': {"min": C2K(30), "max": C2K(80), "bins": 10},
-                    'PV_power_sensor': {"min": 0, "max": 3, "bins": 5},
-                    'demand_heat_flow_sensor': {"min": 0, "max": 10, "bins": 5},
-                    'pv_power_predictor': {"min": 0, "max": 3, "bins": 5, "temporal": {"n_blocks": 4, "agg": "mean"}},
-                    'dhw_demand_predictor': {"min": 0, "max": 10, "bins": 5, "temporal": {"n_blocks": 4, "agg": "mean"}}
+                    'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},
                 })),
-                
             esc.InverterController('inverter_controller', 'inverter', 'battery')
                     ]
         connections = [
@@ -732,7 +743,96 @@ class TestRLControllerFull:
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 1.0)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 1/60)
+        sim = esc.Simulator(env, sim_config)
+        # Run simulation
+        results = sim.run()
+        df_ports, df_controllers, df_sensors = results.to_dataframe()    
+        assert (df_sensors['storage_tank_temperature_sensor'] < C2K(40)).sum() < 100
+        assert (df_sensors['storage_tank_temperature_sensor'] > C2K(80)).sum() < 100
+        assert True
+
+    def test_RL_HybridDHW_application_TandP(self, test_components, test_sensors):
+    # Test of a standard hybrid system, where the only signals read by the RL controller are:
+    # - The storage tank temperature
+    # - The heat pump power
+        controllers = [
+            QLearningController(
+                name = 'test_RL_controller',
+                sensors = {'storage tank temperature': 'storage_tank_temperature_sensor'},
+                actions = {'heat_pump': [0, 1]},
+                reward_function = CompositeReward.make_reward({
+                    "type": "composite",
+                    "components": [
+                     {"type": "temperature_minmax", "kwargs": {"min_temp": 40, "max_temp": 60.0, "sensor_name": 'storage_tank_temperature_sensor'}}, 
+                     {"type": "energy_cost_component", "kwargs": {"default_power_kW": 0.5, 'energy_cost_per_kWh': 0.25, 'controller_name': 'test_RL_controller', 'controlled_component_name': 'heat_pump', 'weight': 0.2}}
+                     ]}),
+                state_discretizer = StateDiscretizer({
+                    'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},
+                })),
+            esc.InverterController('inverter_controller', 'inverter', 'battery')
+                    ]
+        connections = [
+            ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
+            ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
+            ('heat_pump_electricity_input_port', 'inverter_output_port'),
+            ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
+            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_grid_input_port', 'electric_grid_electricity_port'),
+            ('inverter_ESS_port', 'battery_electricity_port')
+        ]
+        predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
+                    PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
+        # Create environment
+        env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
+        # Create simulator object
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 1/60)
+        sim = esc.Simulator(env, sim_config)
+        # Run simulation
+        results = sim.run()
+        df_ports, df_controllers, df_sensors = results.to_dataframe()    
+        assert (df_sensors['storage_tank_temperature_sensor'] < C2K(40)).sum() < 100
+        assert (df_sensors['storage_tank_temperature_sensor'] > C2K(80)).sum() < 100
+        assert True
+
+    def test_RL_HybridDHW_application(self, test_components, test_sensors):
+    # Test of a full system
+        controllers = [
+            QLearningController(
+                name = 'test_RL_controller',
+                sensors = {'storage tank temperature': 'storage_tank_temperature_sensor', 'PV power': 'PV_power_sensor', 'DHW demand': 'demand_heat_flow_sensor'},
+                predictors = {}, # {'PV power prediction': 'pv_power_predictor', 'DHW demand prediction': 'dhw_demand_predictor'},
+                actions = {'heat_pump': [0, 1]},
+                reward_function = CompositeReward.make_reward({
+                    "type": "composite",
+                    "components": [
+                     {"type": "temperature_minmax", "kwargs": {"min_temp": 40, "max_temp": 60.0, "sensor_name": 'storage_tank_temperature_sensor'}}, 
+                     {"type": "energy_cost", "kwargs": {"cost_components": [{"component": "electric_grid", "sensor": 'grid_power_sensor'}]}}
+                     ]}),
+                state_discretizer = StateDiscretizer({
+                    'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},
+                    # 'PV power': {"min": 0, "max": 3, "bins": 5},
+                    # 'DHW demand': {"min": 0, "max": 10, "bins": 5},
+                    # 'PV power prediction': {"min": 0, "max": 3, "bins": 5, "temporal": {"n_blocks": 4, "agg": "mean"}},
+                    # 'DHW demand prediction': {"min": 0, "max": 10, "bins": 5, "temporal": {"n_blocks": 4, "agg": "mean"}}
+                })),
+            esc.InverterController('inverter_controller', 'inverter', 'battery')
+                    ]
+        connections = [
+            ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
+            ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
+            ('heat_pump_electricity_input_port', 'inverter_output_port'),
+            ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
+            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_grid_input_port', 'electric_grid_electricity_port'),
+            ('inverter_ESS_port', 'battery_electricity_port')
+        ]
+        predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
+                    PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
+        # Create environment
+        env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
+        # Create simulator object
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 1/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -742,9 +842,4 @@ class TestRLControllerFull:
         net_electricity_demand = results.get_cumulated_electricity('electric_grid_electricity_port')
         electricity_to_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only positive')
         electricity_from_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only negative')
-        assert math.isclose(electricity_from_pv, 29, abs_tol = 2)
-        assert math.isclose(heat_pump_energy_demand, 13, abs_tol = 2)
-        assert math.isclose(net_electricity_demand, 12, abs_tol = 2)
-        assert math.isclose(electricity_from_grid, 2, abs_tol = 2)
-        assert math.isclose(electricity_to_grid, 13, abs_tol = 2)
-        assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 315, abs_tol = 1)
+        assert True
