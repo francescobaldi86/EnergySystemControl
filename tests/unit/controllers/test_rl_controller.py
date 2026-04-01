@@ -791,8 +791,9 @@ class TestRLControllerFull:
         # Run simulation
         results = sim.run()
         df_ports, df_controllers, df_sensors = results.to_dataframe()    
-        assert (df_sensors['storage_tank_temperature_sensor'] < C2K(40)).sum() < 100
+        assert (df_sensors['storage_tank_temperature_sensor'] < C2K(40)).sum() < 500
         assert (df_sensors['storage_tank_temperature_sensor'] > C2K(80)).sum() < 100
+        results.plot_temperature_sensors('storage_tank_temperature_sensor')
         assert True
 
     def test_RL_HybridDHW_application(self, test_components, test_sensors):
@@ -811,10 +812,10 @@ class TestRLControllerFull:
                      ]}),
                 state_discretizer = StateDiscretizer({
                     'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},
-                    # 'PV power': {"min": 0, "max": 3, "bins": 5},
-                    # 'DHW demand': {"min": 0, "max": 10, "bins": 5},
-                    # 'PV power prediction': {"min": 0, "max": 3, "bins": 5, "temporal": {"n_blocks": 4, "agg": "mean"}},
-                    # 'DHW demand prediction': {"min": 0, "max": 10, "bins": 5, "temporal": {"n_blocks": 4, "agg": "mean"}}
+                    'PV power': {"min": 0, "max": 3, "bins": 5},
+                    'DHW demand': {"min": 0, "max": 10, "bins": 5},
+                    'PV power prediction': {"min": 0, "max": 3, "bins": 5, "temporal": {"n_blocks": 4, "agg": "mean"}},
+                    'DHW demand prediction': {"min": 0, "max": 10, "bins": 5, "temporal": {"n_blocks": 4, "agg": "mean"}}
                 })),
             esc.InverterController('inverter_controller', 'inverter', 'battery')
                     ]

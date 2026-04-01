@@ -1,7 +1,8 @@
 from energy_system_control.sim.simulation_data import SimulationData
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, List
 import numpy as np
+import matplotlib.pyplot as plt
 
 @dataclass
 class SimulationResults:
@@ -41,3 +42,32 @@ class SimulationResults:
                 return self._get_cumulated_result(port_name, "electricity", scaling_factor)
             case "only positive" | "only negative":
                 return self._get_cumulated_result_with_sign(port_name, "electricity", sign, scaling_factor)
+
+
+    def plot_sensors(self, sensors: str | List[str] | None= None, labels: str | List[str] | None = None, ylabel: str | None= None, filename: str | None = None):
+        # Plots the measured values of a sensor over time
+        fig, ax = plt.subplots(figsize=(10, 6))
+        if isinstance(sensors, str):
+            sensors_list = [sensors]
+            labels_list = [labels]
+        elif isinstance(sensors, list):
+            sensors_list = sensors
+            labels_list = labels
+        for sensor in sensors_list:
+            self._plot_sensor(ax, sensor, labels_list)
+        ax.set_xlabel('Time [h]')
+        ax.set_ylabel(ylabel)
+        ax.legend()
+        ax.grid()
+        # If filename is provided, save it there (for now, no folder)
+        if filename:
+            fig.savefig(filename)
+        return fig
+
+    def _plot_sensor(self, ax, sensor_name: str, label: str | None = None):
+        # Plots the measured values of a sensor over time
+        col = self.signal_registry_sensors.col_index(sensor_name, "")
+        ax.plot(self.time_vector/3600, self.data.sensors[:,col], label=sensor_name)
+        
+    def plot_temperature_sensors(self, sensors: str | List[str] | None= None, labels: str | List[str] | None = None, ylabel: str | None= None, filename: str | None = None):
+        return self.plot_sensors(sensors, labels, 'Temperature [K]', filename)
