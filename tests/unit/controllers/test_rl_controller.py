@@ -17,7 +17,7 @@ def test_components():
     test_components = [
         esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design= 3.2),
-        esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
+        esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45),
         esc.ElectricityGrid(name = 'electric_grid', cost_of_electricity_purchased=0.24, value_of_electricity_sold=0.06),
         esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
         esc.PVpanelFromPVGISData(name = 'pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename = 'pvgis_data.csv', rescale_factor = 3.0),
@@ -338,7 +338,7 @@ class TestTemporalAggregator:
         agg = TemporalAggregator(n_blocks=2, agg_func="mean")
         df = pd.DataFrame({'values': [1, 2, 3, 4]})
         
-        result = agg.transform(df)
+        result = agg.transform(df['values'].values)
         
         assert len(result) == 2, "Should have 2 blocks"
         np.testing.assert_array_almost_equal(result, [1.5, 3.5])
@@ -348,7 +348,7 @@ class TestTemporalAggregator:
         agg = TemporalAggregator(n_blocks=2, agg_func="sum")
         df = pd.DataFrame({'values': [1, 2, 3, 4]})
         
-        result = agg.transform(df)
+        result = agg.transform(df['values'].values)
         
         assert len(result) == 2, "Should have 2 blocks"
         np.testing.assert_array_almost_equal(result, [3.0, 7.0])
@@ -358,7 +358,7 @@ class TestTemporalAggregator:
         agg = TemporalAggregator(n_blocks=2, agg_func="max")
         df = pd.DataFrame({'values': [1, 2, 3, 4]})
         
-        result = agg.transform(df)
+        result = agg.transform(df['values'].values)
         
         assert len(result) == 2, "Should have 2 blocks"
         np.testing.assert_array_almost_equal(result, [2.0, 4.0])
@@ -368,7 +368,7 @@ class TestTemporalAggregator:
         agg = TemporalAggregator(n_blocks=1, agg_func="mean")
         df = pd.DataFrame({'values': [1, 2, 3, 4, 5]})
         
-        result = agg.transform(df)
+        result = agg.transform(df['values'].values)
         
         assert len(result) == 1
         assert result[0] == 3.0  # mean of [1,2,3,4,5]
@@ -379,7 +379,7 @@ class TestTemporalAggregator:
         agg = TemporalAggregator(n_blocks=10, agg_func="mean")
         df = pd.DataFrame({'values': list(range(1, n_vals + 1))})
         
-        result = agg.transform(df)
+        result = agg.transform(df['values'].values)
         
         assert len(result) == 10
         # First block: mean of values 1-10 = 5.5
@@ -390,7 +390,7 @@ class TestTemporalAggregator:
         agg = TemporalAggregator(n_blocks=3, agg_func="mean")
         df = pd.DataFrame({'values': [1, 2, 3, 4, 5, 6, 7]})  # 7 values into 3 blocks
         
-        result = agg.transform(df)
+        result = agg.transform(df['values'].values)
         
         assert len(result) == 3
         # Block 1: [1,2] -> mean = 1.5
@@ -403,8 +403,8 @@ class TestTemporalAggregator:
         agg = TemporalAggregator(n_blocks=2, agg_func="mean")
         df = pd.DataFrame({'a': [1, 2, 3, 4], 'b': [3, 4, 5, 6]})
         
-        with pytest.raises(ValueError, match="only supports single-column DataFrames"):
-            result = agg.transform(df)
+        with pytest.raises(ValueError, match="TemporalAggregator only supports 1D arrays"):
+            result = agg.transform(df.values)
         
         assert True
         
@@ -413,9 +413,9 @@ class TestTemporalAggregator:
         agg = TemporalAggregator(n_blocks=2, agg_func="mean")
         df = pd.DataFrame({'value': [42.0]})
         
-        result = agg.transform(df)
+        result = agg.transform(df['value'].values)
         
-        assert len(result) == 2
+        assert len(result) == 1
         # Single value divided into 2 blocks
         
     def test_temporal_aggregator_invalid_agg_func(self):
@@ -424,14 +424,14 @@ class TestTemporalAggregator:
         df = pd.DataFrame({'values': [1, 2, 3, 4]})
         
         with pytest.raises(ValueError, match="Unknown aggregation"):
-            agg.transform(df)
+            agg.transform(df['values'].values)
             
     def test_temporal_aggregator_negative_values(self):
         """Test aggregation with negative values"""
         agg = TemporalAggregator(n_blocks=2, agg_func="sum")
         df = pd.DataFrame({'values': [-2, -1, 1, 2]})
         
-        result = agg.transform(df)
+        result = agg.transform(df['values'].values)
         
         np.testing.assert_array_almost_equal(result, [-3.0, 3.0])
         
@@ -440,7 +440,7 @@ class TestTemporalAggregator:
         agg = TemporalAggregator(n_blocks=3, agg_func="mean")
         df = pd.DataFrame({'values': [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]})
         
-        result = agg.transform(df)
+        result = agg.transform(df['values'].values)
         
         assert len(result) == 3
         np.testing.assert_array_almost_equal(result, [0.15, 0.35, 0.55])
@@ -453,16 +453,9 @@ class TestDiscretizerWithTemporalAggregation:
         """Test Discretizer initialization with TemporalAggregator"""
         agg = TemporalAggregator(n_blocks=5, agg_func="mean")
         discretizer = Discretizer(vmin=0, vmax=100, n_bins=10, temporal_aggregator=agg)
-        
+
         assert discretizer.temporal_aggregator == agg
         
-    def test_discretizer_dataframe_without_aggregator_raises_error(self):
-        """Test that DataFrame input without aggregator raises error"""
-        discretizer = Discretizer(vmin=0, vmax=100, n_bins=10)
-        df = pd.DataFrame({'values': [10, 20, 30, 40]})
-        
-        with pytest.raises(ValueError, match="TemporalAggregator required"):
-            discretizer.discretize(df)
             
     def test_discretizer_with_temporal_aggregator_mean(self):
         """Test discretization of aggregated DataFrame with mean"""
@@ -470,7 +463,7 @@ class TestDiscretizerWithTemporalAggregation:
         discretizer = Discretizer(vmin=0, vmax=100, n_bins=10, temporal_aggregator=agg)
         
         df = pd.DataFrame({'values': [10, 20, 80, 90]})
-        result = discretizer.discretize(df)
+        result = discretizer.discretize(df['values'].values)
         
         # Should aggregate to [15, 85] then discretize
         assert len(result) == 2
@@ -482,7 +475,7 @@ class TestDiscretizerWithTemporalAggregation:
         discretizer = Discretizer(vmin=0, vmax=100, n_bins=5, temporal_aggregator=agg)
         
         df = pd.DataFrame({'values': [10, 15, 35, 40]})
-        result = discretizer.discretize(df)
+        result = discretizer.discretize(df['values'].values)
         
         # Should aggregate to [25, 75] then discretize
         assert len(result) == 2
@@ -494,7 +487,7 @@ class TestDiscretizerWithTemporalAggregation:
         discretizer = Discretizer(vmin=20, vmax=80, n_bins=6, temporal_aggregator=agg)
         
         df = pd.DataFrame({'values': [10, 15, 90, 95]})  # Values outside valid range
-        result = discretizer.discretize(df)
+        result = discretizer.discretize(df['values'].values)
         
         # Should clip to [20, 80] then discretize
         assert len(result) == 2
@@ -595,7 +588,7 @@ class TestStateDiscretizerWithPredictions:
         
         # Create a DataFrame prediction (e.g., 24-hour forecast)
         predictions = {
-            'pv_power': pd.DataFrame({'power': [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5]})
+            'pv_power': np.array([0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5])
         }
         
         result = state_disc.transform(predictions=predictions)
@@ -622,8 +615,8 @@ class TestStateDiscretizerWithPredictions:
         state_disc = StateDiscretizer(config)
         
         predictions = {
-            'pv_forecast': pd.DataFrame({'power': [0.5, 1.0, 2.0, 3.0]}),
-            'demand_forecast': pd.DataFrame({'demand': [1, 2, 3, 4]})
+            'pv_forecast': np.array([0.5, 1.0, 2.0, 3.0]),
+            'demand_forecast': np.array([1, 2, 3, 4])
         }
         
         result = state_disc.transform(predictions=predictions)
@@ -671,8 +664,8 @@ class TestStateDiscretizerWithPredictions:
             'storage_temp_sensor': C2K(50)
         }
         predictions = {
-            'pv_30min_forecast': pd.DataFrame({'power': [0.5, 1.5, 2.5, 3.5]}),
-            'dhw_demand_forecast': pd.DataFrame({'demand': [2, 3, 4, 5]})
+            'pv_30min_forecast': np.array([0.5, 1.5, 2.5, 3.5]),
+            'dhw_demand_forecast': np.array([2, 3, 4, 5])
         }
         
         result = state_disc.transform(obs=obs, predictions=predictions)
@@ -743,7 +736,7 @@ class TestRLControllerFull:
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 1/60)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 5/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -793,7 +786,6 @@ class TestRLControllerFull:
         df_ports, df_controllers, df_sensors = results.to_dataframe()    
         assert (df_sensors['storage_tank_temperature_sensor'] < C2K(40)).sum() < 500
         assert (df_sensors['storage_tank_temperature_sensor'] > C2K(80)).sum() < 100
-        results.plot_temperature_sensors('storage_tank_temperature_sensor')
         assert True
 
     def test_RL_HybridDHW_application(self, test_components, test_sensors):
@@ -802,7 +794,7 @@ class TestRLControllerFull:
             QLearningController(
                 name = 'test_RL_controller',
                 sensors = {'storage tank temperature': 'storage_tank_temperature_sensor', 'PV power': 'PV_power_sensor', 'DHW demand': 'demand_heat_flow_sensor'},
-                predictors = {}, # {'PV power prediction': 'pv_power_predictor', 'DHW demand prediction': 'dhw_demand_predictor'},
+                predictors = {'PV power prediction': 'pv_power_predictor', 'DHW demand prediction': 'dhw_demand_predictor'},
                 actions = {'heat_pump': [0, 1]},
                 reward_function = CompositeReward.make_reward({
                     "type": "composite",

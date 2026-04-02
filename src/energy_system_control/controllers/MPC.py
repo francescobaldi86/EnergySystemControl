@@ -45,9 +45,8 @@ class MPCController(Controller):
         self.horizon = horizon 
         self.solver = solver
 
-    @abstractmethod
-    def initialize():
-        return None
+    def initialize(self, ctx: InitContext):
+        super().initialize(ctx)
 
 
 class MPCController_HybridDHW(MPCController):
@@ -118,6 +117,7 @@ class MPCController_HybridDHW(MPCController):
             raise(BaseException, 'Electricity demand is present but no electricity demand predictor is provided')
         
     def initialize(self, ctx: InitContext):
+        super().initialize(ctx)
         # The optimization problem is initialized at the beginning, and then updated using parameters
         # Connecting to the predictors:
         self.PV_power_predictor = ctx.environment.predictors[self.PV_power_predictor_name] if self.PV_power_predictor_name is not None else None

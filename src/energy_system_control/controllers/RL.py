@@ -9,6 +9,7 @@ from energy_system_control.core.base_classes import InitContext, Sensor
 from energy_system_control.controllers.predictors import Predictor
 from energy_system_control.controllers.reward_functions import RewardFunction, CompositeReward, REWARD_REGISTRY
 from energy_system_control.sim.state import SimulationState
+from energy_system_control.core.registry import SignalRegistry
 
 RLType = Literal["q_learning", "sarsa", "dqn", "deep_sarsa"]
 
@@ -99,9 +100,10 @@ class Discretizer:
 
     def discretize(self, value) -> np.ndarray:
         if isinstance(value, np.ndarray):
-            if self.temporal_aggregator is None:
-                raise ValueError("TemporalAggregator required for DataFrame input")
-            values = self.temporal_aggregator.transform(value)
+            if self.temporal_aggregator:  # If there is a temporal aggregator, we use it
+                values = self.temporal_aggregator.transform(value)
+            else:
+                values = value
         else: # In case it's a float or int
             values = np.array([value])
 
@@ -216,6 +218,16 @@ class RLController(Controller):
         self.last_action = None
         # Initialize reward function if needed
         self.reward_function.initialize(ctx)
+
+    def create_agent_data_registry(self, ctx: InitContext):
+        rl_registry = SignalRegistry()
+        # Example signals
+        rl_registry.register("rl", "reward")
+        rl_registry.register("rl", "td_error")
+        rl_registry.register("rl", "action")
+        ctx.environment.rl_registry = rl_registry
+        
+
     
     def preprocess_state(self) -> List[float]:
         # Transforms the state and prediction in a numpy array or similar structure that can be fed to the agent

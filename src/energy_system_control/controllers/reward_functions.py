@@ -129,7 +129,7 @@ class EnergyCostReward(RewardFunction):
                 "feed_in_revenue": ctx.environment.components[comp['component']].value_of_energy_sold
             })
 
-    def compute(self, **kwargs):
+    def compute(self, state: SimulationState):
         total_cost = 0.0
         for comp in self.cost_components:
             energy_exchange = comp["sensor"].get_measurement()  # positive for purchase, negative for feed-in
