@@ -13,6 +13,7 @@ from energy_system_control.components.storage import *
 from energy_system_control.sensors.sensors import *
 from energy_system_control.controllers.base import *
 from energy_system_control.controllers.predictors import *
+from energy_system_control.controllers.RL.RLcontrollers import *
 from energy_system_control.helpers import *
 from energy_system_control.io.data_provider import EnvironmentalDataProvider
 from energy_system_control.sim.config import SimulationConfig
@@ -53,12 +54,13 @@ class Environment:
         self.create_ports()
         self.connect_ports()
         # self.load_components_and_sensors_to_controllers()
-        self.create_data_registry()
+        
 
     def initialize(self, state: SimulationState):
         if self.environmental_data_provider:
             if hasattr(self.environmental_data_provider, "initialize"):
                 self.environmental_data_provider.initialize(state)
+        self.create_data_registry()
 
     def add_component(self, component_name, component_type, **kwargs):
         if component_type not in Component.registry:
@@ -98,10 +100,13 @@ class Environment:
         for controller_name, controller in self.controllers.items():
             for component_name in controller.controlled_component_names:
                 self.signal_registry_controllers.register(controller_name, component_name)
+                if isinstance(controller, RLController):
+                    self.signal_registry_controllers.register(controller_name, "reward")
+                    self.signal_registry_controllers.register(controller_name, "td_error")
         # We also create a registry for each sensor
         for sensor_name in self.sensors.keys():
             self.signal_registry_sensors.register(sensor_name, "")
-        
+                
     def connect_ports(self):
         for connection in self.connections:
             self.ports[connection[0]].connect_port(connection[1])

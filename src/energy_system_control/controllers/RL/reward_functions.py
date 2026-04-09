@@ -8,7 +8,6 @@ from energy_system_control.controllers.predictors import Predictor
 from energy_system_control.helpers import C2K
 from energy_system_control.sim.state import SimulationState
 
-
 class RewardFunction(ABC):
     required_observations: set = set()
     required_actions: set = set()
@@ -28,6 +27,15 @@ class RewardFunction(ABC):
             raise ValueError(f"Missing observations: {missing_obs}")
         if missing_actions:
             raise ValueError(f"Missing actions: {missing_actions}")
+    
+    def make_reward(config: dict):
+        if config["type"] == "composite":
+            return CompositeReward([
+                CompositeReward.make_reward(sub) for sub in config["components"]
+            ])
+
+        cls = REWARD_REGISTRY[config["type"]]
+        return cls(**config.get("kwargs", {}))
         
 class CompositeReward(RewardFunction):
     def __init__(self, rewards: list):
@@ -47,16 +55,11 @@ class CompositeReward(RewardFunction):
 
     def compute(self, state: SimulationState):
         return sum(r.compute(state) for r in self.rewards)
-
-    @staticmethod
+    
     def make_reward(config: dict) -> RewardFunction:
-        if config["type"] == "composite":
-            return CompositeReward([
-                CompositeReward.make_reward(sub) for sub in config["components"]
-            ])
-
         cls = REWARD_REGISTRY[config["type"]]
         return cls(**config.get("kwargs", {}))
+
 
 
 class TemperatureTrackingReward(RewardFunction):
@@ -145,3 +148,4 @@ REWARD_REGISTRY = {
     "energy_cost_component": ComponentCostReward,
     "temperature_minmax": TemperatureMinMaxReward,
 }
+

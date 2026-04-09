@@ -44,7 +44,7 @@ class SimulationResults:
                 return self._get_cumulated_result_with_sign(port_name, "electricity", sign, scaling_factor)
 
 
-    def plot_sensors(self, sensors: str | List[str] | None= None, labels: str | List[str] | None = None, ylabel: str | None= None, filename: str | None = None):
+    def plot_sensors(self, sensors: str | List[str] | None= None, labels: str | List[str] | None = None, ylabel: str | None= None, filename: str | None = None, reference_value: float | None = None):
         # Plots the measured values of a sensor over time
         fig, ax = plt.subplots(figsize=(10, 6))
         if isinstance(sensors, str):
@@ -55,6 +55,8 @@ class SimulationResults:
             labels_list = labels
         for sensor in sensors_list:
             self._plot_sensor(ax, sensor, labels_list)
+        if reference_value:
+            ax.hlines([reference_value], xmin = ax.get_xlim()[0], xmax = ax.get_xlim()[1], colors = ['red'], linestyles=['solid'])
         ax.set_xlabel('Time [h]')
         ax.set_ylabel(ylabel)
         ax.legend()
@@ -69,5 +71,5 @@ class SimulationResults:
         col = self.signal_registry_sensors.col_index(sensor_name, "")
         ax.plot(self.time_vector/3600, self.data.sensors[:,col], label=sensor_name)
         
-    def plot_temperature_sensors(self, sensors: str | List[str] | None= None, labels: str | List[str] | None = None, ylabel: str | None= None, filename: str | None = None):
-        return self.plot_sensors(sensors, labels, 'Temperature [K]', filename)
+    def plot_temperature_sensors(self, sensors: str | List[str] | None= None, labels: str | List[str] | None = None, ylabel: str | None= None, filename: str | None = None, comfort_temperature: float | None = None):
+        return self.plot_sensors(sensors, labels, 'Temperature [K]', filename, comfort_temperature)

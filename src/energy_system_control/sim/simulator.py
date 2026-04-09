@@ -12,6 +12,7 @@ from energy_system_control.helpers import C2K, calculate_solar_angles
 from energy_system_control.core.ports import FluidPort, HeatPort
 from energy_system_control.sim.simulation_data import SimulationData  # wherever it lives
 from energy_system_control.sim.results import SimulationResults
+from energy_system_control.controllers.RL.RLcontrollers import RLController
 
 @dataclass
 class Simulator:
@@ -178,6 +179,11 @@ class Simulator:
             for component_name in controller.controlled_component_names:
                 col = self.env.signal_registry_controllers.col_index(controller_name, component_name)
                 sim_data.controllers[time_id, col] = controller.previous_action[component_name]
+                if isinstance(controller, RLController):
+                    col_reward = self.env.signal_registry_controllers.col_index(controller_name, 'reward')
+                    col_td_error = self.env.signal_registry_controllers.col_index(controller_name, 'td_error')
+                    sim_data.controllers[time_id, col_reward] = controller.agent.last_reward
+                    sim_data.controllers[time_id, col_td_error] = controller.agent.last_td_error
         # We also create a registry for each sensor
         for sensor_name, sensor in self.env.sensors.items():
             col = self.env.signal_registry_sensors.col_index(sensor_name, "")

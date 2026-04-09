@@ -1,9 +1,11 @@
 # test_rl_controller.py
 import pytest
 import energy_system_control as esc
-from energy_system_control.controllers.RL import QLearningController, StateDiscretizer, Discretizer, TemporalAggregator, QLearningAgent
+from energy_system_control.controllers.RL.RLcontrollers import QLearningController
+from energy_system_control.controllers.RL.discretizers import StateDiscretizer, Discretizer, TemporalAggregator
+from energy_system_control.controllers.RL.agents import QLearningAgent
 from energy_system_control.controllers.predictors import PerfectTimeSeriesPredictor
-from energy_system_control.controllers.reward_functions import CompositeReward, TemperatureTrackingReward, EnergyCostReward
+from energy_system_control.controllers.RL.reward_functions import CompositeReward, TemperatureTrackingReward, EnergyCostReward
 from energy_system_control.helpers import C2K
 import math, os
 import pandas as pd
@@ -745,6 +747,52 @@ class TestRLControllerFull:
         assert (df_sensors['storage_tank_temperature_sensor'] > C2K(80)).sum() < 100
         assert True
 
+
+    def test_RL_HybridDHW_application_onlyT_2(self, test_components, test_sensors):
+    # Test of a standard hybrid system, where the only signal read by the RL controller is the storage tank temperature
+    # Testing a different way of initializing the different components
+        controllers = [
+            QLearningController(
+                name = 'test_RL_controller',
+                sensors = {'storage tank temperature': 'storage_tank_temperature_sensor'},
+                actions = {'heat_pump': [0, 1]},
+                exploration_policy = {'type': 'epsilon-greedy',
+                                      'config info': {
+                                          'bias function': {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): [0.0, 1.0], (273+35, 273+40): [0.1, 0.9], (273+40, 273+60): [0.5, 0.5], (273+60, 273+70): [0.8, 0.2], (273+70, 273+100): [1.0, 0.0]}}}},
+                valid_states_function = {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): {'heat_pump': [1]}, (273+35, 273+70): {'heat_pump': [0, 1]}, (273+70, 273+100): {'heat_pump': [0]}}},
+                agent_config_info = {'epsilon': 0.02, 'decay': 0.01, 'alpha': 0.1},
+                reward_function = {
+                    "type": "composite",
+                    "components": [
+                     {"type": "temperature_minmax", "kwargs": {"min_temp": 40, "max_temp": 60.0, "sensor_name": 'storage_tank_temperature_sensor'}}
+                     ]},
+                state_discretizer = {'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},}),
+            esc.InverterController('inverter_controller', 'inverter', 'battery')
+                    ]
+        connections = [
+            ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
+            ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
+            ('heat_pump_electricity_input_port', 'inverter_output_port'),
+            ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
+            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_grid_input_port', 'electric_grid_electricity_port'),
+            ('inverter_ESS_port', 'battery_electricity_port')
+        ]
+        predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
+                    PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
+        # Create environment
+        env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
+        # Create simulator object
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 5/60)
+        sim = esc.Simulator(env, sim_config)
+        # Run simulation
+        results = sim.run()
+        df_ports, df_controllers, df_sensors = results.to_dataframe()    
+        assert (df_sensors['storage_tank_temperature_sensor'] < C2K(40)).sum() < 100
+        assert (df_sensors['storage_tank_temperature_sensor'] > C2K(80)).sum() < 100
+        assert True
+
+
     def test_RL_HybridDHW_application_TandP(self, test_components, test_sensors):
     # Test of a standard hybrid system, where the only signals read by the RL controller are:
     # - The storage tank temperature
@@ -754,15 +802,17 @@ class TestRLControllerFull:
                 name = 'test_RL_controller',
                 sensors = {'storage tank temperature': 'storage_tank_temperature_sensor'},
                 actions = {'heat_pump': [0, 1]},
-                reward_function = CompositeReward.make_reward({
+                exploration_policy = {'type': 'epsilon-greedy',
+                                      'config info': {
+                                          'bias function': {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): [0.0, 1.0], (273+35, 273+40): [0.1, 0.9], (273+40, 273+60): [0.5, 0.5], (273+60, 273+70): [0.8, 0.2], (273+70, 273+100): [1.0, 0.0]}}}},
+                valid_states_function = {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): {'heat_pump': [1]}, (273+35, 273+70): {'heat_pump': [0, 1]}, (273+70, 273+100): {'heat_pump': [0]}}},
+                agent_config_info = {'epsilon': 0.02, 'decay': 0.01, 'alpha': 0.1},
+                reward_function = {
                     "type": "composite",
                     "components": [
                      {"type": "temperature_minmax", "kwargs": {"min_temp": 40, "max_temp": 60.0, "sensor_name": 'storage_tank_temperature_sensor'}}, 
-                     {"type": "energy_cost_component", "kwargs": {"default_power_kW": 0.5, 'energy_cost_per_kWh': 0.25, 'controller_name': 'test_RL_controller', 'controlled_component_name': 'heat_pump', 'weight': 0.2}}
-                     ]}),
-                state_discretizer = StateDiscretizer({
-                    'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},
-                })),
+                     {"type": "energy_cost_component", "kwargs": {"default_power_kW": 0.5, 'energy_cost_per_kWh': 0.25, 'controller_name': 'test_RL_controller', 'controlled_component_name': 'heat_pump', 'weight': 0.2}}]},
+                state_discretizer = {'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},}),
             esc.InverterController('inverter_controller', 'inverter', 'battery')
                     ]
         connections = [
@@ -825,7 +875,7 @@ class TestRLControllerFull:
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 1/60)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*21, time_step_h = 5/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
