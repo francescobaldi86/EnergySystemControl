@@ -2,15 +2,13 @@ from typing import Dict, List, Callable, Any, Literal
 from dataclasses import dataclass
 import pandas as pd
 import numpy as np
-from energy_system_control.core.ports import Port
+from energy_system_control.core.port import Port
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.core.base_classes import InitContext
 from energy_system_control.helpers import resample_with_interpolation
 
 class Component:
     name: str
-    time: float
-    time_id: int
     time_step: float
     # environment: esc.Environment
     registry = {}

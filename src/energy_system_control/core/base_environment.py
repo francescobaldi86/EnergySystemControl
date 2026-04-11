@@ -2,7 +2,8 @@ from typing import Dict, List
 from collections import defaultdict
 import pandas as pd
 from energy_system_control.core.base_classes import *
-from energy_system_control.core.ports import *
+from energy_system_control.core.port import *
+from energy_system_control.core.node import *
 from energy_system_control.sim.simulation_data import *
 from energy_system_control.core.registry import *
 from energy_system_control.components.base import *
@@ -50,7 +51,6 @@ class Environment:
         # Ordering data
         self.classify_components()
         self.create_ports()
-        self.connect_ports()
         
 
     def initialize(self, state: SimulationState):
@@ -105,11 +105,11 @@ class Environment:
         # We also create a registry for each sensor
         for sensor_name in self.sensors.keys():
             self.signal_registry_sensors.register(sensor_name, "")
-                
+
     def connect_ports(self):
         for connection in self.connections:
-            self.ports[connection[0]].connect_port(connection[1])
-            self.ports[connection[1]].connect_port(connection[0])
+            self.ports[connection[0]].connect_port(self.ports[connection[1]])
+            self.ports[connection[1]].connect_port(self.ports[connection[0]])
 
     def read_timeseries_data(self):
         for _, component in self.components.items():

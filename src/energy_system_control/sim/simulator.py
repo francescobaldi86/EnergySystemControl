@@ -9,7 +9,7 @@ from energy_system_control.core.base_classes import InitContext, EnvironmentalDa
 from .config import SimulationConfig
 from .state import SimulationState
 from energy_system_control.helpers import C2K, calculate_solar_angles
-from energy_system_control.core.ports import FluidPort, HeatPort
+from energy_system_control.core.port import FluidPort, HeatPort
 from energy_system_control.sim.simulation_data import SimulationData  # wherever it lives
 from energy_system_control.sim.results import SimulationResults
 from energy_system_control.controllers.RL.RLcontrollers import RLController
@@ -56,6 +56,8 @@ class Simulator:
         ctx = InitContext(environment=self.env, state=self.state)
         for _, component in self.env.components.items():
             component.initialize(ctx)
+        for _, port in self.env.ports.items():
+            port.initialize(ctx)
         for _, sensor in self.env.sensors.items():
             sensor.initialize(ctx)
         for _, predictor in self.env.predictors.items():
@@ -98,8 +100,7 @@ class Simulator:
         self._simulate_all_components()
 
         # 8. Check balances on all nodes:
-        for port in env.ports.values():
-            port.check_balance(self.state.time, self.state.time_id)
+        self._check_connection_balance()  # This will raise an error if the balance is not correc
 
         if self.components_to_simulate:
             raise RuntimeError(
@@ -167,10 +168,17 @@ class Simulator:
         for _, port in component.ports.items():
             for layer, value in port.flow.items():
                 if port.connected_port:
-                    if self.env.ports[port.connected_port].flow[layer] is no
                     self.env.ports[port.connected_port].flow[layer] = -value
                     if isinstance(self.env.ports[port.connected_port], FluidPort | HeatPort):
                         self.env.ports[port.connected_port].T = self.env.ports[port.name].T
+
+    def _check_connection_balance(self):
+        # Checks that all connections have the same flow on both sides
+        env = self.env
+        for connection in env.connections:
+            if env.ports[connection[0]].flows != env.ports[connection[1]].flows:
+                raise ValueError(f"Connection {connection} has unbalanced flows: {env.ports[connection[0]].flows} != {env.ports[connection[1]].flows}")
+
 
     def _save_simulation_data(self, sim_data):
         # Ports

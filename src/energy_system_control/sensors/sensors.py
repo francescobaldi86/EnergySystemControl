@@ -1,5 +1,26 @@
-from energy_system_control.core.base_classes import Sensor
 from energy_system_control.components.storage import HotWaterStorage, MultiNodeHotWaterTank
+from energy_system_control.core.base_classes import InitContext
+from abc import ABC, abstractmethod
+
+class Sensor(ABC):
+    name: str
+    current_measurement: float
+    def __init__(self, name):
+        self.name = name
+
+    def get_measurement(self):
+        return self.current_measurement
+    
+    @abstractmethod
+    def measure(self, environment, state):
+        pass
+    
+    def initialize(self, ctx: InitContext):
+        self.measure(ctx.environment, ctx.state)
+
+    def reset(self):
+        self.current_measurement = None
+
 
 class FlowTemperatureSensor(Sensor):
     port_name: str

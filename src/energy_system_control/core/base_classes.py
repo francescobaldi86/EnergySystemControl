@@ -1,6 +1,5 @@
 from typing import Dict, List, Callable, Any, Optional
 from dataclasses import dataclass
-from abc import ABC, abstractmethod
 
 @dataclass(frozen=True, slots=True)
 class InitContext:
@@ -9,47 +8,6 @@ class InitContext:
     rng: Optional[Any] = None
     logger: Optional[Any] = None
     config: Optional[dict] = None
-
-
-class Node:
-    name: str
-    time: float
-    time_id: int
-    layers: List[str]
-    flow: Dict[str, float]
-    def __init__(self, name, layers):
-        self.name = name
-        self.time = 0.0
-        self.time_id = 0
-        self.layers = layers
-        self.reset_flow_data()  # Sets each 
-
-    def balance(self, flows):
-        raise NotImplementedError
-    
-    def reset_flow_data(self):
-        self.flow = {name: 0.0 for name in self.layers}
-
-
-class Sensor(ABC):
-    name: str
-    current_measurement: float
-    def __init__(self, name):
-        self.name = name
-
-    def get_measurement(self):
-        return self.current_measurement
-    
-    @abstractmethod
-    def measure(self, environment, state):
-        pass
-    
-    def initialize(self, ctx: InitContext):
-        self.measure(ctx.environment, ctx.state)
-
-    def reset(self):
-        self.current_measurement = None
-
 
 
 @dataclass

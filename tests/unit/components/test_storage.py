@@ -5,7 +5,7 @@ from energy_system_control.core.base_classes import InitContext
 
 def test_battery_creation():
     from energy_system_control import LithiumIonBattery
-    from energy_system_control.core.ports import ElectricPort
+    from energy_system_control.core.port import ElectricPort
     test_battery = LithiumIonBattery('test_battery', 5.0)
     # Check correct creation and default values
     assert test_battery.max_capacity == 5.0 * 3600
