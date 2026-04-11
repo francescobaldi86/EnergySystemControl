@@ -72,33 +72,34 @@ class Simulator:
 
     def _step(self, sim_data: SimulationData) -> None:
         env = self.env  # just a shorthand
-        # Update environmental data (this is time-varying state)
+        
+        # 1. Update environmental data (this is time-varying state)
         self.state.environmental_data = self._update_environmental_data()
 
+        # 2. Measure all sensors at time t
         for _, sensor in env.sensors.items():
             sensor.measure(environment=env, state=self.state)  # We measure all sensors at the beginning of the step to make sure that controllers have access to the most recent measurements when they calculate their actions. This also ensures that we have sensor data for the initial state of the simulation.
-        # Reset port flows and sensor measurements
+        
+        # 3. Reset port data
         for _, port in env.ports.items():
             port.reset_flow_data()
+            port.reset_state_value()
         
-
-        # Initialize control actions and list of components to simulate
+        # 4. Initialize control actions
         self.state.control_actions = {}
-        self.components_to_simulate = list(env.components.keys())      
 
-        # Assign fluid port values
+        # 5. Assign fluid port values
         self._propagate_port_values()
 
-        # Simulate components in your chosen order
-        self._simulate_components_of_type("Demand")
-        self._simulate_components_of_type("Producer")
-
-        # Controllers + controlled components
+        # 6. Controllers compute actions
         self._get_controller_actions()
 
-        self._simulate_components_of_type("Utility")
-        self._simulate_components_of_type("StorageUnit")
-        self._simulate_components_of_type("BalancingUtility")
+        # 7. Simulate components in your chosen order
+        self._simulate_all_components()
+
+        # 8. Check balances on all nodes:
+        for port in env.ports.values():
+            port.check_balance(self.state.time, self.state.time_id)
 
         if self.components_to_simulate:
             raise RuntimeError(
@@ -133,26 +134,32 @@ class Simulator:
             port_name, T = component.set_inherited_heat_port_values(self.state)
             if port_name and env.ports[port_name].connected_port is not None:
                 env.ports[env.ports[port_name].connected_port].T = T
+    
+    def _simulate_all_components(self):
+        self.components_to_simulate = list(self.env.components.keys())
+        list_of_priorities = ("Demand", "Producer", "HeatSource", "Other", "BalancingUtility", "StorageUnit")
+        for priority in list_of_priorities:
+            self._simulate_components_of_type(priority)
 
     def _simulate_components_of_type(self, type: str):
         components = self.env.components_classified[type]
         for component in components:
             if component.name in self.components_to_simulate:
-                self._take_component_step(component, None)           
+                action = self.state.control_actions.get(component.name)
+                self._take_component_step(component, action)           
                 self.components_to_simulate.remove(component.name)
 
     def _get_controller_actions(self):
+        actions = {}
         for controller_name in self.env.ordered_controllers:
-            self.env.controllers[controller_name].get_obs(self.env, self.state)
-            actions = self.env.controllers[controller_name].get_action(self.state)
-            # After a controller has been simulated, its controlled component is immediately simulted as well
-            for component_name, action in actions.items():
-                if component_name in self.components_to_simulate:
-                    self._take_component_step(self.env.components[component_name], action)
-                    self.components_to_simulate.remove(component_name)
-                else:
-                    raise(KeyError, f'Component {component_name} has been simulated before its related control action was calculated at time {self.time}, time ID {self.time_id}. Check what happens!')
-            # self.control_actions.update(actions)
+            controller = self.env.controllers[controller_name]
+            controller.get_obs(self.env, self.state)
+            ctrl_actions = controller.get_action(self.state)
+            for comp, action in ctrl_actions.items():
+                if comp in actions:
+                    raise ValueError(f"Component {comp} controlled by multiple controllers.")
+                actions[comp] = action
+        self.state.control_actions = actions
 
     def _take_component_step(self, component, action):
         component.step(self.state, action)
@@ -160,6 +167,7 @@ class Simulator:
         for _, port in component.ports.items():
             for layer, value in port.flow.items():
                 if port.connected_port:
+                    if self.env.ports[port.connected_port].flow[layer] is no
                     self.env.ports[port.connected_port].flow[layer] = -value
                     if isinstance(self.env.ports[port.connected_port], FluidPort | HeatPort):
                         self.env.ports[port.connected_port].T = self.env.ports[port.name].T

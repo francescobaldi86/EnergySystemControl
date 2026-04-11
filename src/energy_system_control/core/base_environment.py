@@ -35,8 +35,6 @@ class Environment:
         self.nodes: Dict[str, Node] = {}
         self.ports: Dict[str, Port] = {}
         self.connections: List[tuple] = connections
-        self.balance_nodes = {}
-        self.dynamic_nodes = {}
         self.components: Dict[str, Component] = {component.name: component for component in components}
         self.components_classified = defaultdict(list)
         self.controllers: Dict[str, Controller] = {controller.name: controller for controller in controllers}
@@ -53,7 +51,6 @@ class Environment:
         self.classify_components()
         self.create_ports()
         self.connect_ports()
-        # self.load_components_and_sensors_to_controllers()
         
 
     def initialize(self, state: SimulationState):
@@ -78,10 +75,12 @@ class Environment:
                 self.components_classified['Producer'].append(component)
             elif isinstance(component, BalancingUtility):
                 self.components_classified['BalancingUtility'].append(component)
-            elif isinstance(component, Utility):
-                self.components_classified['Utility'].append(component)
             elif isinstance(component, StorageUnit):
                 self.components_classified['StorageUnit'].append(component)
+            elif isinstance(component, HeatSource):
+                self.components_classified['HeatSource'].append(component)
+            else:
+                self.components_classified['Other'].append(component)
     
     def create_ports(self, components: Dict[str, Component] | None = None):
         # Classify components based on their type
@@ -117,40 +116,3 @@ class Environment:
             if callable(getattr(component, 'resample_data', None)):
                 component.resample_data(self.time_step, self.time_end)
 
-    def get_cumulated_electricity(self, port_name: str, unit: str = 'kWh', sign: str = 'net'):
-        match unit:
-            case 'kWh':
-                scaling_factor = 1 / 3600
-            case 'MWh':
-                scaling_factor = 1 / 3_600_000
-        match sign:
-            case 'net':
-                return self.get_cumulated_result(port_name, 'electricity', scaling_factor)
-            case 'only positive' | 'only negative':
-                return self.get_cumulated_result_with_sign(port_name, 'electricity', scaling_factor, sign)
-    
-    def get_DHW_temperature_comfort_index(self, port_name, boundary):
-        # Measures the temperature-based comfort given a condition
-        condition = abs(self.simulation_data.ports[port_name].flow['mass']) > 1e-6
-        return sum(self.simulation_data.ports[port_name].T[condition] >= boundary) / len(self.simulation_data.ports[port_name].T[condition])
-
-    def get_cumulated_result(self, port_name: str, layer_name: str, scaling_factor: float = 1):
-        # Calculates the cumulated value of a given flow over the duration of the simulation
-        return self.simulation_data.ports[:, self.signal_registry_ports.col_index(port_name, layer_name)].sum() * self.time_step * scaling_factor
-
-    def get_cumulated_result_with_sign(self, port_name: str, layer_name: str, scaling_factor: float = 1, sign: str = 'only_positive'):
-        # Calculates the cumulated value of a given flow over the duration of the simulation
-        # Keeps only positive or negative values
-        match sign:
-            case "only positive":
-                return self.simulation_data.ports[self.simulation_data.ports[:, self.signal_registry_ports.col_index(port_name, layer_name)] >=0, self.signal_registry_ports.col_index(port_name, layer_name)].sum() * self.time_step * scaling_factor
-            case "only negative":
-                return -self.simulation_data.ports[self.simulation_data.ports[:, self.signal_registry_ports.col_index(port_name, layer_name)] <=0, self.signal_registry_ports.col_index(port_name, layer_name)].sum() * self.time_step * scaling_factor
-    
-    def get_boundary_index(self, sensor_name: str, boundary: float, condition: str):
-        # Calculates the fraction of time over the simulation a certain value was above or below a certain boundary
-        match condition:
-            case "gt" | ">" | ">=":
-                return sum(self.simulation_data.sensors[:, self.signal_registry_sensors.col_index(sensor_name, "")] >= boundary) / len(self.simulation_data.sensors[:, self.signal_registry_sensors.col_index(sensor_name, "")])
-            case "lt" | "<" | "<=":
-                return sum(self.simulation_data.sensors[:, self.signal_registry_sensors.col_index(sensor_name, "")] <= boundary) / len(self.simulation_data.sensors[:, self.signal_registry_sensors.col_index(sensor_name, "")])

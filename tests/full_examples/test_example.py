@@ -76,10 +76,12 @@ def test_3():
     ]
     controllers = [
         esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10),
-        esc.InverterController('inverter_controller', 'inverter', None)
+        esc.InverterController('inverter_controller', 'inverter', 'pv_power_sensor', 'electricity_demand_sensor')
     ]
     sensors = [
         esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
+        esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port'),
+        esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_output_port')
     ]
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
@@ -124,12 +126,14 @@ def test_4():
     ]
     controllers = [
         esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10),
-        esc.InverterController('inverter_controller', 'inverter', 'battery')
+        esc.InverterController('inverter_controller', 'inverter', 'pv_power_sensor', 'electricity_demand_sensor', 'battery', 'battery_SOC_sensor')
     ]
     sensors = [
         esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
         esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
-        esc.SOCSensor('battery_SOC_sensor', 'battery')
+        esc.SOCSensor('battery_SOC_sensor', 'battery'),
+        esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port'),
+        esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_output_port')
     ]
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),

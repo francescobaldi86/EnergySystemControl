@@ -44,6 +44,22 @@ class SimulationResults:
                 return self._get_cumulated_result_with_sign(port_name, "electricity", sign, scaling_factor)
 
 
+    def get_DHW_temperature_comfort_index(self, port_name, boundary):
+        # Measures the temperature-based comfort given a condition
+        condition = abs(self.data.ports[port_name].flow['mass']) > 1e-6
+        return sum(self.data.ports[port_name].T[condition] >= boundary) / len(self.simulation_data.ports[port_name].T[condition])
+
+
+    
+    def get_boundary_index(self, sensor_name: str, boundary: float, condition: str):
+        # Calculates the fraction of time over the simulation a certain value was above or below a certain boundary
+        match condition:
+            case "gt" | ">" | ">=":
+                return sum(self.data.sensors[:, self.signal_registry_sensors.col_index(sensor_name, "")] >= boundary) / len(self.data.sensors[:, self.signal_registry_sensors.col_index(sensor_name, "")])
+            case "lt" | "<" | "<=":
+                return sum(self.data.sensors[:, self.signal_registry_sensors.col_index(sensor_name, "")] <= boundary) / len(self.data.sensors[:, self.signal_registry_sensors.col_index(sensor_name, "")])
+
+
     def plot_sensors(self, sensors: str | List[str] | None= None, labels: str | List[str] | None = None, ylabel: str | None= None, filename: str | None = None, reference_value: float | None = None):
         # Plots the measured values of a sensor over time
         fig, ax = plt.subplots(figsize=(10, 6))
