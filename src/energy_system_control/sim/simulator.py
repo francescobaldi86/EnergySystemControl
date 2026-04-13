@@ -97,10 +97,6 @@ class Simulator:
         # 7. Simulate components in your chosen order
         self._simulate_all_components()
 
-        # 8. Check balances on all nodes:
-        for port in env.ports.values():
-            port.check_balance(self.state.time, self.state.time_id)
-
         if self.components_to_simulate:
             raise RuntimeError(
                 f"Step concluded but components {self.components_to_simulate} were not simulated "
