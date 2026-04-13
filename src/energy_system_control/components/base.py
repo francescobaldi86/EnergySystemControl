@@ -69,7 +69,7 @@ class TimeSeriesData:
                     self.data *= 1.0e-3
             elif self.var_type == 'energy':
                 self.data = resample_with_interpolation(self.raw, target_freq, sim_end_h*3600.0, var_type="extensive")
-                self.data *= (1.0 / time_step_h) * self.energy_to_power_converter[self.var_unit]
+                self.data = self.data * (1.0 / time_step_h) * self.energy_to_power_converter[self.var_unit]
             elif self.var_type in {'volume', 'mass'}:
                 self.data = resample_with_interpolation(self.raw, target_freq, sim_end_h*3600.0, var_type="extensive")
             else:
