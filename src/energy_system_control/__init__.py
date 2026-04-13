@@ -2,12 +2,13 @@
 from .core.base_environment import Environment
 from .sim.config import SimulationConfig
 from .sim.simulator import Simulator
-from .components.producers import ConstantPowerProducer
-from .components.pv_panels import PVpanel, PVpanelFromPVGISData, PVpanelFromData, PVpanelFromPVGIS
-from .components.storage import HotWaterStorage, LithiumIonBattery, MultiNodeHotWaterTank, Battery
-from .components.demands import IEAHotWaterDemand, CustomProfileHotWaterDemand, ConstantPowerDemand, ElectricityDemand, HotWaterDemand
+from .components.explicit_components.producers import ConstantPowerProducer
+from .components.explicit_components.pv_panels import PVpanel, PVpanelFromPVGISData, PVpanelFromData, PVpanelFromPVGIS
+from .components.storage_units.thermal_storage import HotWaterStorage, MultiNodeHotWaterTank
+from .components.storage_units.electric_storage import LithiumIonBattery, Battery
+from .components.explicit_components.demands import IEAHotWaterDemand, CustomProfileHotWaterDemand, ConstantPowerDemand, ElectricityDemand, HotWaterDemand
 from .components.utilities import ResistanceHeater, BalancingUtility, GenericUtility, ColdWaterGrid, Inverter, ElectricityGrid
-from .components.heat_pumps import HeatPumpConstantEfficiency, HeatPumpLorentzEfficiency, HeatPump
+from .components.controlled_components.heat_pumps import HeatPumpConstantEfficiency, HeatPumpLorentzEfficiency, HeatPump
 from .controllers.base import HeaterControllerWithBandwidth, InverterController
 from .controllers.rule_based import HeatPumpRuleBasedController
 from .sensors.sensors import Sensor, PowerSensor, ElectricPowerSensor, FlowTemperatureSensor, SOCSensor, TankTemperatureSensor, HotWaterDemandSensor

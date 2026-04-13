@@ -1,5 +1,5 @@
 from energy_system_control.sim.state import SimulationState
-from energy_system_control.components.base import Component
+from energy_system_control.components.base import ExplicitComponent
 from energy_system_control.helpers import *
 from energy_system_control.constants import WATER
 from energy_system_control.uncertainty import UncertaintyModel, NoUncertainty
@@ -10,7 +10,7 @@ from importlib.resources import files
 from typing import List, Dict, Literal
 
 
-class Demand(Component):
+class Demand(ExplicitComponent):
     port_name: str
     demand_type: str
     uncertainty_model: float

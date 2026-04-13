@@ -1,5 +1,5 @@
 from energy_system_control.components.base import TimeSeriesData
-from energy_system_control.components.producers import Producer
+from energy_system_control.components.explicit_components.producers import Producer
 from energy_system_control.helpers import *
 from energy_system_control.sim.state import SimulationState
 import os, requests

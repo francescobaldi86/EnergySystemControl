@@ -7,10 +7,10 @@ from energy_system_control.core.node import *
 from energy_system_control.sim.simulation_data import *
 from energy_system_control.core.registry import *
 from energy_system_control.components.base import *
-from energy_system_control.components.demands import *
-from energy_system_control.components.producers import *
-from energy_system_control.components.utilities import *
-from energy_system_control.components.storage import *
+from energy_system_control.components.explicit_components.demands import *
+from energy_system_control.components.explicit_components.producers import *
+from energy_system_control.components.storage_units.thermal_storage import *
+from energy_system_control.components.storage_units.electric_storage import *
 from energy_system_control.sensors.sensors import *
 from energy_system_control.controllers.base import *
 from energy_system_control.controllers.predictors import *
@@ -49,6 +49,7 @@ class Environment:
         self.signal_registry_controllers = SignalRegistry()
         self.signal_registry_sensors = SignalRegistry()
         # Ordering data
+        self.load_internal_components()
         self.classify_components()
         self.create_ports()
         
@@ -69,18 +70,20 @@ class Environment:
         # Classify components based on their type
         dict_to_iterate = components if components else self.components
         for _, component in dict_to_iterate.items():
-            if isinstance(component, Demand):
-                self.components_classified['Demand'].append(component)
-            elif isinstance(component, Producer):
-                self.components_classified['Producer'].append(component)
-            elif isinstance(component, BalancingUtility):
-                self.components_classified['BalancingUtility'].append(component)
+            if isinstance(component, ExplicitComponent):
+                self.components_classified['ExplicitComponent'].append(component)
+            elif isinstance(component, ControlledComponent):
+                self.components_classified['ControlledComponent'].append(component)
+            elif isinstance(component, ImplicitComponent):
+                self.components_classified['ImplicitComponent'].append(component)
             elif isinstance(component, StorageUnit):
                 self.components_classified['StorageUnit'].append(component)
-            elif isinstance(component, HeatSource):
-                self.components_classified['HeatSource'].append(component)
+            elif isinstance(component, Bus):
+                self.components_classified['Bus'].append(component)
+            elif isinstance(component, Grid):
+                self.components_classified['Grid'].append(component)
             else:
-                self.components_classified['Other'].append(component)
+                raise ValueError(f'Component {component} is not classified')
     
     def create_ports(self, components: Dict[str, Component] | None = None):
         # Classify components based on their type

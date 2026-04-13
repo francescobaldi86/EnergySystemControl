@@ -1,4 +1,4 @@
-from energy_system_control.components.storage import HotWaterStorage, MultiNodeHotWaterTank
+from energy_system_control.components.storage_units.thermal_storage import HotWaterStorage, MultiNodeHotWaterTank
 from energy_system_control.core.base_classes import InitContext
 from abc import ABC, abstractmethod
 

@@ -138,9 +138,11 @@ class Simulator:
     
     def _simulate_all_components(self):
         self.components_to_simulate = list(self.env.components.keys())
-        list_of_priorities = ("Demand", "Producer", "HeatSource", "Other", "BalancingUtility", "StorageUnit")
-        for priority in list_of_priorities:
-            self._simulate_components_of_type(priority)
+        self._simulate_components_of_type("ExplicitComponent")
+        self._simulate_components_of_type("ControlledComponent")
+        self._solve_algebric_networks()
+        self._simulate_components_of_type("Grid")
+        self._simulate_components_of_type("StorageUnit")
 
     def _simulate_components_of_type(self, type: str):
         components = self.env.components_classified[type]
@@ -149,6 +151,21 @@ class Simulator:
                 action = self.state.control_actions.get(component.name)
                 self._take_component_step(component, action)           
                 self.components_to_simulate.remove(component.name)
+
+    def _solve_algebric_networks(self):
+        components_to_simulate = self.env.components_classified['Bus'] + self.env.components_classified['ImplicitComponent']
+        while len(components_to_simulate) > 0:
+            updated_ports = 0
+            for component in components_to_simulate:
+                solved, updated_ports = component.balance(self.state)
+                if solved is True:
+                    components_to_simulate.remove(component)
+                for port in updated_ports:
+                    port.propagate_port_values()
+                    updated_ports += 1
+            if updated_ports == 0:
+                raise RuntimeError(f"Could not solve the network at time {self.state.time}. Remaining components: {[comp.name for comp in components_to_simulate]}")
+                
 
     def _get_controller_actions(self):
         actions = {}

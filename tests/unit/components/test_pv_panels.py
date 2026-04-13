@@ -2,7 +2,7 @@
 import numpy as np
 import pandas as pd
 from math import isclose
-from energy_system_control.components.pv_panels import PVpanel, PVpanelFromData, PVpanelFromPVGISData, PVpanelFromPVGIS
+from energy_system_control.components.explicit_components.pv_panels import PVpanel, PVpanelFromData, PVpanelFromPVGISData, PVpanelFromPVGIS
 from energy_system_control.components.base import TimeSeriesData
 from energy_system_control.sim.state import SimulationState
 from datetime import datetime, timedelta
