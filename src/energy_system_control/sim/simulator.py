@@ -99,8 +99,11 @@ class Simulator:
         # 7. Simulate components in your chosen order
         self._simulate_all_components()
 
-        # 8. Check balances on all nodes:
-        self._check_connection_balance()  # This will raise an error if the balance is not correc
+        if self.components_to_simulate:
+            raise RuntimeError(
+                f"Step concluded but components {self.components_to_simulate} were not simulated "
+                f"at time {self.state.time}, time ID {self.state.time_id}."
+            )
 
         # Save results for this step
         sim_data = self._save_simulation_data(sim_data)
