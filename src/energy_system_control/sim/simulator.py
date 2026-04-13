@@ -181,18 +181,9 @@ class Simulator:
         for _, port in component.ports.items():
             for layer, value in port.flows.items():
                 if port.connected_port:
-                    port.connected_port.flows[layer] = -value
-                    if isinstance(port.connected_port, FluidPort | HeatPort):
-                        port.connected_port.T = self.env.ports[port.name].T
-
-    def _check_connection_balance(self):
-        # Checks that all connections have the same flow on both sides
-        env = self.env
-        for connection in env.connections:
-            for layer, value in env.ports[connection[0]].flows.items():
-                if abs(value + env.ports[connection[1]].flows[layer]) > 1e-5:
-                    raise ValueError(f"Connection {connection} has unbalanced flows: {env.ports[connection[0]].flows[layer]:.2f} != {env.ports[connection[1]].flows[layer]:.2f}")
-
+                    self.env.ports[port.connected_port].flow[layer] = -value
+                    if isinstance(self.env.ports[port.connected_port], FluidPort | HeatPort):
+                        self.env.ports[port.connected_port].T = self.env.ports[port.name].T
 
     def _save_simulation_data(self, sim_data):
         # Ports
