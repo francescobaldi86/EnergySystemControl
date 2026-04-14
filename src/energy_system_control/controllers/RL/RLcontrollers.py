@@ -1,6 +1,7 @@
 from typing import Any, Dict, Literal, List, Tuple
 from energy_system_control.controllers.base import Controller  # or move Controller to core/model.py
-from energy_system_control.core.base_classes import InitContext, Sensor
+from energy_system_control.core.base_classes import InitContext
+from energy_system_control.sensors.sensors import Sensor
 from energy_system_control.controllers.predictors import Predictor
 from energy_system_control.controllers.RL.reward_functions import RewardFunction
 from energy_system_control.controllers.RL.agents import RLAgent

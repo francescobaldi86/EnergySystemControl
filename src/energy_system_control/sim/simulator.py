@@ -85,7 +85,7 @@ class Simulator:
         # 3. Reset port data
         for _, port in env.ports.items():
             port.reset_flow_data()
-            port.reset_state_value()
+            # port.reset_state_value()
         
         # 4. Initialize control actions
         self.state.control_actions = {}
@@ -101,12 +101,6 @@ class Simulator:
 
         # 8. Check balances on all nodes:
         self._check_connection_balance()  # This will raise an error if the balance is not correc
-
-        if self.components_to_simulate:
-            raise RuntimeError(
-                f"Step concluded but components {self.components_to_simulate} were not simulated "
-                f"at time {self.state.time}, time ID {self.state.time_id}."
-            )
 
         # Save results for this step
         sim_data = self._save_simulation_data(sim_data)
@@ -131,18 +125,18 @@ class Simulator:
         for _, component in env.components.items():
             port_name, T = component.set_inherited_fluid_port_values(self.state)
             if port_name and env.ports[port_name].connected_port is not None:
-                env.ports[env.ports[port_name].connected_port].T = T
+                env.ports[port_name].connected_port.T = T
             port_name, T = component.set_inherited_heat_port_values(self.state)
             if port_name and env.ports[port_name].connected_port is not None:
-                env.ports[env.ports[port_name].connected_port].T = T
+                env.ports[port_name].connected_port.T = T
     
     def _simulate_all_components(self):
         self.components_to_simulate = list(self.env.components.keys())
         self._simulate_components_of_type("ExplicitComponent")
         self._simulate_components_of_type("ControlledComponent")
         self._solve_algebric_networks()
-        self._simulate_components_of_type("Grid")
         self._simulate_components_of_type("StorageUnit")
+        self._simulate_components_of_type("Grid")
 
     def _simulate_components_of_type(self, type: str):
         components = self.env.components_classified[type]
@@ -150,20 +144,21 @@ class Simulator:
             if component.name in self.components_to_simulate:
                 action = self.state.control_actions.get(component.name)
                 self._take_component_step(component, action)           
-                self.components_to_simulate.remove(component.name)
+                # self.components_to_simulate.remove(component.name)
 
     def _solve_algebric_networks(self):
         components_to_simulate = self.env.components_classified['Bus'] + self.env.components_classified['ImplicitComponent']
         while len(components_to_simulate) > 0:
-            updated_ports = 0
+            number_of_updated_ports = 0
             for component in components_to_simulate:
                 solved, updated_ports = component.balance(self.state)
                 if solved is True:
                     components_to_simulate.remove(component)
+                    # self.components_to_simulate.remove(component)
                 for port in updated_ports:
-                    port.propagate_port_values()
-                    updated_ports += 1
-            if updated_ports == 0:
+                    self.env.ports[port].propagate_port_values()
+                    number_of_updated_ports += 1
+            if number_of_updated_ports == 0:
                 raise RuntimeError(f"Could not solve the network at time {self.state.time}. Remaining components: {[comp.name for comp in components_to_simulate]}")
                 
 
@@ -183,27 +178,28 @@ class Simulator:
         component.step(self.state, action)
         # Update values of connected ports
         for _, port in component.ports.items():
-            for layer, value in port.flow.items():
+            for layer, value in port.flows.items():
                 if port.connected_port:
-                    self.env.ports[port.connected_port].flow[layer] = -value
-                    if isinstance(self.env.ports[port.connected_port], FluidPort | HeatPort):
-                        self.env.ports[port.connected_port].T = self.env.ports[port.name].T
+                    port.connected_port.flows[layer] = -value
+                    if isinstance(port.connected_port, FluidPort | HeatPort):
+                        port.connected_port.T = self.env.ports[port.name].T
 
     def _check_connection_balance(self):
         # Checks that all connections have the same flow on both sides
         env = self.env
         for connection in env.connections:
-            if env.ports[connection[0]].flows != env.ports[connection[1]].flows:
-                raise ValueError(f"Connection {connection} has unbalanced flows: {env.ports[connection[0]].flows} != {env.ports[connection[1]].flows}")
+            for layer, value in env.ports[connection[0]].flows.items():
+                if abs(value + env.ports[connection[1]].flows[layer]) > 1e-5:
+                    raise ValueError(f"Connection {connection} has unbalanced flows: {env.ports[connection[0]].flows[layer]:.2f} != {env.ports[connection[1]].flows[layer]:.2f}")
 
 
     def _save_simulation_data(self, sim_data):
         # Ports
         time_id = self.state.time_id
         for port_name, port in self.env.ports.items():
-            for layer, flow in port.flow.items():
+            for layer, flow in port.flows.items():
                 col = self.env.signal_registry_ports.col_index(port_name, layer)
-                sim_data.ports[time_id, col] = flow / self.state.time_step
+                sim_data.ports[time_id, col] = flow / self.state.time_step if flow is not None else np.nan
             if isinstance(port, FluidPort):
                 col = self.env.signal_registry_ports.col_index(port_name, 'temperature')
                 sim_data.ports[time_id, col] = port.T

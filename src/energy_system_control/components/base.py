@@ -158,6 +158,11 @@ class StorageUnit(Component):
 
 class CompositeComponent(Component):
     """A composite component is a component that contains other components."""
+    def get_internal_components(self):
+        return {}
+    
+    def get_internal_connections(self):
+        return[]
 
 
 @dataclass()

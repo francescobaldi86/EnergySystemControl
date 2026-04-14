@@ -52,7 +52,10 @@ class PowerSensor(Sensor):
         self.flow_type = flow_type
 
     def measure(self, environment, state):
-        self.current_measurement = environment.ports[self.port_name].flow[self.flow_type] / state.time_step
+        if state.time_id == 0:
+            self.current_measurement = 0.0  # The first power measurement is always 0
+        else:
+            self.current_measurement = environment.ports[self.port_name].flows[self.flow_type] / state.time_step
         return self.current_measurement
 
 
@@ -124,8 +127,8 @@ class HotWaterDemandSensor(Sensor):
         from energy_system_control.constants import WATER
         
         # Get the mass flow and heat flow from the port
-        mass_flow_kg = environment.ports[self.port_name].flow['mass']  # in kg
-        heat_flow_kJ = environment.ports[self.port_name].flow['heat']  # in kJ
+        mass_flow_kg = environment.ports[self.port_name].flows['mass']  # in kg
+        heat_flow_kJ = environment.ports[self.port_name].flows['heat']  # in kJ
         
         # Get temperatures
         T_hot_water = environment.ports[self.port_name].T  # Hot water temperature in K

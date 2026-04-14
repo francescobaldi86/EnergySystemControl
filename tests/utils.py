@@ -1,6 +1,6 @@
 import numpy as np
 from dataclasses import dataclass
-from energy_system_control.core.base_classes import Sensor
+from energy_system_control.sensors.sensors import Sensor
 
 def calculate_prediction_metrics(actual, predicted):
     """

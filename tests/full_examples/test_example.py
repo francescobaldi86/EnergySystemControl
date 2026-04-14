@@ -9,7 +9,7 @@ def test_1():
         esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2),
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
-        esc.BalancingUtility(name = 'electric_grid', utility_type = 'electricity'),
+        esc.ElectricityGrid(name = 'electric_grid'),
         esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid')
     ]
     controllers = [
@@ -39,7 +39,7 @@ def test_2():
         esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2),
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
-        esc.BalancingUtility(name = 'electric_grid', utility_type = 'electricity'),
+        esc.ElectricityGrid(name = 'electric_grid'),
         esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid')
     ]
     controllers = [
@@ -69,24 +69,24 @@ def test_3():
         esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2),
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
-        esc.BalancingUtility(name = 'electric_grid', utility_type = 'electricity'),
+        esc.ElectricityGrid(name = 'electric_grid'),
         esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
         esc.PVpanelFromPVGIS(name = 'pv_panels', installed_power=3.0, latitude=44.511, longitude=11.335, tilt=30, azimuth=90),
         esc.Inverter(name = 'inverter')
     ]
     controllers = [
         esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10),
-        esc.InverterController('inverter_controller', 'inverter', 'pv_power_sensor', 'electricity_demand_sensor')
+        # esc.InverterController('inverter_controller', 'inverter', 'pv_power_sensor', 'electricity_demand_sensor')
     ]
     sensors = [
         esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
         esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port'),
-        esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_output_port')
+        esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_AC_output_port')
     ]
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
         ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-        ('heat_pump_electricity_input_port', 'inverter_output_port'),
+        ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
         ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
         ('inverter_PV_input_port', 'pv_panels_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port')

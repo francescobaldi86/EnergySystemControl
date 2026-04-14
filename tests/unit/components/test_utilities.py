@@ -1,7 +1,7 @@
 # tests/unit/components/test_utilities.py
 import pytest
 import numpy as np
-from energy_system_control.components.utilities import Inverter, ResistanceHeater, HeatSource, GenericUtility, ElectricityGrid, ColdWaterGrid
+from energy_system_control.components.composite_components.inverters import Inverter
 from energy_system_control.sim.state import SimulationState
 
 

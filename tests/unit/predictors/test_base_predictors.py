@@ -4,7 +4,7 @@ import pytest
 from dataclasses import dataclass
 from energy_system_control.controllers.predictors import OfflineForecastPredictor, DailyProfilePredictor
 from energy_system_control.sim.state import SimulationState
-from energy_system_control.core.base_classes import InitContext, Sensor
+from energy_system_control.sensors.sensors import Sensor
 import os
 
 

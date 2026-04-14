@@ -73,11 +73,14 @@ class HotWaterStorage(StorageUnit):
     
     def step(self, state: SimulationState, action):
         # Heat port inputs are provided from external sources. Hot water output also. Hence, only the cold water input is updated
-        self.ports[self.cold_water_input_port_name].flow['mass'] = -self.ports[self.hot_water_output_port_name].flow['mass']
-        self.ports[self.cold_water_input_port_name].flow['heat'] = abs(self.ports[self.cold_water_input_port_name].flow['mass']) * WATER.cp * self.ports[self.cold_water_input_port_name].T
+        self.ports[self.cold_water_input_port_name].flows['mass'] = -self.ports[self.hot_water_output_port_name].flows['mass']
+        self.ports[self.cold_water_input_port_name].flows['heat'] = abs(self.ports[self.cold_water_input_port_name].flows['mass']) * WATER.cp * self.ports[self.cold_water_input_port_name].T
         heat_losses = self.calculate_losses(state)
-        heat_input = self.ports[self.main_heat_input_port_name].flow['heat'] + self.ports[self.aux_heat_input_port_name].flow['heat'] 
-        heat_fluid = self.ports[self.hot_water_output_port_name].flow['heat'] + self.ports[self.cold_water_input_port_name].flow['heat']
+        if self.aux_heat_input_port_name in self.ports.keys():
+            heat_input = self.ports[self.main_heat_input_port_name].flows['heat'] + self.ports[self.aux_heat_input_port_name].flows['heat']
+        else:
+            heat_input = self.ports[self.main_heat_input_port_name].flows['heat']
+        heat_fluid = self.ports[self.hot_water_output_port_name].flows['heat'] + self.ports[self.cold_water_input_port_name].flows['heat']
         self.temperature += (heat_input + heat_fluid + heat_losses) / (WATER.cp * self.volume * WATER.rho)
         self.SOC = self.temperature_to_SOC(state)
 
@@ -105,7 +108,8 @@ class HotWaterStorage(StorageUnit):
         self.temperature = self.T_0
         self.SOC_0 = self.temperature_to_SOC(state)
         self.ports[self.main_heat_input_port_name].T = self.T_0
-        self.ports[self.aux_heat_input_port_name].T = self.T_0
+        if self.aux_heat_input_port_name in self.ports.keys():
+            self.ports[self.aux_heat_input_port_name].T = self.T_0
         super().initialize(state)
 
 
@@ -237,8 +241,8 @@ class MultiNodeHotWaterTank(HotWaterStorage):
     
     def step(self, state: SimulationState, action):
         output = {}
-        change_in_water_mass_flow = not math.isclose(self.water_mass_flow_t, -self.ports[self.hot_water_output_port_name].flow['mass'] / state.time_step, abs_tol = 1e-4)
-        self.water_mass_flow_t = -self.ports[self.hot_water_output_port_name].flow['mass'] / state.time_step
+        change_in_water_mass_flow = not math.isclose(self.water_mass_flow_t, -self.ports[self.hot_water_output_port_name].flows['mass'] / state.time_step, abs_tol = 1e-4)
+        self.water_mass_flow_t = -self.ports[self.hot_water_output_port_name].flows['mass'] / state.time_step
         self.update_A_matrix(change_in_water_mass_flow)
         C = self.create_C_vector(state)
         D = -(self.matrix_B * self.T_layer + C)
@@ -246,8 +250,8 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         self.temperature = self.T_layer.mean()
         self.SOC = self.temperature_to_SOC(state)
         # In the end, the only value that needs updating is the input from the cold water grid
-        self.ports[self.cold_water_input_port_name].flow['mass'] = self.water_mass_flow_t * state.time_step
-        self.ports[self.cold_water_input_port_name].flow['heat'] = self.water_mass_flow_t * WATER.cp * self.ports[self.cold_water_input_port_name].T
+        self.ports[self.cold_water_input_port_name].flows['mass'] = self.water_mass_flow_t * state.time_step
+        self.ports[self.cold_water_input_port_name].flows['heat'] = self.water_mass_flow_t * WATER.cp * self.ports[self.cold_water_input_port_name].T
         return output
 
     def update_A_matrix(self, change_in_water_mass_flow):
@@ -275,8 +279,8 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         
     def create_C_vector(self, state: SimulationState):
         ambient_temperature = self.T_amb if self.located_inside else state.environmental_data.temperature_ambient
-        total_heat_from_main_heating_source = self.ports[self.main_heat_input_port_name].flow['heat'] / state.time_step
-        total_heat_from_aux_heating_source = self.ports[self.aux_heat_input_port_name].flow['heat'] / state.time_step
+        total_heat_from_main_heating_source = self.ports[self.main_heat_input_port_name].flows['heat'] / state.time_step
+        total_heat_from_aux_heating_source = self.ports[self.aux_heat_input_port_name].flows['heat'] / state.time_step
         # Calculating useful vectors
         vector_cold_water_input = self.cold_water_input_location * self.water_mass_flow_t * WATER.cp * self.ports[self.cold_water_input_port_name].T
         vector_heat_from_main_heating_source = total_heat_from_main_heating_source / len([self.main_heating_source_location]) * self.main_heating_source_location

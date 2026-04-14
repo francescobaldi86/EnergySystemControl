@@ -52,7 +52,18 @@ class Environment:
         self.load_internal_components()
         self.classify_components()
         self.create_ports()
-        
+        self.connect_ports()
+        self.check_unconnected_ports()
+
+    def load_internal_components(self):
+        new_components = {}
+        new_connections = []
+        for component in self.components.values():
+            if isinstance(component, CompositeComponent):
+                new_components.update(component.get_internal_components())
+                new_connections += component.get_internal_connections()
+        self.components.update(new_components)
+        self.connections += new_connections
 
     def initialize(self, state: SimulationState):
         if self.environmental_data_provider:
@@ -82,6 +93,8 @@ class Environment:
                 self.components_classified['Bus'].append(component)
             elif isinstance(component, Grid):
                 self.components_classified['Grid'].append(component)
+            elif isinstance(component, CompositeComponent):
+                self.components_classified['CompositeComponent'].append(component)
             else:
                 raise ValueError(f'Component {component} is not classified')
     
@@ -90,6 +103,19 @@ class Environment:
         dict_to_iterate = components if components else self.components
         for _, component in dict_to_iterate.items():
             self.ports.update(component.create_ports())
+
+    def check_unconnected_ports(self):
+        # This function checks whether there are ports that are not connected to any other port, and in case removes them
+        for component in self.components.values():
+            ports_to_remove = []
+            for port_name, port in component.ports.items():
+                if port.connected_port is None:
+                    ports_to_remove.append(port_name)
+            for port_to_remove in ports_to_remove:
+                self.ports.pop(port_to_remove)
+                component.ports.pop(port_to_remove)
+                print(f'WARNING: Port {port_to_remove} was removed since it was not connected to any other port. The simulation will attempt to continue')
+
     
     def create_data_registry(self):
         # We create a registry for each pair port-layer

@@ -7,7 +7,9 @@ from .components.explicit_components.pv_panels import PVpanel, PVpanelFromPVGISD
 from .components.storage_units.thermal_storage import HotWaterStorage, MultiNodeHotWaterTank
 from .components.storage_units.electric_storage import LithiumIonBattery, Battery
 from .components.explicit_components.demands import IEAHotWaterDemand, CustomProfileHotWaterDemand, ConstantPowerDemand, ElectricityDemand, HotWaterDemand
-from .components.utilities import ResistanceHeater, BalancingUtility, GenericUtility, ColdWaterGrid, Inverter, ElectricityGrid
+from .components.grids.grids import ElectricityGrid, ColdWaterGrid
+from .components.composite_components.inverters import Inverter
+from .components.controlled_components.other_heat_sources import ResistanceHeater
 from .components.controlled_components.heat_pumps import HeatPumpConstantEfficiency, HeatPumpLorentzEfficiency, HeatPump
 from .controllers.base import HeaterControllerWithBandwidth, InverterController
 from .controllers.rule_based import HeatPumpRuleBasedController

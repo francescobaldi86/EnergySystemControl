@@ -65,7 +65,7 @@ class ElectricityDemand(TimeSeriesDemand):
         
     def step(self, state: SimulationState, action = None):
         temp_kW = self.ts.data[state.time_id]  # This calculates the required power in kW (note: time step is in [s], read value in [kWh], hence the 3600)
-        self.ports[self.port_name].flow['electricity'] = temp_kW * state.time_step  # Value in kJ
+        self.ports[self.port_name].flows['electricity'] = temp_kW * state.time_step  # Value in kJ
 
 
 class HotWaterDemand(TimeSeriesDemand):
@@ -85,8 +85,8 @@ class HotWaterDemand(TimeSeriesDemand):
             mdot = mdot_dhw_th
         Qdot = mdot * WATER.cp * T_hot_water  # Enthalpy flow output, in kW
         # Remember: flows are POSITIVE if they ENTER the component
-        self.ports[self.port_name].flow['heat'] = Qdot * state.time_step
-        self.ports[self.port_name].flow['mass'] = mdot * state.time_step
+        self.ports[self.port_name].flows['heat'] = Qdot * state.time_step
+        self.ports[self.port_name].flows['mass'] = mdot * state.time_step
 
 
 class IEAHotWaterDemand(HotWaterDemand):

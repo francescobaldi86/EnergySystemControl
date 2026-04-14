@@ -1,4 +1,4 @@
-from energy_system_control.components.utilities import HeatSource
+from energy_system_control.components.controlled_components.base import HeatSource
 from energy_system_control.helpers import OnOffComponentError, C2K
 from energy_system_control.sim.state import SimulationState
 from abc import abstractmethod

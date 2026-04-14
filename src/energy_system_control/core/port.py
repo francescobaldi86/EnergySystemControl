@@ -31,7 +31,10 @@ class Port():
     def propagate_port_values(self):
         for layer in self.layers:
             if self.flows[layer] is not None and self.connected_port.flows[layer] is None:
-                self.connected_port.flows[layer] = self.flows[layer]
+                self.connected_port.flows[layer] = -self.flows[layer]
+            if isinstance(self, FluidPort) or isinstance(self, HeatPort):
+                if self.T is not None and self.connected_port.T is None:
+                    self.connected_port.T = self.T
 
     @staticmethod
     def create_port_of_type(port_name: str, port_type: str):
@@ -51,7 +54,7 @@ class HeatPort(Port):
     def reset_state_value(self):
         self.T = None 
 
-    def initialize(self):
+    def initialize(self, ctx: InitContext):
         self.T = None
 
 
@@ -64,7 +67,7 @@ class FluidPort(Port):
     def reset_state_value(self):
         self.T = None
 
-    def initialize(self):
+    def initialize(self, ctx: InitContext):
         self.T = None
 
     def propagate_port_values(self):

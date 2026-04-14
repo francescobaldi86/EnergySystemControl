@@ -2,7 +2,8 @@ from typing import List, Dict, Any
 from abc import ABC, abstractmethod
 from energy_system_control.helpers import *
 from energy_system_control.components.base import Component
-from energy_system_control.core.base_classes import Sensor, InitContext
+from energy_system_control.core.base_classes import InitContext
+from energy_system_control.sensors.sensors import Sensor
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.controllers.predictors import Predictor
 
@@ -86,6 +87,7 @@ class HeaterControllerWithBandwidth(Controller):
         self.previous_action = action
         return action
 
+
 class InverterController(Controller):
     inverter_name: str
     battery_name: str
@@ -96,8 +98,8 @@ class InverterController(Controller):
                  inverter_name: str, 
                  PV_power_sensor_name: str, 
                  AC_output_sensor_name: str, 
-                 battery_name: str | None = None, 
-                 battery_SOC_sensor_name: str | None = None, 
+                 battery_name: str, 
+                 battery_SOC_sensor_name: str, 
                  SOC_min: float = 0.3, 
                  SOC_max: float = 0.9, 
                  baseline_battery_efficiency: float = 0.9):
@@ -106,17 +108,10 @@ class InverterController(Controller):
         self.SOC_min = SOC_min
         self.SOC_max = SOC_max
         self.baseline_battery_efficiency = baseline_battery_efficiency
-        if self.battery_name:
-            if battery_SOC_sensor_name is None:
-                raise ValueError("If a battery is provided, a battery SOC sensor name must be provided")
-            super().__init__(name, controlled_components=[inverter_name, battery_name], sensors = {'PV power': PV_power_sensor_name, 'output power': AC_output_sensor_name, 'battery SOC': battery_SOC_sensor_name})
-        else:
-            super().__init__(name, controlled_components=[inverter_name], sensors = {'PV power': PV_power_sensor_name, 'output power': AC_output_sensor_name})
+        super().__init__(name, controlled_components=[inverter_name, battery_name], sensors = {'PV power': PV_power_sensor_name, 'output power': AC_output_sensor_name, 'battery SOC': battery_SOC_sensor_name})
     
     def initialize(self, ctx):
-        super().initialize(ctx)
-    
-        
+        super().initialize(ctx)      
 
     def get_action(self, state: SimulationState):
         # In the case of the inverter, the action is the energy required to balance the controlled sensor node (normally the exchange with the grid)

@@ -14,7 +14,7 @@ class PVpanel(Producer):
         self.ts = ts
 
     def step(self, state: SimulationState, action = None):
-        self.ports[self.port_name].flow['electricity'] = -self.ts.data[state.time_id] * state.time_step
+        self.ports[self.port_name].flows['electricity'] = -self.ts.data[state.time_id] * state.time_step
 
     def resample_data(self, time_step_h: float, sim_end_h: float):
         self.ts.resample(time_step_h=time_step_h, sim_end_h=sim_end_h)
@@ -166,5 +166,5 @@ class PVpanelFromIrradiation(PVpanel):
         power_output = poa_irradiation / 1000 * self.installed_power
 
         # Update PV port
-        self.ports[self.port_name].flow['electricity'] = -power_output * state.time_step
+        self.ports[self.port_name].flows['electricity'] = -power_output * state.time_step
 

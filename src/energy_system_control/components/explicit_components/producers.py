@@ -1,14 +1,8 @@
-from energy_system_control.components.base import Component, TimeSeriesData
-from energy_system_control.helpers import *
+from energy_system_control.components.base import ExplicitComponent
 from energy_system_control.sim.state import SimulationState
-from typing import List, Dict
-import os, yaml, csv, json, requests
-import numpy as np
-import pandas as pd
-from typing import Literal
 
 
-class Producer(Component):
+class Producer(ExplicitComponent):
     port_name: str
     production_type: str
     def __init__(self, name: str, production_type: str):
@@ -23,6 +17,6 @@ class ConstantPowerProducer(Producer):
         self.power = power  # 
     
     def step(self, state: SimulationState, action = None): 
-        self.ports[self.port_name].flow[self.production_type] = -self.power * state.time_step  # Since it is a producer, the net energy flow is always negative
+        self.ports[self.port_name].flows[self.production_type] = -self.power * state.time_step  # Since it is a producer, the net energy flow is always negative
 
 
