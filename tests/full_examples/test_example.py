@@ -130,7 +130,8 @@ def test_4():
         esc.SOCSensor('battery_SOC_sensor', 'battery'),
         esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port'),
         esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_AC_output_port'),
-        esc.ElectricPowerSensor('grid_exchange_sensor', 'electric_grid_electricity_port')
+        esc.ElectricPowerSensor('grid_exchange_sensor', 'electric_grid_electricity_port'),
+        esc.ElectricPowerSensor('battery_power_sensor', 'battery_electricity_port'),
     ]
     connections = [
         ('inverter_PV_input_port', 'pv_panels_electricity_port'),

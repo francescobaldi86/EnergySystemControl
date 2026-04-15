@@ -89,3 +89,6 @@ class SimulationResults:
         
     def plot_temperature_sensors(self, sensors: str | List[str] | None= None, labels: str | List[str] | None = None, ylabel: str | None= None, filename: str | None = None, comfort_temperature: float | None = None):
         return self.plot_sensors(sensors, labels, 'Temperature [K]', filename, comfort_temperature)
+
+    def plot_electric_power_sensors(self, sensors: str | List[str] | None= None, labels: str | List[str] | None = None, ylabel: str | None= None, filename: str | None = None):
+        return self.plot_sensors(sensors, labels, 'Power [kW]', filename)

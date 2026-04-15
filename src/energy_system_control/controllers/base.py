@@ -129,9 +129,9 @@ class ChargeController(Controller):
         SOC = self.obs['battery SOC']
         # Deriving action. NOTE: Positive action means charging the battery
         if DC_balance >= 0:  # If the node balance is positive, the inverter will try to charge the battery
-            energy_to_charge = min(self.controlled_components[self.battery_name].charger.get_maximum_charge_power() * state.time_step, DC_balance * state.time_step)  # First we limit based on battery power limits
+            energy_to_charge = min(self.controlled_components[self.battery_name].charger.get_maximum_charge_power(), DC_balance) * state.time_step  # First we limit based on battery power limits
             action = min(self.controlled_components[self.battery_name].battery_pack.max_capacity * (self.SOC_max - SOC) * self.baseline_battery_efficiency, energy_to_charge) / state.time_step # Then we limit based on the available energy
         else:
-            energy_to_discharge = min(self.controlled_components[self.battery_name].charger.get_maximum_discharge_power() * state.time_step, -DC_balance)  # First we limit based on battery power limits
+            energy_to_discharge = min(self.controlled_components[self.battery_name].charger.get_maximum_discharge_power(), -DC_balance) * state.time_step # First we limit based on battery power limits
             action = -min(self.controlled_components[self.battery_name].battery_pack.max_capacity * (SOC - self.SOC_min) * self.baseline_battery_efficiency, energy_to_discharge) / state.time_step # Then we limit based on the available energy
         return {self.battery_charger_name: action}
