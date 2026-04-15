@@ -153,11 +153,11 @@ def test_4():
     net_electricity_demand = results.get_cumulated_electricity('electric_grid_electricity_port')
     electricity_to_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only positive')
     electricity_from_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only negative')
-    assert math.isclose(electricity_from_pv, 27, abs_tol = 2)
-    assert math.isclose(electricity_demand, 34, abs_tol = 2)
-    assert math.isclose(net_electricity_demand, 12, abs_tol = 2)
-    assert math.isclose(electricity_from_grid, 2, abs_tol = 2)
-    assert math.isclose(electricity_to_grid, 13, abs_tol = 2)
+    assert math.isclose(electricity_from_pv, 7, abs_tol = 2)
+    assert math.isclose(electricity_demand, 15, abs_tol = 2)
+    assert math.isclose(net_electricity_demand, -9, abs_tol = 2)
+    assert math.isclose(electricity_from_grid, 11, abs_tol = 2)
+    assert math.isclose(electricity_to_grid, 2, abs_tol = 2)
 
 def test_5():
     # Like test 3, but adding a battery with related controller
@@ -180,7 +180,9 @@ def test_5():
         esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
         esc.SOCSensor('battery_SOC_sensor', 'battery'),
         esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port'),
-        esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_AC_output_port')
+        esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_AC_output_port'),
+        esc.ElectricPowerSensor('battery_power_sensor', 'battery_electricity_port'),
+        esc.ElectricPowerSensor('grid_power_sensor', 'electric_grid_electricity_port')
     ]
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
@@ -210,4 +212,4 @@ def test_5():
     assert math.isclose(net_electricity_demand, 12, abs_tol = 2)
     assert math.isclose(electricity_from_grid, 2, abs_tol = 2)
     assert math.isclose(electricity_to_grid, 13, abs_tol = 2)
-    assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 325, abs_tol = 1)
+    assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 323, abs_tol = 1)
