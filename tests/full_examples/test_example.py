@@ -5,6 +5,7 @@ __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
 def test_1():
+    # Represent substantially a minimal example of electric heating system
     components = [
         esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2),
@@ -112,13 +113,58 @@ def test_3():
     assert math.isclose(net_electricity_demand, 13, abs_tol = 2)
     assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 325, abs_tol = 1)
 
+
 def test_4():
+    # Represents a minimal test of an electric system with PV and a battery, that requires control
+    components = [
+        esc.ElectricityGrid(name = 'electric_grid'),
+        esc.PVpanelFromPVGIS(name = 'pv_panels', installed_power=0.8, latitude=44.500365, longitude=11.350096, tilt=90, azimuth=90),
+        esc.LithiumIonBattery(name = 'battery', capacity = 1.5, SOC_0 = 0.5),
+        esc.Inverter(name = 'inverter'),
+        esc.ElectricityDemand(name = 'demand', var_unit = 'kWh', path = os.path.join(__TEST__, 'DATA', 'yearly_data_electricity_demand_15min.csv'))
+    ]
+    controllers = [
+        esc.ChargeController('charge_controller', 'battery', 'pv_power_sensor', 'electricity_demand_sensor', 'battery_SOC_sensor')
+    ]
+    sensors = [
+        esc.SOCSensor('battery_SOC_sensor', 'battery'),
+        esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port'),
+        esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_AC_output_port'),
+        esc.ElectricPowerSensor('grid_exchange_sensor', 'electric_grid_electricity_port')
+    ]
+    connections = [
+        ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+        ('inverter_grid_input_port', 'electric_grid_electricity_port'),
+        ('inverter_ESS_port', 'battery_electricity_port'),
+        ('inverter_AC_output_port', 'demand_electricity_port')
+    ]
+    # Create environment
+    env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
+    # Create simulator object
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 1/60)
+    sim = esc.Simulator(env, sim_config)
+    # Run simulation
+    results = sim.run()
+    df_ports, df_controllers, df_sensors = results.to_dataframe()
+    # Verify results
+    electricity_demand = results.get_cumulated_electricity('demand_electricity_port')
+    electricity_from_pv = results.get_cumulated_electricity('inverter_PV_input_port')
+    net_electricity_demand = results.get_cumulated_electricity('electric_grid_electricity_port')
+    electricity_to_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only positive')
+    electricity_from_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only negative')
+    assert math.isclose(electricity_from_pv, 27, abs_tol = 2)
+    assert math.isclose(electricity_demand, 34, abs_tol = 2)
+    assert math.isclose(net_electricity_demand, 12, abs_tol = 2)
+    assert math.isclose(electricity_from_grid, 2, abs_tol = 2)
+    assert math.isclose(electricity_to_grid, 13, abs_tol = 2)
+
+def test_5():
     # Like test 3, but adding a battery with related controller
     components = [
         esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2),
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
-        esc.BalancingUtility(name = 'electric_grid', utility_type = 'electricity'),
+        esc.ElectricityGrid(name = 'electric_grid'),
         esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
         esc.PVpanelFromPVGIS(name = 'pv_panels', installed_power=3.0, latitude=44.511, longitude=11.335, tilt=30, azimuth=90),
         esc.LithiumIonBattery(name = 'battery', capacity = 2.0, SOC_0 = 0.5),
@@ -126,19 +172,19 @@ def test_4():
     ]
     controllers = [
         esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10),
-        esc.InverterController('inverter_controller', 'inverter', 'pv_power_sensor', 'electricity_demand_sensor', 'battery', 'battery_SOC_sensor')
+        esc.ChargeController('charge_controller', 'battery', 'pv_power_sensor', 'electricity_demand_sensor', 'battery_SOC_sensor')
     ]
     sensors = [
         esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
         esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
         esc.SOCSensor('battery_SOC_sensor', 'battery'),
         esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port'),
-        esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_output_port')
+        esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_AC_output_port')
     ]
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
         ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-        ('heat_pump_electricity_input_port', 'inverter_output_port'),
+        ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
         ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
         ('inverter_PV_input_port', 'pv_panels_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port'),
@@ -147,7 +193,7 @@ def test_4():
     # Create environment
     env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
     # Create simulator object
-    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 0.5)
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 1/60)
     sim = esc.Simulator(env, sim_config)
     # Run simulation
     results = sim.run()

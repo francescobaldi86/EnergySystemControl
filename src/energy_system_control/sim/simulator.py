@@ -160,7 +160,6 @@ class Simulator:
                     number_of_updated_ports += 1
             if number_of_updated_ports == 0:
                 raise RuntimeError(f"Could not solve the network at time {self.state.time}. Remaining components: {[comp.name for comp in components_to_simulate]}")
-                
 
     def _get_controller_actions(self):
         actions = {}
@@ -199,7 +198,10 @@ class Simulator:
         for port_name, port in self.env.ports.items():
             for layer, flow in port.flows.items():
                 col = self.env.signal_registry_ports.col_index(port_name, layer)
-                sim_data.ports[time_id, col] = flow / self.state.time_step if flow is not None else np.nan
+                try:
+                    sim_data.ports[time_id, col] = flow if flow is not None else np.nan
+                except ValueError as e:
+                    print(f"Error saving flow for port {port_name} and layer {layer}: {e}")
             if isinstance(port, FluidPort):
                 col = self.env.signal_registry_ports.col_index(port_name, 'temperature')
                 sim_data.ports[time_id, col] = port.T

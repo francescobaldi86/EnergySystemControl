@@ -88,27 +88,29 @@ class HeaterControllerWithBandwidth(Controller):
         return action
 
 
-class InverterController(Controller):
-    inverter_name: str
+class ChargeController(Controller):
     battery_name: str
+    battery_charger_name: str
     SOC_max: float
     SOC_min: float
     baseline_battery_efficiency: float
+    baseline_inverter_efficiency: float
     def __init__(self, name, 
-                 inverter_name: str, 
+                 battery_name: str, 
                  PV_power_sensor_name: str, 
                  AC_output_sensor_name: str, 
-                 battery_name: str, 
                  battery_SOC_sensor_name: str, 
                  SOC_min: float = 0.3, 
                  SOC_max: float = 0.9, 
-                 baseline_battery_efficiency: float = 0.9):
-        self.inverter_name = inverter_name
+                 baseline_battery_efficiency: float = 0.9,
+                 baseline_inverter_efficiency: float = 0.92):
         self.battery_name = battery_name
+        self.battery_charger_name = f'{battery_name}_charger'
         self.SOC_min = SOC_min
         self.SOC_max = SOC_max
         self.baseline_battery_efficiency = baseline_battery_efficiency
-        super().__init__(name, controlled_components=[inverter_name, battery_name], sensors = {'PV power': PV_power_sensor_name, 'output power': AC_output_sensor_name, 'battery SOC': battery_SOC_sensor_name})
+        self.baseline_inverter_efficiency = baseline_inverter_efficiency
+        super().__init__(name, controlled_components=[self.battery_name], sensors = {'PV power': PV_power_sensor_name, 'output power': AC_output_sensor_name, 'battery SOC': battery_SOC_sensor_name})
     
     def initialize(self, ctx):
         super().initialize(ctx)      
@@ -118,20 +120,18 @@ class InverterController(Controller):
         # This involves two checks:
         #   - Power check (the power should not be higher than what is allowed by the battery)
         #   - Energy check (we should not be asking from the battery more energy then what is stored inside)
-        PV_power_input = self.obs['PV power'] * state.time_step
-        AC_output = self.obs['output power'] * state.time_step
-        if PV_power_input > 1500:
+        PV_power_input = self.obs['PV power']
+        if PV_power_input > 0.2:
             pass
-        DC_output = AC_output / self.controlled_components[self.inverter_name].get_efficiency()
+        AC_output = self.obs['output power']
+        DC_output = AC_output / self.baseline_inverter_efficiency
         DC_balance = PV_power_input + DC_output
-        if self.battery_name:
-            SOC = self.obs['battery SOC']
-            if DC_balance >= 0:  # If the node balance is positive, the inverter will try to charge the battery
-                energy_to_charge = min(self.controlled_components[self.battery_name].get_maximum_charge_power() * state.time_step, DC_balance)  # First we limit based on battery power limits
-                action = -min(self.controlled_components[self.battery_name].max_capacity * (self.SOC_max - SOC) * self.baseline_battery_efficiency, energy_to_charge)  # Then we limit based on the available energy
-            else:
-                energy_to_discharge = min(self.controlled_components[self.battery_name].get_maximum_discharge_power() * state.time_step, -DC_balance)  # First we limit based on battery power limits
-                action = min(self.controlled_components[self.battery_name].max_capacity * (SOC - self.SOC_min) * self.baseline_battery_efficiency, energy_to_discharge)  # Then we limit based on the available energy
-            return {self.inverter_name: action, self.battery_name: None}
+        SOC = self.obs['battery SOC']
+        # Deriving action. NOTE: Positive action means charging the battery
+        if DC_balance >= 0:  # If the node balance is positive, the inverter will try to charge the battery
+            energy_to_charge = min(self.controlled_components[self.battery_name].charger.get_maximum_charge_power() * state.time_step, DC_balance * state.time_step)  # First we limit based on battery power limits
+            action = min(self.controlled_components[self.battery_name].battery_pack.max_capacity * (self.SOC_max - SOC) * self.baseline_battery_efficiency, energy_to_charge) / state.time_step # Then we limit based on the available energy
         else:
-            return {self.inverter_name: 0.0}
+            energy_to_discharge = min(self.controlled_components[self.battery_name].charger.get_maximum_discharge_power() * state.time_step, -DC_balance)  # First we limit based on battery power limits
+            action = -min(self.controlled_components[self.battery_name].battery_pack.max_capacity * (SOC - self.SOC_min) * self.baseline_battery_efficiency, energy_to_discharge) / state.time_step # Then we limit based on the available energy
+        return {self.battery_charger_name: action}

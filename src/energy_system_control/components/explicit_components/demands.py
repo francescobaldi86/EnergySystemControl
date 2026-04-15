@@ -41,7 +41,7 @@ class ConstantPowerDemand(Demand):
         self.power = power  # Since it is a demand, the power is always negative
     
     def step(self, state: SimulationState, action = None):
-        self.ports[self.port_name].flow[self.demand_type] = self._apply_uncertainty(self.power * state.time_step)
+        self.ports[self.port_name].flow[self.demand_type] = self._apply_uncertainty(self.power)
 
 
 class TimeSeriesDemand(Demand):
@@ -59,13 +59,17 @@ class TimeSeriesDemand(Demand):
     
 
 class ElectricityDemand(TimeSeriesDemand):
-    def __init__(self, name: str, **kwargs):
+    def __init__(self, name: str, path: str = None, **kwargs):
         self.demand_type = 'electricity'
-        super().__init__(name, self.demand_type, **kwargs)
+        super().__init__(name = name, demand_type = self.demand_type, var_type = 'energy', **kwargs)
+        self.ts = TimeSeriesData(
+            raw = pd.read_csv(path, index_col=0, sep = ";", decimal = '.', parse_dates = True),
+            var_type = 'energy',
+            var_unit = 'kWh')
         
     def step(self, state: SimulationState, action = None):
         temp_kW = self.ts.data[state.time_id]  # This calculates the required power in kW (note: time step is in [s], read value in [kWh], hence the 3600)
-        self.ports[self.port_name].flows['electricity'] = temp_kW * state.time_step  # Value in kJ
+        self.ports[self.port_name].flows['electricity'] = temp_kW  # Value in kJ
 
 
 class HotWaterDemand(TimeSeriesDemand):
@@ -85,8 +89,8 @@ class HotWaterDemand(TimeSeriesDemand):
             mdot = mdot_dhw_th
         Qdot = mdot * WATER.cp * T_hot_water  # Enthalpy flow output, in kW
         # Remember: flows are POSITIVE if they ENTER the component
-        self.ports[self.port_name].flows['heat'] = Qdot * state.time_step
-        self.ports[self.port_name].flows['mass'] = mdot * state.time_step
+        self.ports[self.port_name].flows['heat'] = Qdot
+        self.ports[self.port_name].flows['mass'] = mdot
 
 
 class IEAHotWaterDemand(HotWaterDemand):

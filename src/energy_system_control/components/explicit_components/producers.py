@@ -17,6 +17,6 @@ class ConstantPowerProducer(Producer):
         self.power = power  # 
     
     def step(self, state: SimulationState, action = None): 
-        self.ports[self.port_name].flows[self.production_type] = -self.power * state.time_step  # Since it is a producer, the net energy flow is always negative
+        self.ports[self.port_name].flows[self.production_type] = -self.power  # Since it is a producer, the net energy flow is always negative
 
 

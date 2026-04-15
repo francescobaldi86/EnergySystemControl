@@ -21,9 +21,9 @@ class GenericControlledComponent(ControlledComponent):
         # According to the port paradigm, flow is POSITIVE if ENTERING the component. 
         # On the other hand, required_power is positive when LEAVING the component. 
         if required_power > self.power_max: 
-            self.ports[self.port_name].flows[self.port_type] = -self.power_max * self.time_step
+            self.ports[self.port_name].flows[self.port_type] = -self.power_max
         elif required_power < self.power_min: 
-            self.ports[self.port_name].flows[self.port_type] = -self.power_min * self.time_step
+            self.ports[self.port_name].flows[self.port_type] = -self.power_min
         else:
             self.ports[self.port_name].flows[self.port_type] = -action
 
@@ -53,5 +53,5 @@ class HeatSource(ControlledComponent):
         return self.get_heat_output(state) / self.get_efficiency(state)
 
     def step(self, state: SimulationState, action):
-        self.ports[self.heat_output_port_name].flows['heat'] = -self.get_heat_output(state) * action * state.time_step
-        self.ports[self.power_input_port_name].flows[self.source_type] = self.get_power_input(state) * action * state.time_step
+        self.ports[self.heat_output_port_name].flows['heat'] = -self.get_heat_output(state) * action
+        self.ports[self.power_input_port_name].flows[self.source_type] = self.get_power_input(state) * action

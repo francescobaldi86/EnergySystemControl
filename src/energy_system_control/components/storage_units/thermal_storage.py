@@ -81,7 +81,7 @@ class HotWaterStorage(StorageUnit):
         else:
             heat_input = self.ports[self.main_heat_input_port_name].flows['heat']
         heat_fluid = self.ports[self.hot_water_output_port_name].flows['heat'] + self.ports[self.cold_water_input_port_name].flows['heat']
-        self.temperature += (heat_input + heat_fluid + heat_losses) / (WATER.cp * self.volume * WATER.rho)
+        self.temperature += (heat_input + heat_fluid + heat_losses) * state.time_step / (WATER.cp * self.volume * WATER.rho)
         self.SOC = self.temperature_to_SOC(state)
 
     def calculate_losses(self, state: SimulationState):
@@ -241,8 +241,8 @@ class MultiNodeHotWaterTank(HotWaterStorage):
     
     def step(self, state: SimulationState, action):
         output = {}
-        change_in_water_mass_flow = not math.isclose(self.water_mass_flow_t, -self.ports[self.hot_water_output_port_name].flows['mass'] / state.time_step, abs_tol = 1e-4)
-        self.water_mass_flow_t = -self.ports[self.hot_water_output_port_name].flows['mass'] / state.time_step
+        change_in_water_mass_flow = not math.isclose(self.water_mass_flow_t, -self.ports[self.hot_water_output_port_name].flows['mass'], abs_tol = 1e-4)
+        self.water_mass_flow_t = -self.ports[self.hot_water_output_port_name].flows['mass']
         self.update_A_matrix(change_in_water_mass_flow)
         C = self.create_C_vector(state)
         D = -(self.matrix_B * self.T_layer + C)
@@ -250,7 +250,7 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         self.temperature = self.T_layer.mean()
         self.SOC = self.temperature_to_SOC(state)
         # In the end, the only value that needs updating is the input from the cold water grid
-        self.ports[self.cold_water_input_port_name].flows['mass'] = self.water_mass_flow_t * state.time_step
+        self.ports[self.cold_water_input_port_name].flows['mass'] = self.water_mass_flow_t
         self.ports[self.cold_water_input_port_name].flows['heat'] = self.water_mass_flow_t * WATER.cp * self.ports[self.cold_water_input_port_name].T
         return output
 

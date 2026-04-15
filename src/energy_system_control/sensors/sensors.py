@@ -55,7 +55,7 @@ class PowerSensor(Sensor):
         if state.time_id == 0:
             self.current_measurement = 0.0  # The first power measurement is always 0
         else:
-            self.current_measurement = environment.ports[self.port_name].flows[self.flow_type] / state.time_step
+            self.current_measurement = environment.ports[self.port_name].flows[self.flow_type]
         return self.current_measurement
 
 

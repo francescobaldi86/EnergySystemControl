@@ -56,18 +56,19 @@ def resample_with_interpolation(df, target_freq, sim_end: float | None = None, v
     if target_step >= original_step: # --- Downsampling ---
         match var_type:
             case 'extensive':
-                return df.resample(target_freq).agg('sum').to_numpy()
+                output = df.resample(target_freq).agg('sum').to_numpy()
             case 'intensive':
-                return df.resample(target_freq).agg('mean').to_numpy()
+                output = df.resample(target_freq).agg('mean').to_numpy()
     else:  # --- Upsampling ---
         match var_type:
             case 'extensive':
                 output = df.resample(target_freq).ffill()
                 output = output * (target_step / original_step)
-                return output.to_numpy()
+                output = output.to_numpy()
             case 'intensive':
                 output = df.reindex(pd.date_range(df.index[0], df.index[-1], freq = target_freq, tz=df.index.tz))
-                return output.interpolate(method='time').to_numpy()
+                output = output.interpolate(method='time').to_numpy()
+    return output.ravel()
 
 
 def C2K(T):
