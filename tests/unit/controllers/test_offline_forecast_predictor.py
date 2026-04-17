@@ -435,23 +435,23 @@ class TestOfflineForecastPredictorIntegration:
             # Power conversion
             esc.Inverter(name='inverter'),
             # Grid connection for balance
-            esc.BalancingUtility(name='electric_grid', utility_type='electricity'),
+            esc.ElectricityGrid(name='electric_grid'),
         ]
         
         # Create controllers
         controllers = [
-            esc.InverterController(
-                name='inverter_controller',
-                inverter_name='inverter',
+            esc.ChargeController(
+                name='charge_controller',
                 battery_name='battery',
-                SOC_min=0.3,
-                SOC_max=0.9
+                battery_SOC_sensor_name = 'battery_SOC_sensor',
+                PV_power_sensor_name = 'PV_power_sensor'
             )
         ]
         
         # Create sensors to monitor the system
         sensors = [
             esc.SOCSensor('battery_SOC_sensor', 'battery'),
+            esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port')
         ]
         
         # Create connections

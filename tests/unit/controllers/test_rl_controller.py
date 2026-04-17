@@ -5,7 +5,7 @@ from energy_system_control.controllers.RL.RLcontrollers import QLearningControll
 from energy_system_control.controllers.RL.discretizers import StateDiscretizer, Discretizer, TemporalAggregator
 from energy_system_control.controllers.RL.agents import QLearningAgent
 from energy_system_control.controllers.predictors import PerfectTimeSeriesPredictor
-from energy_system_control.controllers.RL.reward_functions import CompositeReward, TemperatureTrackingReward, EnergyCostReward
+from energy_system_control.controllers.RL.reward_functions import CompositeReward, TemperatureTrackingReward, EnergyCostReward, TemperatureMinMaxReward
 from energy_system_control.helpers import C2K
 import math, os
 import pandas as pd
@@ -35,6 +35,7 @@ def test_sensors():
         esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
         esc.SOCSensor('battery_SOC_sensor', 'battery'),
         esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port'),
+        esc.ElectricPowerSensor('inverter_power_output_sensor', 'inverter_AC_output_port'),
         esc.ElectricPowerSensor('grid_power_sensor', 'inverter_grid_input_port'),
         esc.HotWaterDemandSensor('demand_heat_flow_sensor', 'demand_DHW')
     ]
@@ -714,20 +715,23 @@ class TestRLControllerFull:
                 name = 'test_RL_controller',
                 sensors = {'storage tank temperature': 'storage_tank_temperature_sensor'},
                 actions = {'heat_pump': [0, 1]},
-                reward_function = CompositeReward.make_reward({
-                    "type": "composite",
-                    "components": [
-                     {"type": "temperature_minmax", "kwargs": {"min_temp": 40, "max_temp": 60.0, "sensor_name": 'storage_tank_temperature_sensor'}}
-                     ]}),
+                exploration_policy = {'type': 'epsilon-greedy', 'config info': {}},
+                valid_states_function = {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): {'heat_pump': [1]}, (273+35, 273+70): {'heat_pump': [0, 1]}, (273+70, 273+100): {'heat_pump': [0]}}},
+                agent_config_info = {'epsilon': 0.02, 'decay': 0.01, 'alpha': 0.1},
+                reward_function = TemperatureMinMaxReward(
+                    sensor_name='storage_tank_temperature_sensor',
+                    min_temp=40,
+                    max_temp=60.0
+                ),
                 state_discretizer = StateDiscretizer({
                     'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},
                 })),
-            esc.InverterController('inverter_controller', 'inverter', 'battery')
+            esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'inverter_power_output_sensor', 'PV_power_sensor')
                     ]
         connections = [
             ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
             ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-            ('heat_pump_electricity_input_port', 'inverter_output_port'),
+            ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
             ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
             ('inverter_PV_input_port', 'pv_panels_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
@@ -762,17 +766,16 @@ class TestRLControllerFull:
                 valid_states_function = {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): {'heat_pump': [1]}, (273+35, 273+70): {'heat_pump': [0, 1]}, (273+70, 273+100): {'heat_pump': [0]}}},
                 agent_config_info = {'epsilon': 0.02, 'decay': 0.01, 'alpha': 0.1},
                 reward_function = {
-                    "type": "composite",
-                    "components": [
-                     {"type": "temperature_minmax", "kwargs": {"min_temp": 40, "max_temp": 60.0, "sensor_name": 'storage_tank_temperature_sensor'}}
-                     ]},
+                    "type": "temperature_minmax",
+                    "kwargs": {"min_temp": 40, "max_temp": 60.0, "sensor_name": 'storage_tank_temperature_sensor'}
+                },
                 state_discretizer = {'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},}),
-            esc.InverterController('inverter_controller', 'inverter', 'battery')
+            esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'inverter_power_output_sensor', 'PV_power_sensor')
                     ]
         connections = [
             ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
             ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-            ('heat_pump_electricity_input_port', 'inverter_output_port'),
+            ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
             ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
             ('inverter_PV_input_port', 'pv_panels_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
@@ -804,21 +807,17 @@ class TestRLControllerFull:
                 actions = {'heat_pump': [0, 1]},
                 exploration_policy = {'type': 'epsilon-greedy',
                                       'config info': {
-                                          'bias function': {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): [0.0, 1.0], (273+35, 273+40): [0.1, 0.9], (273+40, 273+60): [0.5, 0.5], (273+60, 273+70): [0.8, 0.2], (273+70, 273+100): [1.0, 0.0]}}}},
+                                          'bias function': {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): [(0, 0.0), (1, 1.0)], (273+35, 273+40): [(0, 0.1), (1, 0.9)], (273+40, 273+60): [(0, 0.5), (1, 0.5)], (273+60, 273+70): [(0, 0.8), (1, 0.2)], (273+70, 273+100): [(0, 1.0), (1, 0.0)]}}}},
                 valid_states_function = {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): {'heat_pump': [1]}, (273+35, 273+70): {'heat_pump': [0, 1]}, (273+70, 273+100): {'heat_pump': [0]}}},
                 agent_config_info = {'epsilon': 0.02, 'decay': 0.01, 'alpha': 0.1},
-                reward_function = {
-                    "type": "composite",
-                    "components": [
-                     {"type": "temperature_minmax", "kwargs": {"min_temp": 40, "max_temp": 60.0, "sensor_name": 'storage_tank_temperature_sensor'}}, 
-                     {"type": "energy_cost_component", "kwargs": {"default_power_kW": 0.5, 'energy_cost_per_kWh': 0.25, 'controller_name': 'test_RL_controller', 'controlled_component_name': 'heat_pump', 'weight': 0.2}}]},
+                reward_function = TemperatureMinMaxReward(sensor_name='storage_tank_temperature_sensor', min_temp=40, max_temp=60.0),
                 state_discretizer = {'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},}),
-            esc.InverterController('inverter_controller', 'inverter', 'battery')
+            esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'inverter_power_output_sensor', 'PV_power_sensor')
                     ]
         connections = [
             ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
             ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-            ('heat_pump_electricity_input_port', 'inverter_output_port'),
+            ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
             ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
             ('inverter_PV_input_port', 'pv_panels_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
@@ -846,12 +845,10 @@ class TestRLControllerFull:
                 sensors = {'storage tank temperature': 'storage_tank_temperature_sensor', 'PV power': 'PV_power_sensor', 'DHW demand': 'demand_heat_flow_sensor'},
                 predictors = {'PV power prediction': 'pv_power_predictor', 'DHW demand prediction': 'dhw_demand_predictor'},
                 actions = {'heat_pump': [0, 1]},
-                reward_function = CompositeReward.make_reward({
-                    "type": "composite",
-                    "components": [
-                     {"type": "temperature_minmax", "kwargs": {"min_temp": 40, "max_temp": 60.0, "sensor_name": 'storage_tank_temperature_sensor'}}, 
-                     {"type": "energy_cost", "kwargs": {"cost_components": [{"component": "electric_grid", "sensor": 'grid_power_sensor'}]}}
-                     ]}),
+                exploration_policy = {'type': 'epsilon-greedy', 'config info': {}},
+                valid_states_function = {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): {'heat_pump': [1]}, (273+35, 273+70): {'heat_pump': [0, 1]}, (273+70, 273+100): {'heat_pump': [0]}}},
+                agent_config_info = {'epsilon': 0.02, 'decay': 0.01, 'alpha': 0.1},
+                reward_function = TemperatureMinMaxReward(sensor_name='storage_tank_temperature_sensor', min_temp=40, max_temp=60.0),
                 state_discretizer = StateDiscretizer({
                     'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},
                     'PV power': {"min": 0, "max": 3, "bins": 5},
@@ -859,12 +856,12 @@ class TestRLControllerFull:
                     'PV power prediction': {"min": 0, "max": 3, "bins": 5, "temporal": {"n_blocks": 4, "agg": "mean"}},
                     'DHW demand prediction': {"min": 0, "max": 10, "bins": 5, "temporal": {"n_blocks": 4, "agg": "mean"}}
                 })),
-            esc.InverterController('inverter_controller', 'inverter', 'battery')
+            esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'inverter_power_output_sensor', 'PV_power_sensor')
                     ]
         connections = [
             ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
             ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-            ('heat_pump_electricity_input_port', 'inverter_output_port'),
+            ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
             ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
             ('inverter_PV_input_port', 'pv_panels_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),

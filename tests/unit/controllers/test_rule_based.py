@@ -11,7 +11,7 @@ def test_base_controller():
         esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2),
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
-        esc.BalancingUtility(name = 'electric_grid', utility_type = 'electricity'),
+        esc.ElectricityGrid(name = 'electric_grid'),
         esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
         esc.PVpanelFromPVGIS(name = 'pv_panels', installed_power=2.0, latitude=44.511, longitude=11.335, tilt=30, azimuth=90),
         esc.LithiumIonBattery(name = 'battery', capacity = 2.0, SOC_0 = 0.5),
@@ -19,18 +19,19 @@ def test_base_controller():
     ]
     controllers = [
         esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10),
-        esc.InverterController('inverter_controller', 'inverter', 'battery')
+        esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'inverter_AC_power_sensor', 'PV_power_sensor')
     ]
     sensors = [
         esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
         esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
-        esc.SOCSensor('battery_SOC_sensor', 'battery'),
-        esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port')
+        esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port'),
+        esc.ElectricPowerSensor('inverter_AC_power_sensor', 'inverter_AC_output_port'),
+        esc.SOCSensor('battery_SOC_sensor', 'battery')
     ]
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
         ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-        ('heat_pump_electricity_input_port', 'inverter_output_port'),
+        ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
         ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
         ('inverter_PV_input_port', 'pv_panels_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port'),
@@ -48,7 +49,7 @@ def test_base_controller():
     # Preparing the "optimal control" test run
     controllers = [
         esc.HeatPumpRuleBasedController('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 'PV_power_sensor', 40, 10, 0.600),
-        esc.InverterController('inverter_controller', 'inverter', 'battery')
+        esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'inverter_AC_power_sensor', 'PV_power_sensor')
     ]
     env_opti = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
     sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 0.25)

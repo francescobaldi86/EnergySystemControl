@@ -80,7 +80,7 @@ class SimulationResults:
         # If filename is provided, save it there (for now, no folder)
         if filename:
             fig.savefig(filename)
-        return fig
+        return fig, ax
 
     def _plot_sensor(self, ax, sensor_name: str, label: str | None = None):
         # Plots the measured values of a sensor over time
@@ -89,7 +89,47 @@ class SimulationResults:
         ax.plot(self.time_vector/3600, self.data.sensors[:,col], label=label)
         
     def plot_temperature_sensors(self, sensors: str | List[str] | None= None, labels: str | List[str] | None = None, ylabel: str | None= None, filename: str | None = None, comfort_temperature: float | None = None):
-        return self.plot_sensors(sensors, labels, 'Temperature [K]', filename, comfort_temperature)
+        fig, ax = self.plot_sensors(sensors, labels, 'Temperature [K]', filename, comfort_temperature)
+        return fig, ax
 
-    def plot_electric_power_sensors(self, sensors: str | List[str] | None= None, labels: str | List[str] | None = None, ylabel: str | None= None, filename: str | None = None):
-        return self.plot_sensors(sensors, labels, 'Power [kW]', filename)
+    def plot_electric_power_sensors(
+        self,
+        power_sensors: str | List[str],
+        SOC_sensor: str | None = None,
+        labels: str | List[str] | None = None,
+        filename: str | None = None
+    ):
+        fig, ax = self.plot_sensors(power_sensors, labels, 'Power [kW]', None)
+
+        # Secondary axis for SOC
+        if SOC_sensor is not None:
+            ax2 = ax.twinx()
+
+            col = self.signal_registry_sensors.col_index(SOC_sensor, "")
+            soc_values = self.data.sensors[:, col]
+
+            ax2.plot(
+                self.time_vector / 3600,
+                soc_values,
+                color='black',
+                linestyle='--',
+                label=SOC_sensor if labels is None else f"{SOC_sensor}"
+            )
+
+            ax2.set_ylabel('State of Charge [-]')
+            ax2.set_ylim(0, 1)  # assuming SOC is normalized
+
+            # Combine legends from both axes
+            lines_1, labels_1 = ax.get_legend_handles_labels()
+            lines_2, labels_2 = ax2.get_legend_handles_labels()
+            ax.legend(lines_1 + lines_2, labels_1 + labels_2)
+
+        ax.set_xlabel('Time [h]')
+        ax.grid()
+
+        if filename:
+            fig.savefig(filename)
+
+        return fig, ax
+
+    

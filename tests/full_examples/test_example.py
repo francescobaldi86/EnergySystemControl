@@ -124,7 +124,7 @@ def test_4():
         esc.ElectricityDemand(name = 'demand', var_unit = 'kWh', path = os.path.join(__TEST__, 'DATA', 'yearly_data_electricity_demand_15min.csv'))
     ]
     controllers = [
-        esc.ChargeController('charge_controller', 'battery', 'pv_power_sensor', 'electricity_demand_sensor', 'battery_SOC_sensor')
+        esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'electricity_demand_sensor', 'pv_power_sensor')
     ]
     sensors = [
         esc.SOCSensor('battery_SOC_sensor', 'battery'),
@@ -173,7 +173,7 @@ def test_5():
     ]
     controllers = [
         esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 40, 10),
-        esc.ChargeController('charge_controller', 'battery', 'pv_power_sensor', 'electricity_demand_sensor', 'battery_SOC_sensor')
+        esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'electricity_demand_sensor', 'pv_power_sensor')
     ]
     sensors = [
         esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
@@ -209,7 +209,7 @@ def test_5():
     electricity_from_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only negative')
     assert math.isclose(electricity_from_pv, 27, abs_tol = 2)
     assert math.isclose(heat_pump_energy_demand, 13, abs_tol = 2)
-    assert math.isclose(net_electricity_demand, 12, abs_tol = 2)
-    assert math.isclose(electricity_from_grid, 2, abs_tol = 2)
-    assert math.isclose(electricity_to_grid, 13, abs_tol = 2)
+    assert math.isclose(net_electricity_demand, 11, abs_tol = 2)
+    assert math.isclose(electricity_from_grid, 1, abs_tol = 2)
+    assert math.isclose(electricity_to_grid, 12, abs_tol = 2)
     assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 323, abs_tol = 1)
