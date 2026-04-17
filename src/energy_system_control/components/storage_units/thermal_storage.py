@@ -65,6 +65,8 @@ class HotWaterStorage(StorageUnit):
         self.hot_water_output_port_name = f'{name}_hot_water_output_port'
         self.main_heat_input_port_name = f'{name}_main_heat_input_port'
         self.aux_heat_input_port_name = f'{name}_aux_heat_input_port'
+        self.heat_input_port_names = [self.main_heat_input_port_name, self.aux_heat_input_port_name]
+        self.fluid_port_names = [self.cold_water_input_port_name, self.hot_water_output_port_name]
         
         super().__init__(name, {self.cold_water_input_port_name: 'fluid',
                                       self.hot_water_output_port_name: 'fluid',
@@ -76,10 +78,10 @@ class HotWaterStorage(StorageUnit):
         self.ports[self.cold_water_input_port_name].flows['mass'] = -self.ports[self.hot_water_output_port_name].flows['mass']
         self.ports[self.cold_water_input_port_name].flows['heat'] = abs(self.ports[self.cold_water_input_port_name].flows['mass']) * WATER.cp * self.ports[self.cold_water_input_port_name].T
         heat_losses = self.calculate_losses(state)
-        if self.aux_heat_input_port_name in self.ports.keys():
-            heat_input = self.ports[self.main_heat_input_port_name].flows['heat'] + self.ports[self.aux_heat_input_port_name].flows['heat']
-        else:
-            heat_input = self.ports[self.main_heat_input_port_name].flows['heat']
+        heat_input = 0.0
+        for input_port in self.heat_input_port_names:
+            if input_port in self.ports.keys():
+                heat_input += self.ports[input_port].flows['heat']
         heat_fluid = self.ports[self.hot_water_output_port_name].flows['heat'] + self.ports[self.cold_water_input_port_name].flows['heat']
         self.temperature += (heat_input + heat_fluid + heat_losses) * state.time_step / (WATER.cp * self.volume * WATER.rho)
         self.SOC = self.temperature_to_SOC(state)
@@ -90,12 +92,18 @@ class HotWaterStorage(StorageUnit):
         return losses
     
     def set_inherited_fluid_port_values(self, state: SimulationState):
-        self.ports[self.hot_water_output_port_name].T = self.temperature
-        return self.hot_water_output_port_name, self.temperature
+        # Allows for the temperature of the fluid leaving the tank to be set by the storage unit
+        if self.hot_water_output_port_name in self.ports.keys():
+            self.ports[self.hot_water_output_port_name].T = self.temperature
+        return {self.hot_water_output_port_name: self.temperature}
     
     def set_inherited_heat_port_values(self, state: SimulationState):
-        self.ports[self.main_heat_input_port_name].T = self.temperature
-        return self.main_heat_input_port_name, self.temperature
+        output = {}
+        for port_name in self.heat_input_port_names:
+            if port_name in self.ports.keys():
+                self.ports[port_name].T = self.temperature
+                output[port_name] = self.temperature
+        return output
     
     def temperature_to_SOC(self, state: SimulationState):
         try:
@@ -107,9 +115,9 @@ class HotWaterStorage(StorageUnit):
     def initialize(self, state: SimulationState):
         self.temperature = self.T_0
         self.SOC_0 = self.temperature_to_SOC(state)
-        self.ports[self.main_heat_input_port_name].T = self.T_0
-        if self.aux_heat_input_port_name in self.ports.keys():
-            self.ports[self.aux_heat_input_port_name].T = self.T_0
+        for port_name in self.heat_input_port_names:
+            if port_name in self.ports.keys():
+                self.ports[port_name].T = self.T_0
         super().initialize(state)
 
 
@@ -203,6 +211,9 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         self.hot_water_output_location = self.identify_layer_by_height(height = height_hot_water_output, default = 0)
         self.main_heating_source_location = self.identify_heat_input_layers(height_main_heat_input, default=self.number_of_layers-1)
         self.aux_heating_source_location = self.identify_heat_input_layers(height_aux_heat_input, default=self.number_of_layers-1)
+        self.heating_source_locations = {
+            self.main_heat_input_port_name: self.main_heating_source_location, 
+            self.aux_heat_input_port_name: self.aux_heating_source_location}
         self.matrix_B = None
         self.matrix_A = None
     
@@ -279,8 +290,11 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         
     def create_C_vector(self, state: SimulationState):
         ambient_temperature = self.T_amb if self.located_inside else state.environmental_data.temperature_ambient
-        total_heat_from_main_heating_source = self.ports[self.main_heat_input_port_name].flows['heat'] / state.time_step
-        total_heat_from_aux_heating_source = self.ports[self.aux_heat_input_port_name].flows['heat'] / state.time_step
+        total_heat_from_main_heating_source = self.ports[self.main_heat_input_port_name].flows['heat']
+        if self.aux_heat_input_port_name in self.ports.keys():
+            total_heat_from_aux_heating_source = self.ports[self.aux_heat_input_port_name].flows['heat']
+        else:
+            total_heat_from_aux_heating_source = 0.0
         # Calculating useful vectors
         vector_cold_water_input = self.cold_water_input_location * self.water_mass_flow_t * WATER.cp * self.ports[self.cold_water_input_port_name].T
         vector_heat_from_main_heating_source = total_heat_from_main_heating_source / len([self.main_heating_source_location]) * self.main_heating_source_location
@@ -306,12 +320,16 @@ class MultiNodeHotWaterTank(HotWaterStorage):
     def set_inherited_fluid_port_values(self, state):
         T_port = self.T_layer[np.nonzero(self.hot_water_output_location==1)][0]
         self.ports[self.hot_water_output_port_name].T = T_port
-        return self.hot_water_output_port_name, T_port
+        return {self.hot_water_output_port_name: T_port}
     
     def set_inherited_heat_port_values(self, state):
-        T_heating_port = self.T_layer[self.main_heating_source_location==1].max()
-        self.ports[self.main_heat_input_port_name].T = T_heating_port
-        return self.main_heat_input_port_name, T_heating_port
+        output = {}
+        for port_name in self.heat_input_port_names:
+            if port_name in self.ports.keys():
+                T_heating_port = self.T_layer[self.heating_source_locations[port_name]==1].max()
+                self.ports[port_name].T = T_heating_port
+                output[port_name] = T_heating_port
+        return output
         
     def initialize(self, ctx: InitContext):
         state = ctx.state

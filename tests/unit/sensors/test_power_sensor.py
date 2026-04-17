@@ -39,14 +39,15 @@ class TestElectricPowerSensor:
                 SOC_0=0.5
             ),
             esc.Inverter(name='inverter'),
-            esc.BalancingUtility(name='electric_grid', utility_type='electricity'),
+            esc.ElectricityGrid(name='electric_grid'),
         ]
         
         controllers = [
-            esc.InverterController(
-                name='inverter_controller',
-                inverter_name='inverter',
+            esc.ChargeController(
+                name='charge_controller',
                 battery_name='battery',
+                battery_SOC_sensor_name='battery_SOC_sensor',
+                PV_power_sensor_name='pv_power_sensor',
                 SOC_min=0.3,
                 SOC_max=0.9
             )
@@ -107,7 +108,7 @@ class TestElectricPowerSensor:
                 production_type='electricity',
                 power=5.0  # 5 kW constant power
             ),
-            esc.BalancingUtility(name='electric_grid', utility_type='electricity'),
+            esc.ElectricityGrid(name='electric_grid'),
         ]
         
         sensors = [
@@ -157,7 +158,7 @@ class TestElectricPowerSensor:
                 tilt=30,
                 azimuth=90
             ),
-            esc.BalancingUtility(name='electric_grid', utility_type='electricity'),
+            esc.ElectricityGrid(name='electric_grid'),
         ]
         
         sensors = [

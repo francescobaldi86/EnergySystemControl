@@ -33,7 +33,7 @@ class TestHotWaterDemandSensor:
                 tank_volume=200,
                 T_0=50
             ),
-            esc.BalancingUtility(name='electric_grid', utility_type='electricity'),
+            esc.ElectricityGrid(name='electric_grid'),
             esc.ColdWaterGrid(name='water_grid', utility_type='fluid')
         ]
         
@@ -88,7 +88,7 @@ class TestHotWaterDemandSensor:
                 tank_volume=200,
                 T_0=50
             ),
-            esc.BalancingUtility(name='electric_grid', utility_type='electricity'),
+            esc.ElectricityGrid(name='electric_grid'),
             esc.ColdWaterGrid(name='water_grid', utility_type='fluid')
         ]
         
@@ -144,7 +144,7 @@ class TestHotWaterDemandSensor:
                 tank_volume=200,
                 T_0=45  # Lower initial temperature
             ),
-            esc.BalancingUtility(name='electric_grid', utility_type='electricity'),
+            esc.ElectricityGrid(name='electric_grid'),
             esc.ColdWaterGrid(name='water_grid', utility_type='fluid')
         ]
         
@@ -192,7 +192,7 @@ class TestHotWaterDemandSensor:
                 tank_volume=200,
                 T_0=65  # Higher initial temperature
             ),
-            esc.BalancingUtility(name='electric_grid', utility_type='electricity'),
+            esc.ElectricityGrid(name='electric_grid'),
             esc.ColdWaterGrid(name='water_grid', utility_type='fluid')
         ]
         

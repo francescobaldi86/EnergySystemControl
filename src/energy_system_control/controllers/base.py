@@ -96,10 +96,10 @@ class ChargeController(Controller):
     baseline_battery_efficiency: float
     baseline_inverter_efficiency: float
     def __init__(self, name, 
-                 battery_name: str, 
-                 PV_power_sensor_name: str, 
-                 AC_output_sensor_name: str, 
+                 battery_name: str,   
                  battery_SOC_sensor_name: str, 
+                 AC_output_sensor_name: str | None = None,
+                 PV_power_sensor_name: str | None = None,
                  SOC_min: float = 0.3, 
                  SOC_max: float = 0.9, 
                  baseline_battery_efficiency: float = 0.9,
@@ -110,7 +110,12 @@ class ChargeController(Controller):
         self.SOC_max = SOC_max
         self.baseline_battery_efficiency = baseline_battery_efficiency
         self.baseline_inverter_efficiency = baseline_inverter_efficiency
-        super().__init__(name, controlled_components=[self.battery_name], sensors = {'PV power': PV_power_sensor_name, 'output power': AC_output_sensor_name, 'battery SOC': battery_SOC_sensor_name})
+        sensors = {'battery SOC': battery_SOC_sensor_name}
+        if PV_power_sensor_name is not None:
+            sensors['PV power'] = PV_power_sensor_name
+        if AC_output_sensor_name is not None:
+            sensors['output power'] = AC_output_sensor_name
+        super().__init__(name, controlled_components=[self.battery_name], sensors = sensors)
     
     def initialize(self, ctx):
         super().initialize(ctx)      
@@ -120,10 +125,8 @@ class ChargeController(Controller):
         # This involves two checks:
         #   - Power check (the power should not be higher than what is allowed by the battery)
         #   - Energy check (we should not be asking from the battery more energy then what is stored inside)
-        PV_power_input = self.obs['PV power']
-        if PV_power_input > 0.2:
-            pass
-        AC_output = self.obs['output power']
+        PV_power_input = self.obs['PV power'] if 'PV power' in self.obs.keys() else 0.0
+        AC_output = self.obs['output power'] if 'output power' in self.obs.keys() else 0.0
         DC_output = AC_output / self.baseline_inverter_efficiency
         DC_balance = PV_power_input + DC_output
         SOC = self.obs['battery SOC']

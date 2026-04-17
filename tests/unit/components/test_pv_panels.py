@@ -50,7 +50,7 @@ def test_panel_with_custom_data():
     assert isclose(pv.ts.data[0], 0.12, abs_tol = 0.01)
     # Testing taking step
     pv.step(state)
-    assert pv.ports[pv.port_name].flow['electricity'] == -time_step * 0.12  # Energy generated during the time step in kJ
+    assert pv.ports[pv.port_name].flows['electricity'] == -0.12  # Energy generated during the time step in kJ
 
 def test_panel_from_PVGIS():
     from energy_system_control import PVpanelFromPVGIS
@@ -71,7 +71,7 @@ def test_panel_from_PVGIS():
     # Testing taking step
     state = SimulationState(time_id = 0, time_step = time_step)
     pv.step(state)
-    assert pv.ports[pv.port_name].flow['electricity'] == 0.0
+    assert pv.ports[pv.port_name].flows['electricity'] == 0.0
     # Testing the check data function
     # pv.check_data()
 

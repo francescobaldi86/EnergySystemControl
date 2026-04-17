@@ -33,21 +33,23 @@ class TestSOCSensor:
                 SOC_0=0.5  # Start at 50% SOC
             ),
             esc.Inverter(name='inverter'),
-            esc.BalancingUtility(name='electric_grid', utility_type='electricity'),
+            esc.ElectricityGrid(name='electric_grid'),
         ]
         
         controllers = [
-            esc.InverterController(
-                name='inverter_controller',
-                inverter_name='inverter',
+            esc.ChargeController(
+                name='charge_controller',
                 battery_name='battery',
+                battery_SOC_sensor_name='battery_SOC_sensor',
+                PV_power_sensor_name='pv_power_sensor',
                 SOC_min=0.3,
                 SOC_max=0.9
             )
         ]
         
         sensors = [
-            esc.SOCSensor('battery_soc', 'battery'),
+            esc.SOCSensor('battery_SOC_sensor', 'battery'),
+            esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port')
         ]
         
         connections = [
@@ -74,8 +76,8 @@ class TestSOCSensor:
         df_ports, df_controllers, df_sensors = results.to_dataframe()
         
         # Verify SOC is recorded
-        assert 'battery_soc' in df_sensors.columns
-        soc = df_sensors['battery_soc']
+        assert 'battery_SOC_sensor' in df_sensors.columns
+        soc = df_sensors['battery_SOC_sensor']
         
         # SOC should always be between 0 and 1
         assert soc.min() >= 0.0, "SOC should not go below 0"
@@ -92,11 +94,11 @@ class TestSOCSensor:
                 capacity=5.0,
                 SOC_0=0.75  # Start at 75% SOC
             ),
-            esc.BalancingUtility(name='electric_grid', utility_type='electricity'),
+            esc.ElectricityGrid(name='electric_grid'),
         ]
         
         sensors = [
-            esc.SOCSensor('battery_soc', 'battery'),
+            esc.SOCSensor('battery_SOC_sensor', 'battery')
         ]
         
         connections = []
@@ -119,7 +121,7 @@ class TestSOCSensor:
         df_ports, df_controllers, df_sensors = results.to_dataframe()
         
         # Initial SOC should be close to 0.75
-        initial_soc = df_sensors['battery_soc'].iloc[0]
+        initial_soc = df_sensors['battery_SOC_sensor'].iloc[0]
         assert math.isclose(initial_soc, 0.75, abs_tol=0.05)
     
     def test_soc_sensor_respects_bounds(self):
@@ -139,21 +141,23 @@ class TestSOCSensor:
                 SOC_0=0.5
             ),
             esc.Inverter(name='inverter'),
-            esc.BalancingUtility(name='electric_grid', utility_type='electricity'),
+            esc.ElectricityGrid(name='electric_grid'),
         ]
         
         controllers = [
-            esc.InverterController(
-                name='inverter_controller',
-                inverter_name='inverter',
+            esc.ChargeController(
+                name='charge_controller',
                 battery_name='battery',
-                SOC_min=0.2,  # Minimum 20%
-                SOC_max=0.8   # Maximum 80%
+                battery_SOC_sensor_name='battery_SOC_sensor',
+                PV_power_sensor_name='pv_power_sensor',
+                SOC_min=0.3,
+                SOC_max=0.85
             )
         ]
         
         sensors = [
-            esc.SOCSensor('battery_soc', 'battery'),
+            esc.SOCSensor('battery_SOC_sensor', 'battery'),
+            esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port')
         ]
         
         connections = [
@@ -179,7 +183,7 @@ class TestSOCSensor:
         results = sim.run()
         df_ports, df_controllers, df_sensors = results.to_dataframe()
         
-        soc = df_sensors['battery_soc']
+        soc = df_sensors['battery_SOC_sensor']
         
         # SOC should respect the controller bounds (with some tolerance for numerical precision)
         assert soc.min() >= 0.15, "SOC should not go significantly below min bound"

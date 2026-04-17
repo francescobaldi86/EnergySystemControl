@@ -6,13 +6,15 @@ from energy_system_control.core.base_classes import InitContext
 def test_battery_creation():
     from energy_system_control import LithiumIonBattery
     from energy_system_control.core.port import ElectricPort
-    test_battery = LithiumIonBattery('test_battery', 5.0)
+    test_battery = LithiumIonBattery(name = 'test_battery', capacity = 5.0)
     # Check correct creation and default values
-    assert test_battery.max_capacity == 5.0 * 3600
-    assert test_battery.port_name == 'test_battery_electricity_port'
+    assert test_battery.battery_pack.max_capacity == 5.0 * 3600
+    assert test_battery.main_connection_port_name == 'test_battery_electricity_port'
     # Test node creation
     test_battery.create_ports()
-    assert isinstance(test_battery.ports[test_battery.port_name], ElectricPort)
+    test_battery.battery_pack.create_ports()
+    test_battery.charger.create_ports()
+    assert isinstance(test_battery.charger.ports[test_battery.main_connection_port_name], ElectricPort)
     assert True
 
 def test_battery_soc(base_test_env):
@@ -20,7 +22,7 @@ def test_battery_soc(base_test_env):
     sim_config = SimulationConfig(time_start_h = 0.0, time_end_h = 1, time_step_h = 0.5)
     sim = Simulator(base_test_env, sim_config)
     results = sim.run()
-    assert math.isclose(base_test_env.components['battery'].SOC, 0.684, abs_tol=0.01)
+    assert math.isclose(base_test_env.components['battery'].SOC, 0.592, abs_tol=0.01)
 
 def test_multinode_water_tank_creation():
     from energy_system_control import MultiNodeHotWaterTank
@@ -63,17 +65,21 @@ def test_multinode_water_tank_base_system(base_test_env_TES):
 
 @pytest.fixture
 def base_test_env():
-    from energy_system_control import LithiumIonBattery, Environment, ConstantPowerProducer, InverterController, SOCSensor, Inverter, BalancingUtility, Simulator, SimulationConfig
+    from energy_system_control import LithiumIonBattery, Environment, ConstantPowerProducer, SOCSensor, Inverter, ElectricityGrid, ChargeController, ElectricPowerSensor
     components = [
-        LithiumIonBattery('battery', capacity = 5.0, SOC_0 = 0.5),
+        LithiumIonBattery(name = 'battery', capacity = 5.0, SOC_0 = 0.5),
         ConstantPowerProducer('producer', production_type='electricity', power = 1.0),
         Inverter(name = 'inverter'),
-        BalancingUtility(name = 'electric_grid', utility_type = 'electricity'),
+        ElectricityGrid(name = 'electric_grid'),
     ]
     sensors = [
         SOCSensor('battery_SOC_sensor', 'battery'),
+        ElectricPowerSensor('inverter_PV_sensor', 'inverter_PV_input_port'),
+        ElectricPowerSensor('inverter_grid_sensor', 'inverter_grid_input_port'),
     ]
-    controllers = [InverterController('inverter_controller', 'inverter', 'battery')]
+    controllers = [
+        ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', PV_power_sensor_name = 'inverter_PV_sensor')
+    ]
     connections = [
         ('inverter_PV_input_port', 'producer_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port'),
@@ -85,12 +91,12 @@ def base_test_env():
 
 @pytest.fixture
 def base_test_env_TES():
-    from energy_system_control import MultiNodeHotWaterTank, IEAHotWaterDemand, HeatPumpConstantEfficiency, TankTemperatureSensor, BalancingUtility, ColdWaterGrid, HeaterControllerWithBandwidth, Environment
+    from energy_system_control import MultiNodeHotWaterTank, IEAHotWaterDemand, HeatPumpConstantEfficiency, TankTemperatureSensor, ElectricityGrid, ColdWaterGrid, HeaterControllerWithBandwidth, Environment
     components = [
         IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2),
         MultiNodeHotWaterTank(name = 'test_TES', max_temperature = 80, tank_volume = 250, number_of_layers=10, tank_height=1.5, height_main_heat_input=0.5, height_aux_heat_input=0.3, T_0=80),
-        BalancingUtility(name = 'electric_grid', utility_type = 'electricity'),
+        ElectricityGrid(name = 'electric_grid'),
         ColdWaterGrid(name = 'water_grid', utility_type = 'fluid')
     ]
     controllers = [

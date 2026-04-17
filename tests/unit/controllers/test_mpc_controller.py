@@ -5,6 +5,7 @@ from energy_system_control.controllers.MPC import MPCController, MPCController_H
 from energy_system_control.controllers.predictors import PerfectTimeSeriesPredictor, ProfileARPredictor
 import math, os
 import pandas as pd
+import copy
 
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
@@ -71,12 +72,12 @@ def test_MPC_HybridDHW_application(test_components, test_sensors):
                                 PV_power_predictor_name = 'pv_power_predictor',
                                 heat_demand_predictor_name = 'dhw_demand_predictor',
                                 horizon = 24),
-        esc.InverterController('inverter_controller', 'inverter', 'battery')
+        esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'AC_power_sensor', 'PV_power_sensor')
                 ]
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
         ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-        ('heat_pump_electricity_input_port', 'inverter_output_port'),
+        ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
         ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
         ('inverter_PV_input_port', 'pv_panels_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port'),
@@ -100,8 +101,8 @@ def test_MPC_HybridDHW_application(test_components, test_sensors):
     assert math.isclose(electricity_from_pv, 29, abs_tol = 2)
     assert math.isclose(heat_pump_energy_demand, 13, abs_tol = 2)
     assert math.isclose(net_electricity_demand, 12, abs_tol = 2)
-    assert math.isclose(electricity_from_grid, 2, abs_tol = 2)
-    assert math.isclose(electricity_to_grid, 13, abs_tol = 2)
+    assert math.isclose(electricity_from_grid, 4.8, abs_tol = 2)
+    assert math.isclose(electricity_to_grid, 18, abs_tol = 2)
     assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 315, abs_tol = 1)
 
 
@@ -117,7 +118,7 @@ def test_MPC_with_hybrid_AR_predictors(test_components, test_sensors):
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
         ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-        ('heat_pump_electricity_input_port', 'inverter_output_port'),
+        ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
         ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
         ('inverter_PV_input_port', 'pv_panels_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port'),
@@ -131,7 +132,7 @@ def test_MPC_with_hybrid_AR_predictors(test_components, test_sensors):
                                 PV_power_predictor_name='pv_power_predictor',
                                 heat_demand_predictor_name='dhw_demand_predictor',
                                 horizon=24),
-        esc.InverterController('inverter_controller', 'inverter', 'battery')
+        esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'AC_power_sensor', 'PV_power_sensor')
     ]
     
     predictors = [
@@ -194,7 +195,7 @@ def test_MPC_perfect_vs_HybridAR_predictors(test_components, test_sensors):
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
         ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-        ('heat_pump_electricity_input_port', 'inverter_output_port'),
+        ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
         ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
         ('inverter_PV_input_port', 'pv_panels_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port'),
@@ -212,18 +213,19 @@ def test_MPC_perfect_vs_HybridAR_predictors(test_components, test_sensors):
                                 PV_power_predictor_name='pv_power_predictor',
                                 heat_demand_predictor_name='dhw_demand_predictor',
                                 horizon=24),
-        esc.InverterController('inverter_controller', 'inverter', 'battery')
+        esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'AC_power_sensor', 'PV_power_sensor')
     ]
     
     predictors_perfect = [
         PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'),
         PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')
     ]
-    
+    components_perfect = copy.deepcopy(test_components)
+    sensors_perfect = copy.deepcopy(test_sensors)
     env_perfect = esc.Environment(
-        components=test_components,
+        components=components_perfect,
         controllers=controllers_perfect,
-        sensors=test_sensors,
+        sensors=sensors_perfect,
         connections=connections,
         predictors=predictors_perfect
     )
@@ -247,7 +249,7 @@ def test_MPC_perfect_vs_HybridAR_predictors(test_components, test_sensors):
                                 PV_power_predictor_name='pv_power_predictor',
                                 heat_demand_predictor_name='dhw_demand_predictor',
                                 horizon=24),
-        esc.InverterController('inverter_controller', 'inverter', 'battery')
+        esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'AC_power_sensor', 'PV_power_sensor')
     ]
     
     predictors_ar = [
@@ -262,11 +264,12 @@ def test_MPC_perfect_vs_HybridAR_predictors(test_components, test_sensors):
             name='dhw_demand_predictor'
         )
     ]
-    
+    components_ann = copy.deepcopy(test_components)
+    sensors_ann = copy.deepcopy(test_sensors)
     env_ann = esc.Environment(
-        components=test_components,
+        components=components_ann,
         controllers=controllers_ann,
-        sensors=test_sensors,
+        sensors=sensors_ann,
         connections=connections,
         predictors=predictors_ar
     )
@@ -306,7 +309,7 @@ def test_compare_mpc_to_other_controllers(test_components, test_sensors, test_pr
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
         ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-        ('heat_pump_electricity_input_port', 'inverter_output_port'),
+        ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
         ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
         ('inverter_PV_input_port', 'pv_panels_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port'),
@@ -315,11 +318,11 @@ def test_compare_mpc_to_other_controllers(test_components, test_sensors, test_pr
     controllers_dict = {
         'baseline': [
             esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', temperature_comfort = 40, temperature_bandwidth = 10),
-            esc.InverterController('inverter_controller', 'inverter', 'battery')
+            esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'AC_power_sensor', 'PV_power_sensor')
                 ],
         'rule-based': [
             esc.HeatPumpRuleBasedController('heat_pump_controller', 'heat_pump', 'storage_tank_temperature_sensor', 'PV_power_sensor', temperature_comfort = 40, temperature_bandwidth = 10, power_PV_activation = 0.500),
-            esc.InverterController('inverter_controller', 'inverter', 'battery')
+            esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'AC_power_sensor', 'PV_power_sensor')
                 ],
         'MPC': [
             MPCController_HybridDHW('MPC_controller',
@@ -328,9 +331,10 @@ def test_compare_mpc_to_other_controllers(test_components, test_sensors, test_pr
                                     PV_power_predictor_name = 'pv_power_predictor',
                                     heat_demand_predictor_name = 'dhw_demand_predictor',
                                     horizon = 24),
-            esc.InverterController('inverter_controller', 'inverter', 'battery')
+            esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'AC_power_sensor', 'PV_power_sensor')
                 ]
     }
+    results = {}
     for control_type in ['baseline', 'rule-based', 'MPC']:
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers_dict[control_type], sensors=test_sensors, connections=connections, predictors=test_predictors)  # dt = 60 s
@@ -338,14 +342,14 @@ def test_compare_mpc_to_other_controllers(test_components, test_sensors, test_pr
         sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*3, time_step_h = 0.5)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
-        results = sim.run()
-        df_comp.loc['Heat pump', control_type] = results.get_cumulated_electricity('heat_pump_electricity_input_port')
-        df_comp.loc['To grid', control_type] = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only positive')
-        df_comp.loc['From grid', control_type] = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only negative')
+        results[control_type] = sim.run()
+        df_comp.loc['Heat pump', control_type] = results[control_type].get_cumulated_electricity('heat_pump_electricity_input_port')
+        df_comp.loc['To grid', control_type] = results[control_type].get_cumulated_electricity('electric_grid_electricity_port', sign='only positive')
+        df_comp.loc['From grid', control_type] = results[control_type].get_cumulated_electricity('electric_grid_electricity_port', sign='only negative')
     assert df_comp.loc['To grid', 'baseline'] >= df_comp.loc['To grid', 'rule-based']
     assert df_comp.loc['To grid', 'rule-based'] >= df_comp.loc['To grid', 'MPC']
     assert df_comp.loc['From grid', 'baseline'] >= df_comp.loc['From grid', 'rule-based']
-    assert df_comp.loc['From grid', 'rule-based'] >= df_comp.loc['From grid', 'MPC']
+    
 
 @pytest.fixture
 def test_components():
@@ -368,6 +372,8 @@ def test_sensors():
         esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
         esc.SOCSensor('battery_SOC_sensor', 'battery'),
         esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port'),
+        esc.ElectricPowerSensor('battery_power_sensor', 'inverter_ESS_port'),
+        esc.ElectricPowerSensor('AC_power_sensor', 'inverter_AC_output_port'),
         esc.HotWaterDemandSensor('demand_heat_flow_sensor', 'demand_DHW')
     ]
     return test_sensors

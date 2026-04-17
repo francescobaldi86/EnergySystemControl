@@ -69,8 +69,8 @@ class SimulationResults:
         elif isinstance(sensors, list):
             sensors_list = sensors
             labels_list = labels
-        for sensor in sensors_list:
-            self._plot_sensor(ax, sensor, labels_list)
+        for id, sensor in enumerate(sensors_list):
+            self._plot_sensor(ax, sensor, labels_list[id])
         if reference_value:
             ax.hlines([reference_value], xmin = ax.get_xlim()[0], xmax = ax.get_xlim()[1], colors = ['red'], linestyles=['solid'])
         ax.set_xlabel('Time [h]')
@@ -85,7 +85,8 @@ class SimulationResults:
     def _plot_sensor(self, ax, sensor_name: str, label: str | None = None):
         # Plots the measured values of a sensor over time
         col = self.signal_registry_sensors.col_index(sensor_name, "")
-        ax.plot(self.time_vector/3600, self.data.sensors[:,col], label=sensor_name)
+        label = label if label else sensor_name
+        ax.plot(self.time_vector/3600, self.data.sensors[:,col], label=label)
         
     def plot_temperature_sensors(self, sensors: str | List[str] | None= None, labels: str | List[str] | None = None, ylabel: str | None= None, filename: str | None = None, comfort_temperature: float | None = None):
         return self.plot_sensors(sensors, labels, 'Temperature [K]', filename, comfort_temperature)

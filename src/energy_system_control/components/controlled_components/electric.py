@@ -22,7 +22,10 @@ class BatteryCharger(ControlledComponent):
                          ports_info = {self.internal_port_name: 'electricity', self.main_port_name: 'electricity'})
         
     def step(self, state: SimulationState, action):
-        if action >= 0:
+        if action is None:
+            for port in self.ports.values():
+                port.flows['electricity'] = 0.0
+        elif action >= 0:
             charging_power = min(action, self.get_maximum_charge_power())
             self.ports[self.main_port_name].flows['electricity'] = charging_power
             self.ports[self.internal_port_name].flows['electricity'] = -charging_power * self.efficiency_charge

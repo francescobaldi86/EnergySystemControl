@@ -123,12 +123,14 @@ class Simulator:
     def _propagate_port_values(self):
         env = self.env
         for _, component in env.components.items():
-            port_name, T = component.set_inherited_fluid_port_values(self.state)
-            if port_name and env.ports[port_name].connected_port is not None:
-                env.ports[port_name].connected_port.T = T
-            port_name, T = component.set_inherited_heat_port_values(self.state)
-            if port_name and env.ports[port_name].connected_port is not None:
-                env.ports[port_name].connected_port.T = T
+            inherited_fluid_ports_info = component.set_inherited_fluid_port_values(self.state)
+            for port_name, temperature in inherited_fluid_ports_info.items():
+                if port_name and env.ports[port_name].connected_port is not None:
+                    env.ports[port_name].connected_port.T = temperature
+            inherited_heat_ports_info = component.set_inherited_heat_port_values(self.state)
+            for port_name, temperature in inherited_heat_ports_info.items():
+                if port_name and env.ports[port_name].connected_port is not None:
+                    env.ports[port_name].connected_port.T = temperature
     
     def _simulate_all_components(self):
         self.components_to_simulate = list(self.env.components.keys())

@@ -25,7 +25,10 @@ class Port():
         if type(self) != type(port):
             raise ValueError(f"Port types do not match: {self.name} has type {type(self)} while {port.name} has type {type(port)}")
         if self.connected_port is not None:
-            raise ValueError(f"Port {self.name} is already connected to {self.connected_port.name}")
+            if self.connected_port != port:
+                raise ValueError(f"Port {self.name} is already connected to {self.connected_port.name}, cannot be connected to {port.name}")
+            else:
+                return
         self.connected_port = port
 
     def propagate_port_values(self):
