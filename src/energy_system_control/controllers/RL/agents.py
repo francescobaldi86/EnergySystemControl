@@ -80,9 +80,12 @@ class DiscreteActionRLAgent(RLAgent):
         if valid_actions is None:
             idx = self.rng.choice(np.flatnonzero(q_values == q_values.max()))
             return self.action_space[idx]
+        valid_indices = list(valid_actions)
         permitted_q_values = q_values[valid_actions]
         # map valid actions to indices
-        idx = self.rng.choice(np.flatnonzero(permitted_q_values == permitted_q_values.max()))
+        best_local_idxs = np.flatnonzero(permitted_q_values == permitted_q_values.max())
+        best_global_idxs = [valid_indices[i] for i in best_local_idxs]
+        idx = self.rng.choice(best_global_idxs)
         return self.action_space[idx]
     
     def update(self):

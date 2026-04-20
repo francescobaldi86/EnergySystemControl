@@ -94,13 +94,19 @@ class StateDiscretizer:
 
     def transform(self, obs: dict = {}, predictions: dict = {}) -> tuple:
         state = []
-        for var, discretizer in self.discretizers.items():
-            if var in obs:
-                values = discretizer.discretize(obs[var])
-            elif var in predictions:
-                values = discretizer.discretize(predictions[var])
+        for var, value in obs.items():
+            if var in self.discretizers.keys():
+                values = self.discretizers[var].discretize(value)
+                state.extend(values.tolist())
             else:
-                raise KeyError(f"{var} not found in obs or predictions")
-            state.extend(values.tolist())
-
+                if isinstance(value, int):
+                    state.extend([value])
+                else:
+                    raise ValueError(f'Observed variable {var} is not an integer and no discretizer was provided')
+        for var, value in predictions.items():
+            if var in self.discretizers.keys():
+                values = self.discretizers[var].discretize(value)
+                state.extend(values.tolist())
+            else:
+                raise ValueError(f'Prediction variable {var} is not an integer and no discretizer was provided')
         return tuple(state)

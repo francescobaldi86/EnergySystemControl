@@ -37,6 +37,7 @@ def test_sensors():
         esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port'),
         esc.ElectricPowerSensor('inverter_power_output_sensor', 'inverter_AC_output_port'),
         esc.ElectricPowerSensor('grid_power_sensor', 'inverter_grid_input_port'),
+        esc.ElectricPowerSensor('battery_power_sensor', 'inverter_ESS_port'),
         esc.HotWaterDemandSensor('demand_heat_flow_sensor', 'demand_DHW')
     ]
     return test_sensors
@@ -718,6 +719,50 @@ class TestRLControllerFull:
                 exploration_policy = {'type': 'epsilon-greedy', 'config info': {}},
                 valid_states_function = {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): {'heat_pump': [1]}, (273+35, 273+70): {'heat_pump': [0, 1]}, (273+70, 273+100): {'heat_pump': [0]}}},
                 agent_config_info = {'epsilon': 0.02, 'decay': 0.01, 'alpha': 0.1},
+                reward_function = TemperatureMinMaxReward(
+                    sensor_name='storage_tank_temperature_sensor',
+                    min_temp=40,
+                    max_temp=60.0
+                ),
+                state_discretizer = StateDiscretizer({
+                    'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},
+                })),
+            esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'inverter_power_output_sensor', 'PV_power_sensor')
+                    ]
+        connections = [
+            ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
+            ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
+            ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
+            ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
+            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_grid_input_port', 'electric_grid_electricity_port'),
+            ('inverter_ESS_port', 'battery_electricity_port')
+        ]
+        predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
+                    PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
+        # Create environment
+        env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
+        # Create simulator object
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 5/60)
+        sim = esc.Simulator(env, sim_config)
+        # Run simulation
+        results = sim.run()
+        df_ports, df_controllers, df_sensors = results.to_dataframe()    
+        assert (df_sensors['storage_tank_temperature_sensor'] < C2K(40)).sum() < 100
+        assert (df_sensors['storage_tank_temperature_sensor'] > C2K(80)).sum() < 100
+        assert True
+
+    def test_RL_HybridDHW_application_onlyT_with_minimum_switch_time(self, test_components, test_sensors):
+    # Test of a standard hybrid system, where the only signal read by the RL controller is the storage tank temperature
+        controllers = [
+            QLearningController(
+                name = 'test_RL_controller',
+                sensors = {'storage tank temperature': 'storage_tank_temperature_sensor'},
+                actions = {'heat_pump': [0, 1]},
+                exploration_policy = {'type': 'epsilon-greedy', 'config info': {}},
+                valid_states_function = {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): {'heat_pump': [1]}, (273+35, 273+70): {'heat_pump': [0, 1]}, (273+70, 273+100): {'heat_pump': [0]}}},
+                agent_config_info = {'epsilon': 0.02, 'decay': 0.01, 'alpha': 0.1},
+                minimum_time_between_state_switches_h = {'heat_pump': 0.5},
                 reward_function = TemperatureMinMaxReward(
                     sensor_name='storage_tank_temperature_sensor',
                     min_temp=40,
