@@ -848,15 +848,20 @@ class TestRLControllerFull:
         controllers = [
             QLearningController(
                 name = 'test_RL_controller',
-                sensors = {'storage tank temperature': 'storage_tank_temperature_sensor'},
+                sensors = {'storage tank temperature': 'storage_tank_temperature_sensor',
+                           'power PV': 'PV_power_sensor'},
                 actions = {'heat_pump': [0, 1]},
                 exploration_policy = {'type': 'epsilon-greedy',
                                       'config info': {
                                           'bias function': {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): [(0, 0.0), (1, 1.0)], (273+35, 273+40): [(0, 0.1), (1, 0.9)], (273+40, 273+60): [(0, 0.5), (1, 0.5)], (273+60, 273+70): [(0, 0.8), (1, 0.2)], (273+70, 273+100): [(0, 1.0), (1, 0.0)]}}}},
                 valid_states_function = {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): {'heat_pump': [1]}, (273+35, 273+70): {'heat_pump': [0, 1]}, (273+70, 273+100): {'heat_pump': [0]}}},
                 agent_config_info = {'epsilon': 0.02, 'decay': 0.01, 'alpha': 0.1},
-                reward_function = TemperatureMinMaxReward(sensor_name='storage_tank_temperature_sensor', min_temp=40, max_temp=60.0),
-                state_discretizer = {'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},}),
+                reward_function = CompositeReward([
+                    TemperatureMinMaxReward(sensor_name='storage_tank_temperature_sensor', min_temp=40, max_temp=60.0),
+                    EnergyCostReward(cost_components = [{'component': 'electric_grid', 'sensor': 'grid_power_sensor'}])
+                ]),
+                state_discretizer = {'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},
+                                     'power PV': {'min': 0, 'max': 3.0, "bins": 10}}),
             esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'inverter_power_output_sensor', 'PV_power_sensor')
                     ]
         connections = [
@@ -868,12 +873,10 @@ class TestRLControllerFull:
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port')
         ]
-        predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
-                    PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
         # Create environment
-        env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
+        env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 1/60)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*30, time_step_h = 1/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -882,25 +885,28 @@ class TestRLControllerFull:
         assert (df_sensors['storage_tank_temperature_sensor'] > C2K(80)).sum() < 100
         assert True
 
-    def test_RL_HybridDHW_application(self, test_components, test_sensors):
-    # Test of a full system
+    def test_RL_HybridDHW_application_TandP_with_minimum_switch_time(self, test_components, test_sensors):
+    # Test of a standard hybrid system, where the only signals read by the RL controller are:
+    # - The storage tank temperature
+    # - The heat pump power
         controllers = [
             QLearningController(
                 name = 'test_RL_controller',
-                sensors = {'storage tank temperature': 'storage_tank_temperature_sensor', 'PV power': 'PV_power_sensor', 'DHW demand': 'demand_heat_flow_sensor'},
-                predictors = {'PV power prediction': 'pv_power_predictor', 'DHW demand prediction': 'dhw_demand_predictor'},
+                sensors = {'storage tank temperature': 'storage_tank_temperature_sensor',
+                           'power PV': 'PV_power_sensor'},
                 actions = {'heat_pump': [0, 1]},
-                exploration_policy = {'type': 'epsilon-greedy', 'config info': {}},
+                exploration_policy = {'type': 'epsilon-greedy',
+                                      'config info': {
+                                          'bias function': {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): [(0, 0.0), (1, 1.0)], (273+35, 273+40): [(0, 0.1), (1, 0.9)], (273+40, 273+60): [(0, 0.5), (1, 0.5)], (273+60, 273+70): [(0, 0.8), (1, 0.2)], (273+70, 273+100): [(0, 1.0), (1, 0.0)]}}}},
                 valid_states_function = {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): {'heat_pump': [1]}, (273+35, 273+70): {'heat_pump': [0, 1]}, (273+70, 273+100): {'heat_pump': [0]}}},
+                minimum_time_between_state_switches_h = {'heat_pump': 0.5},
                 agent_config_info = {'epsilon': 0.02, 'decay': 0.01, 'alpha': 0.1},
-                reward_function = TemperatureMinMaxReward(sensor_name='storage_tank_temperature_sensor', min_temp=40, max_temp=60.0),
-                state_discretizer = StateDiscretizer({
-                    'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},
-                    'PV power': {"min": 0, "max": 3, "bins": 5},
-                    'DHW demand': {"min": 0, "max": 10, "bins": 5},
-                    'PV power prediction': {"min": 0, "max": 3, "bins": 5, "temporal": {"n_blocks": 4, "agg": "mean"}},
-                    'DHW demand prediction': {"min": 0, "max": 10, "bins": 5, "temporal": {"n_blocks": 4, "agg": "mean"}}
-                })),
+                reward_function = CompositeReward([
+                    TemperatureMinMaxReward(sensor_name='storage_tank_temperature_sensor', min_temp=40, max_temp=60.0),
+                    EnergyCostReward(cost_components = [{'component': 'electric_grid', 'sensor': 'grid_power_sensor'}])
+                ]),
+                state_discretizer = {'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},
+                                     'power PV': {'min': 0, 'max': 3.0, "bins": 10}}),
             esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'inverter_power_output_sensor', 'PV_power_sensor')
                     ]
         connections = [
@@ -912,19 +918,14 @@ class TestRLControllerFull:
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port')
         ]
-        predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
-                    PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
         # Create environment
-        env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
+        env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*21, time_step_h = 5/60)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 1/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
         df_ports, df_controllers, df_sensors = results.to_dataframe()    
-        heat_pump_energy_demand = results.get_cumulated_electricity('heat_pump_electricity_input_port')
-        electricity_from_pv = results.get_cumulated_electricity('inverter_PV_input_port')
-        net_electricity_demand = results.get_cumulated_electricity('electric_grid_electricity_port')
-        electricity_to_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only positive')
-        electricity_from_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only negative')
+        assert (df_sensors['storage_tank_temperature_sensor'] < C2K(40)).sum() < 500
+        assert (df_sensors['storage_tank_temperature_sensor'] > C2K(80)).sum() < 100
         assert True
