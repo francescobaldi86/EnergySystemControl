@@ -31,12 +31,12 @@ class TestInverterInitialization:
     def test_inverter_custom_design_efficiency(self):
         """Test inverter creation with custom design efficiency."""
         inverter = Inverter(name="test_inverter", design_efficiency=0.95)
-        assert inverter.inverter.design_efficiency == 0.95
+        assert inverter.converter.design_efficiency == 0.95
 
     def test_inverter_default_design_efficiency(self):
         """Test that default efficiency is 0.92."""
         inverter = Inverter(name="test_inverter")
-        assert inverter.inverter.design_efficiency == 0.92
+        assert inverter.converter.design_efficiency == 0.92
 
     def test_inverter_port_names_defined(self):
         """Test that port name attributes are correctly set."""
@@ -81,8 +81,8 @@ class TestInverterInitialization:
             design_efficiency=0.90, 
             efficiency_type="fixed"
         )
-        assert isinstance(inverter.inverter, FixedEfficiencyInverterConverter)
-        assert inverter.inverter.design_efficiency == 0.90
+        assert isinstance(inverter.converter, FixedEfficiencyInverterConverter)
+        assert inverter.converter.design_efficiency == 0.90
 
 
 class TestDCBusComponent:
@@ -363,7 +363,7 @@ class TestInverterIntegration:
         assert inverter.name == "main_inverter"
         assert hasattr(inverter, "dc_bus")
         assert hasattr(inverter, "ac_bus")
-        assert hasattr(inverter, "inverter")
+        assert hasattr(inverter, "converter")
         
         internal_comps = inverter.get_internal_components()
         assert len(internal_comps) == 3
@@ -381,8 +381,8 @@ class TestInverterIntegration:
         ]
         
         for inverter, expected_eff in zip(inverters, efficiencies):
-            assert inverter.inverter.design_efficiency == expected_eff
-            assert inverter.inverter.get_efficiency() == expected_eff
+            assert inverter.converter.design_efficiency == expected_eff
+            assert inverter.converter.get_efficiency() == expected_eff
 
     def test_inverter_port_independence(self):
         """Test that multiple inverters have independent port names."""
@@ -403,12 +403,12 @@ class TestInverterIntegration:
         # Verify they are different objects
         assert inv1.dc_bus is not inv2.dc_bus
         assert inv1.ac_bus is not inv2.ac_bus
-        assert inv1.inverter is not inv2.inverter
+        assert inv1.converter is not inv2.converter
         
         # Verify different names
         assert inv1.dc_bus.name != inv2.dc_bus.name
         assert inv1.ac_bus.name != inv2.ac_bus.name
-        assert inv1.inverter.name != inv2.inverter.name
+        assert inv1.converter.name != inv2.converter.name
 
 
 class TestInverterConverterEdgeCases:

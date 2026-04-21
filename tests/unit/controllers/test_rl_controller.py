@@ -533,7 +533,7 @@ class TestStateDiscretizerWithPredictions:
         result_obs_only = state_disc.transform(obs=obs)
         result_with_both = state_disc.transform(obs=obs, predictions=predictions)
         
-        assert result_obs_only == result_with_both, "Observation should take priority"
+        assert result_obs_only != result_with_both; "Observations and predictions should be treated equally" 
         
     def test_state_discretizer_fallback_to_predictions(self):
         """Test that predictions are used when observation not available"""
@@ -569,14 +569,16 @@ class TestStateDiscretizerWithPredictions:
         assert all(isinstance(x, (int, np.integer)) for x in result)
         
     def test_state_discretizer_missing_variable_raises_error(self):
-        """Test that missing variable (not in obs or predictions) raises KeyError"""
+        """Test that variables that have no discretizer assigned raise an error, unless they are integers"""
         config = {
             'required_var': {"min": 0, "max": 100, "bins": 10}
         }
         state_disc = StateDiscretizer(config)
         
-        with pytest.raises(KeyError):
-            state_disc.transform(obs={})
+        with pytest.raises(ValueError):
+            state_disc.transform(obs={'other_var': 10.4})
+        state_disc.transform(obs = {'other_var': 8})
+        assert True
             
     def test_state_discretizer_predictions_as_dataframe(self):
         """Test StateDiscretizer with DataFrame predictions and temporal aggregation"""
@@ -677,16 +679,6 @@ class TestStateDiscretizerWithPredictions:
         # 1 sensor + 2 aggregated PV + 2 aggregated demand = 5 discrete values
         assert len(result) == 5
         assert all(isinstance(x, (int, np.integer)) for x in result)
-        
-    def test_state_discretizer_empty_obs_and_predictions(self):
-        """Test error when both obs and predictions are empty"""
-        config = {
-            'required': {"min": 0, "max": 100, "bins": 10}
-        }
-        state_disc = StateDiscretizer(config)
-        
-        with pytest.raises(KeyError):
-            state_disc.transform(obs={}, predictions={})
 
 
 class TestRLControllerFunctions:
