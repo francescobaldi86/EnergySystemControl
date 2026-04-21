@@ -99,11 +99,8 @@ class Simulator:
         # 7. Simulate components in your chosen order
         self._simulate_all_components()
 
-        if self.components_to_simulate:
-            raise RuntimeError(
-                f"Step concluded but components {self.components_to_simulate} were not simulated "
-                f"at time {self.state.time}, time ID {self.state.time_id}."
-            )
+        # 8. Check balances on all nodes:
+        self._check_connection_balance()  # This will raise an error if the balance is not correct
 
         # Save results for this step
         sim_data = self._save_simulation_data(sim_data)
@@ -184,9 +181,17 @@ class Simulator:
         for _, port in component.ports.items():
             for layer, value in port.flows.items():
                 if port.connected_port:
-                    self.env.ports[port.connected_port].flow[layer] = -value
-                    if isinstance(self.env.ports[port.connected_port], FluidPort | HeatPort):
-                        self.env.ports[port.connected_port].T = self.env.ports[port.name].T
+                    port.connected_port.flows[layer] = -value
+                    if isinstance(port.connected_port, FluidPort | HeatPort):
+                        port.connected_port.T = self.env.ports[port.name].T
+    
+    def _check_connection_balance(self):
+        # Checks that all connections have the same flow on both sides
+        env = self.env
+        for connection in env.connections:
+            for layer, value in env.ports[connection[0]].flows.items():
+                if abs(value + env.ports[connection[1]].flows[layer]) > 1e-5:
+                    raise ValueError(f"Connection {connection} has unbalanced flows: {env.ports[connection[0]].flows[layer]:.2f} != {env.ports[connection[1]].flows[layer]:.2f}")
 
     def _save_simulation_data(self, sim_data):
         # Ports
