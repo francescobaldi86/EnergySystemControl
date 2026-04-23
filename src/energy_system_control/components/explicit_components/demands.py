@@ -49,13 +49,16 @@ class TimeSeriesDemand(Demand):
     var_unit: Literal['Wh', 'kWh', 'MWh', 'W', 'kW', 'MW', 'l', 'm3', 'kg', 'C', 'K']
     ts: TimeSeriesData
     
-    def __init__(self, name: str, demand_type: str, var_type: str, var_unit: str, uncertainty_model: UncertaintyModel = NoUncertainty, uncertainty_seed: int | None = None):
+    def __init__(self, name: str, ts_data: TimeSeriesData, demand_type: str, var_type: str, var_unit: str, rescale_factor: float = 1.0, uncertainty_model: UncertaintyModel = NoUncertainty, uncertainty_seed: int | None = None):
         self.var_type = var_type
         self.var_unit = var_unit
+        self.ts = ts_data
+        self.rescale_factor = rescale_factor
         super().__init__(name, demand_type, uncertainty_model, uncertainty_seed)
 
     def resample_data(self, time_step_h: float, sim_end_h: float):
         self.ts.resample(time_step_h=time_step_h, sim_end_h=sim_end_h)
+        self.ts.data = self.ts.data * self.rescale_factor
     
 
 class ElectricityDemand(TimeSeriesDemand):
@@ -73,18 +76,23 @@ class ElectricityDemand(TimeSeriesDemand):
 
 
 class HotWaterDemand(TimeSeriesDemand):
-    def __init__(self, name: str, reference_temperature: float, **kwargs):
-        self.demand_type = 'fluid'
+    def __init__(self, name: str, ts_data: TimeSeriesData | None = None, var_unit: Literal['Wh', 'kWh'] = 'kWh', reference_temperature: float = 40, rescale_factor: float = 1.0, **kwargs):
         self.T_ref = C2K(reference_temperature)
-        super().__init__(name, self.demand_type, **kwargs)
+        super().__init__(name = name, 
+                         ts_data = ts_data, 
+                         demand_type = 'fluid', 
+                         var_type = 'energy', 
+                         var_unit = var_unit, 
+                         rescale_factor = rescale_factor,
+                         **kwargs)
 
     def step(self, state: SimulationState, action = None):
         T_cold_water = state.environmental_data.temperature_cold_water
         T_hot_water = self.ports[self.port_name].T 
         demand_kW = self.ts.data[state.time_id]  # This calculates the required power in kW (note: time step is in [s], read value in [kWh], hence the 3600)
-        mdot_dhw_th = demand_kW / WATER.cp / (313.25 - T_cold_water)  # Theroetical hot water mass flow, in kg/s
+        mdot_dhw_th = demand_kW / WATER.cp / (self.T_ref - T_cold_water)  # Theroetical hot water mass flow, in kg/s
         if T_hot_water > self.T_ref:
-            mdot = mdot_dhw_th * (313.25 - T_cold_water) / (T_hot_water - T_cold_water)  # Actual hot water mass flow, in kg/s
+            mdot = mdot_dhw_th * (self.T_ref - T_cold_water) / (T_hot_water - T_cold_water)  # Actual hot water mass flow, in kg/s
         else:
             mdot = mdot_dhw_th
         Qdot = mdot * WATER.cp * T_hot_water  # Enthalpy flow output, in kW

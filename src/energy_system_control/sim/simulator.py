@@ -208,9 +208,9 @@ class Simulator:
                 sim_data.ports[time_id, col] = port.T
         # Controllers
         for controller_name, controller in self.env.controllers.items():
-            for component_name in controller.controlled_component_names:
-                col = self.env.signal_registry_controllers.col_index(controller_name, component_name)
-                sim_data.controllers[time_id, col] = controller.previous_action[component_name]
+            for controlled_component_name, action_value in controller.previous_action.items():
+                col = self.env.signal_registry_controllers.col_index(controller_name, controlled_component_name)
+                sim_data.controllers[time_id, col] = action_value
                 if isinstance(controller, RLController):
                     col_reward = self.env.signal_registry_controllers.col_index(controller_name, 'reward')
                     col_td_error = self.env.signal_registry_controllers.col_index(controller_name, 'td_error')

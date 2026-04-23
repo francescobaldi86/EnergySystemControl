@@ -172,10 +172,10 @@ class QLearningController(RLControllerTabular):
     def get_action(self, state: SimulationState):
         RL_state = self.preprocess_state(state)
         reward = self.reward_function.compute(state)
-        if self.last_state is not None and self.last_action is not None:
+        if self.last_state is not None and self.previous_action is not None:
             self.agent.update(
                 last_state = self.last_state, 
-                last_action = self.last_action, 
+                last_action = self.previous_action, 
                 current_reward = reward,
                 next_state = RL_state,
                 next_action = None) # In Q-learning the next action is not needed for the update)
@@ -185,7 +185,7 @@ class QLearningController(RLControllerTabular):
         action = self.agent.select_action(RL_state, valid_actions)
         self.update_switch_state(action, state.time)
         self.last_state = RL_state
-        self.last_action = action
+        self.previous_action = action
         return action
     
 class SARSAController(RLControllerTabular):
@@ -213,15 +213,15 @@ class SARSAController(RLControllerTabular):
         reward = self.reward_function.compute(state)
         valid_actions = self.agent.map_to_action_space(self.valid_states_function(self.obs))
         action = self.agent.select_action(RL_state, valid_actions)
-        if self.last_state is not None and self.last_action is not None:
+        if self.last_state is not None and self.previous_action is not None:
             self.agent.update(
                 last_state = self.last_state, 
-                last_action = self.last_action, 
+                last_action = self.previous_action, 
                 current_reward = reward,
                 next_state = RL_state,
                 next_action = action) # In SARSA the next action is needed for the update)
         self.last_state = RL_state
-        self.last_action = action
+        self.previous_action = action
         return action
 
 

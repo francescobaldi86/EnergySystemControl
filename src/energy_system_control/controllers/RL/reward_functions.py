@@ -366,9 +366,9 @@ class EnergyCostReward(RewardFunction):
         for comp in self.cost_components:
             energy_exchange = comp["sensor"].get_measurement()  # positive for purchase, negative for feed-in
             if energy_exchange > 0:  # purchasing energy
-                total_cost += energy_exchange * comp["purchase_cost"]
+                total_cost += energy_exchange * comp["purchase_cost"] * state.time_step / 3_600 # EUR/kWh * kW * s * h/s 
             else:  # selling energy
-                total_cost += energy_exchange * comp["feed_in_revenue"]  # note that energy_exchange is negative here
+                total_cost += energy_exchange * comp["feed_in_revenue"] * state.time_step / 3_600  # note that energy_exchange is negative here
         return -total_cost
 
 REWARD_REGISTRY = {

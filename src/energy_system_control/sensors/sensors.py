@@ -128,7 +128,7 @@ class HotWaterDemandSensor(Sensor):
         
         # Get the mass flow and heat flow from the port
         mass_flow_kg = environment.ports[self.port_name].flows['mass']  # in kg
-        heat_flow_kJ = environment.ports[self.port_name].flows['heat']  # in kJ
+        # heat_flow_kJ = environment.ports[self.port_name].flows['heat']  # in kJ
         
         # Get temperatures
         T_hot_water = environment.ports[self.port_name].T  # Hot water temperature in K
@@ -141,7 +141,7 @@ class HotWaterDemandSensor(Sensor):
             # Calculate net heat flow: Q_net = mass_flow * cp * (T_hot - T_cold)
             # Q_net_kJ = mass_flow_kg * WATER.cp * (T_hot_water - T_cold_water)
             # Convert to power in kW
-            Q_net_kJ = mass_flow_kg * WATER.cp * (T_hot_water - T_cold_water)
-            self.current_measurement = Q_net_kJ / state.time_step
+            Q_net_kW = mass_flow_kg * WATER.cp * (T_hot_water - T_cold_water)
+            self.current_measurement = Q_net_kW
         
         return self.current_measurement
