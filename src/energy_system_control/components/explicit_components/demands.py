@@ -103,7 +103,7 @@ class HotWaterDemand(TimeSeriesDemand):
 
 class IEAHotWaterDemand(HotWaterDemand):
     def __init__(self, name: str, reference_temperature: float, profile_name: str, **kwargs):
-        super().__init__(name, reference_temperature, var_type = 'energy', var_unit = 'kWh', **kwargs)
+        super().__init__(name, reference_temperature, var_unit = 'kWh', **kwargs)
         path = files("energy_system_control.data") / "dhw_profiles_iea.csv"
         self.ts = TimeSeriesData(
             raw = pd.read_csv(path, sep = ";", decimal = '.', index_col = 0, header = 0, parse_dates = True, date_format='%H:%M')[profile_name],
@@ -115,5 +115,4 @@ class CustomProfileHotWaterDemand(HotWaterDemand):
         super().__init__(name, reference_temperature, **kwargs)
         self.ts = TimeSeriesData(
             raw = pd.read_csv(os.path.join(data_path, filename), sep = ";", decimal = '.', parse_dates = True),
-            var_type = 'energy',
             var_unit = var_unit)

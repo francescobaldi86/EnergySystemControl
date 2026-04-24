@@ -219,5 +219,8 @@ class Simulator:
         # We also create a registry for each sensor
         for sensor_name, sensor in self.env.sensors.items():
             col = self.env.signal_registry_sensors.col_index(sensor_name, "")
-            sim_data.sensors[time_id, col] = sensor.current_measurement
+            if isinstance(sensor.current_measurement, (int, float)):
+                sim_data.sensors[time_id, col] = sensor.current_measurement
+            else:
+                sim_data.sensors[time_id, col] = sum(sensor.current_measurement) / len(sensor.current_measurement)
         return sim_data
