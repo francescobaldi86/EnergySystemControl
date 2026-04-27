@@ -1,4 +1,5 @@
 from typing import Any, Dict, Literal, List, Tuple
+from numpy import sin, cos, pi
 from energy_system_control.controllers.base import Controller  # or move Controller to core/model.py
 from energy_system_control.core.base_classes import InitContext
 from energy_system_control.controllers.RL.reward_functions import RewardFunction
@@ -100,6 +101,8 @@ class RLControllerTabular(RLController):
                 exploration_policy: ExplorationPolicy | Dict,
                 valid_states_function: ValidStatesFunction | Dict,
                 state_discretizer: StateDiscretizer | Dict,
+                include_hour_of_day: bool = False,
+                include_day_of_the_year: bool = False,
                 minimum_time_between_state_switches_h: Dict[str, float] | None = None
                 ):
         controlled_components = list(actions.keys())
@@ -107,6 +110,8 @@ class RLControllerTabular(RLController):
         if isinstance(agent, dict):
             agent['actions'] = actions
         self.minimum_time_between_state_switches = {k: v * 3600 for k, v in minimum_time_between_state_switches_h.items()} if minimum_time_between_state_switches_h is not None else None
+        self.include_hour_of_day = include_hour_of_day
+        self.include_day_of_the_year = include_day_of_the_year
         super().__init__(name = name, controlled_components=controlled_components, sensors=sensors, agent = agent, predictors=predictors, reward_function=reward_function, exploration_policy = exploration_policy, valid_states_function=valid_states_function)
         
     def initialize(self, ctx):
@@ -120,12 +125,24 @@ class RLControllerTabular(RLController):
                     vmax = self.minimum_time_between_state_switches[component_name] + 3600,
                     n_bins = 10
                 )
+        if self.include_hour_of_day:
+            self.state_discretizer.discretizers[f'Hour of day (sin)'] = Discretizer(vmin = 0.0, vmax = 1.0, n_bins = 10)
+            self.state_discretizer.discretizers[f'Hour of day (cos)'] = Discretizer(vmin = 0.0, vmax = 1.0, n_bins = 10)
+        if self.include_day_of_the_year:
+            self.state_discretizer.discretizers[f'Day of year (sin)'] = Discretizer(vmin = 0.0, vmax = 1.0, n_bins = 10)
+            self.state_discretizer.discretizers[f'Day of year (cos)'] = Discretizer(vmin = 0.0, vmax = 1.0, n_bins = 10)
 
     def preprocess_state(self, state: SimulationState):
         if self.minimum_time_between_state_switches:
             for component, last_switch_time in self.last_switch_time.items():
                 self.obs[f'Time_since_last_switch_{component}'] = state.time - last_switch_time
                 self.obs[f'Current mode_{component}'] = int(self.current_mode[component])
+        if self.include_hour_of_day:
+            self.obs[f'Hour of day (sin)'] = sin(2 * pi * state.time / 86400)
+            self.obs[f'Hour of day (cos)'] = cos(2 * pi * state.time / 86400)
+        if self.include_day_of_the_year:
+            self.obs[f'Day of year (sin)'] = sin(2 * pi * state.time / (365*86400))
+            self.obs[f'Day of year (cos)'] = cos(2 * pi * state.time / (365*86400))
         return self.state_discretizer.transform(obs = self.obs, predictions=self.predictions)
     
     def update_switch_state(self, action, current_time):
@@ -155,6 +172,8 @@ class QLearningController(RLControllerTabular):
                 state_discretizer: StateDiscretizer | Dict,
                 exploration_policy: ExplorationPolicy | Dict = {},
                 valid_states_function: ValidStatesFunction | Dict = {},
+                include_hour_of_day: bool = False,
+                include_day_of_the_year: bool = False,
                 agent_config_info: Dict = {},
                 minimum_time_between_state_switches_h: Dict[str, float] | None = None,
                 predictors: Dict[str, str] = {}):
@@ -166,6 +185,8 @@ class QLearningController(RLControllerTabular):
                          reward_function=reward_function, 
                          exploration_policy=exploration_policy,
                          valid_states_function = valid_states_function, 
+                         include_day_of_the_year = include_day_of_the_year,
+                         include_hour_of_day = include_hour_of_day,
                          state_discretizer=state_discretizer,
                          minimum_time_between_state_switches_h=minimum_time_between_state_switches_h)
 
@@ -196,6 +217,8 @@ class SARSAController(RLControllerTabular):
                 actions: Dict[str, List[Any]],
                 reward_function: RewardFunction, 
                 state_discretizer: StateDiscretizer,
+                include_hour_of_day: bool = False,
+                include_day_of_the_year: bool = False,
                 minimum_time_between_state_switches_h: Dict[str, float] | None = None,
                 agent_kwargs: dict = {}):
         super().__init__(name = name, 
@@ -204,6 +227,8 @@ class SARSAController(RLControllerTabular):
                          actions=actions, 
                          reward_function=reward_function, 
                          state_discretizer=state_discretizer, 
+                         include_day_of_the_year = include_day_of_the_year,
+                         include_hour_of_day = include_hour_of_day,
                          minimum_time_between_state_switches_h=minimum_time_between_state_switches_h,
                          agent_type="sarsa", 
                          agent_kwargs=agent_kwargs)
