@@ -236,9 +236,11 @@ class TemperatureMinMaxReward(RewardFunction):
         Returns:
             float: Reward value (negative for out-of-bounds temperature, zero otherwise).
         """
-        error_max = max(self.sensor.get_measurement() - self.max_temp, 0)
-        error_min = max(self.min_temp - self.sensor.get_measurement(), 0)
-        return -self.weight * (error_max + error_min)**2
+        temperature = self.sensor.get_measurement()
+        error_max = max(temperature - self.max_temp, 0)
+        error_min = max(self.min_temp - temperature, 0)
+        reward = -self.weight * state.time_step / 3_600 * (error_max + error_min)**2  # We multiply by the time step for coherence with energy-related rewards. This way, the balance between rewards does not depend on the time step
+        return reward
 
 class ComponentCostReward(RewardFunction):
     """Reward for minimizing energy cost of a controlled component.
@@ -295,7 +297,8 @@ class ComponentCostReward(RewardFunction):
         if self.controller.last_action is None:
             return 0
         else:
-            return -self.weight * self.energy_cost_per_kWh * self.default_power_kW * self.controller.last_action[self.controlled_component_name] * state.time_step / 3600
+            reward = -self.weight * self.energy_cost_per_kWh * self.default_power_kW * self.controller.last_action[self.controlled_component_name] * state.time_step / 3600
+            return reward
     
 
 class EnergyCostReward(RewardFunction):
@@ -368,7 +371,7 @@ class EnergyCostReward(RewardFunction):
             if energy_exchange > 0:  # purchasing energy
                 total_cost += energy_exchange * comp["purchase_cost"] * state.time_step / 3_600 # EUR/kWh * kW * s * h/s 
             else:  # selling energy
-                total_cost += energy_exchange * comp["feed_in_revenue"] * state.time_step / 3_600  # note that energy_exchange is negative here
+                total_cost -= energy_exchange * comp["feed_in_revenue"] * state.time_step / 3_600  # note that energy_exchange is negative here
         return -total_cost
 
 REWARD_REGISTRY = {

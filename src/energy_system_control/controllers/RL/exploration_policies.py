@@ -9,7 +9,7 @@ class ExplorationPolicy(ABC):
         self.config_info = config_info
 
     @abstractmethod
-    def select_action(self, agent, state):
+    def select_action(self, agent, state, obs):
         """
         agent: gives access to Q-values or policy
         state: current state
@@ -39,13 +39,16 @@ class BiasFunction():
             if not isinstance(probs, (list, tuple)):
                 raise ValueError(f'The probabilities provided for the interval {bounds} are not correct. Provided values are {probs}')
     
-    def get_bias(self, state, valid_actions):
-
-        value = state[self.sensor_name]
-        for bounds, probs in self.info.items():
-            if value > bounds[0] and value <= bounds[1]:
-                return [v for k, v in probs if k in valid_actions]
-        raise ValueError(f'The value {value} is not in any of the intervals provided in the config information.')
+    def get_bias(self, valid_actions, obs):
+        value = obs[self.sensor_name]
+        if len(valid_actions) == 1:
+            return [1.0]
+        else:
+            for bounds, probs in self.info.items():
+                if value > bounds[0] and value <= bounds[1]:
+                    probs = [v for k, v in probs if k in valid_actions]
+                    return [p / sum(probs) for p in probs]
+            raise ValueError(f'The value {value} is not in any of the intervals provided in the config information.')
 
     @classmethod
     def make_bias_function(cls, control_variable, config_info):
@@ -60,11 +63,11 @@ class EpsilonGreedy(ExplorationPolicy):
         else:
             self.bias_function = None
 
-    def select_action(self, state, valid_actions):
+    def select_action(self, state, valid_actions, obs):
         if self.config_info is None:
             probs = [1/len(valid_actions) for k in valid_actions]
         else:
-            probs = self.bias_function.get_bias(state, valid_actions)
+            probs = self.bias_function.get_bias(valid_actions, obs)
         return self.rng.choice(valid_actions, p = probs)
         
 

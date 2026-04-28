@@ -126,11 +126,11 @@ class RLControllerTabular(RLController):
                     n_bins = 10
                 )
         if self.include_hour_of_day:
-            self.state_discretizer.discretizers[f'Hour of day (sin)'] = Discretizer(vmin = 0.0, vmax = 1.0, n_bins = 10)
-            self.state_discretizer.discretizers[f'Hour of day (cos)'] = Discretizer(vmin = 0.0, vmax = 1.0, n_bins = 10)
+            self.state_discretizer.discretizers[f'Hour of day (sin)'] = Discretizer(vmin = -1.0, vmax = 1.0, n_bins = 10)
+            self.state_discretizer.discretizers[f'Hour of day (cos)'] = Discretizer(vmin = -1.0, vmax = 1.0, n_bins = 10)
         if self.include_day_of_the_year:
-            self.state_discretizer.discretizers[f'Day of year (sin)'] = Discretizer(vmin = 0.0, vmax = 1.0, n_bins = 10)
-            self.state_discretizer.discretizers[f'Day of year (cos)'] = Discretizer(vmin = 0.0, vmax = 1.0, n_bins = 10)
+            self.state_discretizer.discretizers[f'Day of year (sin)'] = Discretizer(vmin = -1.0, vmax = 1.0, n_bins = 10)
+            self.state_discretizer.discretizers[f'Day of year (cos)'] = Discretizer(vmin = -1.0, vmax = 1.0, n_bins = 10)
 
     def preprocess_state(self, state: SimulationState):
         if self.minimum_time_between_state_switches:
@@ -195,6 +195,7 @@ class QLearningController(RLControllerTabular):
         reward = self.reward_function.compute(state)
         if self.last_state is not None and self.previous_action is not None:
             self.agent.update(
+                state = state,
                 last_state = self.last_state, 
                 last_action = self.previous_action, 
                 current_reward = reward,
@@ -203,10 +204,12 @@ class QLearningController(RLControllerTabular):
         valid_actions_temp = self.valid_states_function(self.obs)
         valid_actions_temp = self.get_valid_states_based_on_minimum_switch_time(valid_actions_temp)
         valid_actions = self.agent.map_to_action_space(valid_actions_temp)
-        action = self.agent.select_action(RL_state, valid_actions)
+        action = self.agent.select_action(RL_state, valid_actions, self.obs)
         self.update_switch_state(action, state.time)
         self.last_state = RL_state
         self.previous_action = action
+        if state.time > 3600*24*50:
+            pass
         return action
     
 class SARSAController(RLControllerTabular):
@@ -237,9 +240,10 @@ class SARSAController(RLControllerTabular):
         RL_state = self.preprocess_state()
         reward = self.reward_function.compute(state)
         valid_actions = self.agent.map_to_action_space(self.valid_states_function(self.obs))
-        action = self.agent.select_action(RL_state, valid_actions)
+        action = self.agent.select_action(RL_state, valid_actions, self.obs)
         if self.last_state is not None and self.previous_action is not None:
             self.agent.update(
+                state = state,
                 last_state = self.last_state, 
                 last_action = self.previous_action, 
                 current_reward = reward,

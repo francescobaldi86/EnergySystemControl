@@ -4,6 +4,7 @@ from itertools import product
 import numpy as np
 from collections import defaultdict
 from energy_system_control.controllers.RL.exploration_policies import ExplorationPolicy
+from energy_system_control.sim.state import SimulationState
 
 
 class RLAgent(ABC):
@@ -35,7 +36,8 @@ class DiscreteActionRLAgent(RLAgent):
         self.alpha = alpha
         self.gamma = gamma
         self.epsilon = epsilon
-        self.decay = decay
+        self.epsilon_0 = epsilon
+        self.decay = decay  # It's to be understood as the characteristic time of the exponential decay. Hence, a value of 1000 means that the epsilon will decay to 1/e of its initial value after 1000 hours.
         self.min_epsilon = min_epsilon
         self._create_action_space()
         self.q_table = defaultdict(lambda: np.zeros(len(self.action_space)))
@@ -69,9 +71,9 @@ class DiscreteActionRLAgent(RLAgent):
                 output.append(action_id)
         return output
 
-    def select_action(self, state, valid_actions):
+    def select_action(self, state, valid_actions, obs):
         if self.rng.random() < self.epsilon:
-            return self.exploration_policy.select_action(state, valid_actions)
+            return self.action_space[int(self.exploration_policy.select_action(state, valid_actions, obs))]
         else:
             return self.greedy_action(state, valid_actions)
 
@@ -88,9 +90,9 @@ class DiscreteActionRLAgent(RLAgent):
         idx = self.rng.choice(best_global_idxs)
         return self.action_space[idx]
     
-    def update(self):
+    def update(self, state: SimulationState):
         if self.decay:
-            self.epsilon = max(self.min_epsilon, self.epsilon * self.decay)
+            self.epsilon = self.min_epsilon + (self.epsilon_0 - self.min_epsilon) * np.exp(-(state.time/3600) / self.decay)
 
 
 class QLearningAgent(DiscreteActionRLAgent):
@@ -98,9 +100,9 @@ class QLearningAgent(DiscreteActionRLAgent):
     def __init__(self, actions, exploration_policy: ExplorationPolicy | None = None, alpha: float = 0.1, gamma: float = 0.99, epsilon : float = 0.1, decay: float | None = None, min_epsilon: float = 0.0):
         super().__init__(actions, alpha, gamma, epsilon, decay, min_epsilon, exploration_policy)
 
-    def update(self, last_state, last_action, current_reward, next_state, next_action=None):
+    def update(self, state, last_state, last_action, current_reward, next_state, next_action=None):
         # a_idx = self.action_space.index(last_action)
-        super().update()
+        super().update(state)
         a_idx = next(k for k, v in self.action_space.items() if v == last_action)
         best_next = np.max(self.q_table[next_state])
         td_target = current_reward + self.gamma * best_next
@@ -115,10 +117,10 @@ class SARSAAgent(DiscreteActionRLAgent):
     def __init__(self, actions, exploration_policy: ExplorationPolicy, alpha=0.1, gamma=0.9):
         super().__init__(actions, exploration_policy, alpha, gamma)
     
-    def update(self, last_state, last_action, current_reward, next_state, next_action):
+    def update(self, state, last_state, last_action, current_reward, next_state, next_action):
         # a_idx = self.action_space.index(last_action)
         # next_a_idx = self.action_space.index(next_action)
-        super().update()
+        super().update(state)
         a_idx = next(k for k, v in self.action_space.items() if v == last_action)
         next_a_idx = next(k for k, v in self.action_space.items() if v == next_action)
         td_target = current_reward + self.gamma * self.q_table[next_state][next_a_idx]

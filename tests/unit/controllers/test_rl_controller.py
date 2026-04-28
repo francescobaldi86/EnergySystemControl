@@ -22,7 +22,7 @@ def test_components():
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45),
         esc.ElectricityGrid(name = 'electric_grid', cost_of_electricity_purchased=0.24, value_of_electricity_sold=0.06),
         esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
-        esc.PVpanelFromPVGISData(name = 'pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename = 'pvgis_data.csv', rescale_factor = 3.0),
+        esc.PVpanelFromPVGISData(name = 'pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename = 'pvgis_data.csv', rescale_factor = 0.5),
         esc.LithiumIonBattery(name = 'battery', capacity = 2.0, SOC_0 = 0.5),
         esc.Inverter(name = 'inverter')
     ]
@@ -932,22 +932,24 @@ class TestRLControllerFull:
             QLearningController(
                 name = 'test_RL_controller',
                 sensors = {'storage tank temperature': 'storage_tank_temperature_sensor',
-                           'power PV': 'PV_power_sensor'},
+                           'power PV': 'PV_power_sensor',
+                           'battery SOC': 'battery_SOC_sensor'},
                 actions = {'heat_pump': [0, 1]},
                 exploration_policy = {'type': 'epsilon-greedy',
                                       'config info': {
                                           'bias function': {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): [(0, 0.0), (1, 1.0)], (273+35, 273+40): [(0, 0.1), (1, 0.9)], (273+40, 273+60): [(0, 0.5), (1, 0.5)], (273+60, 273+70): [(0, 0.8), (1, 0.2)], (273+70, 273+100): [(0, 1.0), (1, 0.0)]}}}},
                 valid_states_function = {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): {'heat_pump': [1]}, (273+35, 273+70): {'heat_pump': [0, 1]}, (273+70, 273+100): {'heat_pump': [0]}}},
-                minimum_time_between_state_switches_h = {'heat_pump': 0.5},
-                agent_config_info = {'epsilon': 0.2, 'decay': 0.01, 'alpha': 0.1},
+                minimum_time_between_state_switches_h = {'heat_pump': 0.25},
+                agent_config_info = {'epsilon': 0.4, 'decay': 24*30, 'alpha': 0.1, 'min_epsilon': 0.1},
                 reward_function = CompositeReward([
-                    TemperatureMinMaxReward(sensor_name='storage_tank_temperature_sensor', min_temp=40, max_temp=60.0, weight=0.1),
+                    TemperatureMinMaxReward(sensor_name='storage_tank_temperature_sensor', min_temp=40, max_temp=65.0, weight=0.000000),
                     EnergyCostReward(cost_components = [{'component': 'electric_grid', 'sensor': 'grid_power_sensor'}])
                 ]),
-                include_hour_of_day = True,
-                include_day_of_the_year = True,
+                include_hour_of_day = False,
+                include_day_of_the_year = False,
                 state_discretizer = {'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},
-                                     'power PV': {'min': 0, 'max': 3.0, "bins": 10}}),
+                                     'power PV': {'min': 0, 'max': 3.0, "bins": 10},
+                                     'battery SOC': {'min': 0, 'max': 1.0, 'bins': 3}}),
             esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'inverter_power_output_sensor', 'PV_power_sensor')
                     ]
         connections = [
@@ -962,7 +964,7 @@ class TestRLControllerFull:
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*30, time_step_h = 1/60)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*180, time_step_h = 1/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
