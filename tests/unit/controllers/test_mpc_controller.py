@@ -67,6 +67,7 @@ def test_MPC_HybridDHW_application(test_components, test_sensors):
     # Test of a full system
     controllers = [
         MPCController_HybridDHW('MPC_controller',
+                                heat_pump_name = 'heat_pump',
                                 storage_temperature_sensor = 'storage_tank_temperature_sensor',
                                 battery_SOC_sensor = 'battery_SOC_sensor',
                                 PV_power_predictor_name = 'pv_power_predictor',
@@ -127,6 +128,7 @@ def test_MPC_with_hybrid_AR_predictors(test_components, test_sensors):
     
     controllers = [
         MPCController_HybridDHW('MPC_controller',
+                                heat_pump_name = 'heat_pump',
                                 storage_temperature_sensor='storage_tank_temperature_sensor',
                                 battery_SOC_sensor='battery_SOC_sensor',
                                 PV_power_predictor_name='pv_power_predictor',
@@ -208,6 +210,7 @@ def test_MPC_perfect_vs_HybridAR_predictors(test_components, test_sensors):
     # --- Run with Perfect Time Series Predictors ---
     controllers_perfect = [
         MPCController_HybridDHW('MPC_controller',
+                                heat_pump_name = 'heat_pump',
                                 storage_temperature_sensor='storage_tank_temperature_sensor',
                                 battery_SOC_sensor='battery_SOC_sensor',
                                 PV_power_predictor_name='pv_power_predictor',
@@ -244,6 +247,7 @@ def test_MPC_perfect_vs_HybridAR_predictors(test_components, test_sensors):
     # --- Run with ANN-Based Predictors ---
     controllers_ann = [
         MPCController_HybridDHW('MPC_controller',
+                                heat_pump_name = 'heat_pump',
                                 storage_temperature_sensor='storage_tank_temperature_sensor',
                                 battery_SOC_sensor='battery_SOC_sensor',
                                 PV_power_predictor_name='pv_power_predictor',
@@ -326,6 +330,7 @@ def test_compare_mpc_to_other_controllers(test_components, test_sensors, test_pr
                 ],
         'MPC': [
             MPCController_HybridDHW('MPC_controller',
+                                    heat_pump_name = 'heat_pump',
                                     storage_temperature_sensor = 'storage_tank_temperature_sensor',
                                     battery_SOC_sensor = 'battery_SOC_sensor',
                                     PV_power_predictor_name = 'pv_power_predictor',

@@ -64,11 +64,11 @@ class TimeSeriesDemand(Demand):
 class ElectricityDemand(TimeSeriesDemand):
     def __init__(self, name: str, path: str = None, **kwargs):
         self.demand_type = 'electricity'
-        super().__init__(name = name, demand_type = self.demand_type, var_type = 'energy', **kwargs)
-        self.ts = TimeSeriesData(
+        ts_data = TimeSeriesData(
             raw = pd.read_csv(path, index_col=0, sep = ";", decimal = '.', parse_dates = True),
             var_type = 'energy',
             var_unit = 'kWh')
+        super().__init__(name = name, ts_data = ts_data, demand_type = self.demand_type, var_type = 'energy', **kwargs)
         
     def step(self, state: SimulationState, action = None):
         temp_kW = self.ts.data[state.time_id]  # This calculates the required power in kW (note: time step is in [s], read value in [kWh], hence the 3600)

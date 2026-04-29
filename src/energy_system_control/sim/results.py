@@ -34,9 +34,9 @@ class SimulationResults:
             start_index = int(time_interval_h[0] * 3_600 / self.time_step)
             end_index = int(time_interval_h[1] * 3_600 / self.time_step)
 
+        temp = self.data.ports[start_index: end_index, col]
         match sign:
             case 'only positive':
-                temp = self.data.ports[start_index: end_index, col]
                 return temp[temp >= 0.0].sum() * self.time_step * scaling_factor
             case 'only negative':
                 return -temp[temp <= 0.0].sum() * self.time_step * scaling_factor

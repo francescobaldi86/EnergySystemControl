@@ -121,7 +121,7 @@ def test_4():
         esc.PVpanelFromPVGIS(name = 'pv_panels', installed_power=0.8, latitude=44.500365, longitude=11.350096, tilt=90, azimuth=90),
         esc.LithiumIonBattery(name = 'battery', capacity = 1.5, SOC_0 = 0.5),
         esc.Inverter(name = 'inverter'),
-        esc.ElectricityDemand(name = 'demand', var_unit = 'kWh', path = os.path.join(__TEST__, 'DATA', 'yearly_data_electricity_demand_15min.csv'))
+        esc.ElectricityDemand(name = 'demand', path = os.path.join(__TEST__, 'DATA', 'yearly_data_electricity_demand_15min.csv'), var_unit = 'kWh')
     ]
     controllers = [
         esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'electricity_demand_sensor', 'pv_power_sensor')

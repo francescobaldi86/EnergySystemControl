@@ -65,6 +65,7 @@ class MPCController_HybridDHW(MPCController):
     def __init__(self,
                     name: str,
                     horizon: float,
+                    heat_pump_name: str,
                     storage_temperature_sensor: str | None = None,
                     battery_SOC_sensor: str | None = None,
                     PV_power_predictor_name: str | None = None,
@@ -86,7 +87,7 @@ class MPCController_HybridDHW(MPCController):
         self.cost_of_temperature_violation = cost_of_temperature_violation
         super().__init__(
             name = name,
-            controlled_components = [],
+            controlled_components = [heat_pump_name],
             sensors = sensors,
             predictors = predictors,
             horizon = horizon,

@@ -1,6 +1,7 @@
 # energy_system_control/sim/simulator.py
 from dataclasses import dataclass
 from typing import Any
+from numbers import Number
 import numpy as np
 import pandas as pd
 
@@ -71,6 +72,32 @@ class Simulator:
         for _, component in self.env.components.items():
             if callable(getattr(component, 'resample_data', None)):
                 component.resample_data(self.cfg.time_step_h, self.cfg.time_end_h + self.cfg.prediction_horizon_margin_h)
+
+    def _normalize_measurement(self, value):
+        """
+        Normalize a measurement value to a single scalar.
+        - Numbers (int, float, np scalar types) → saved directly
+        - Iterables (list, np.array, etc.) → average is saved
+        - None → NaN is saved
+        """
+        # Handle None explicitly
+        if value is None:
+            return np.nan
+        
+        # Handle numeric types (built-in + numpy)
+        if isinstance(value, (Number, np.generic)):
+            return float(value)
+        
+        # Handle iterables (lists, arrays, etc.)
+        try:
+            # Try to convert to array and compute mean
+            arr = np.asarray(value)
+            if arr.size == 0:
+                return np.nan  # Empty array
+            return float(np.mean(arr))
+        except (TypeError, ValueError):
+            # If it's not iterable or can't be converted, return NaN
+            return np.nan
 
     def _step(self, sim_data: SimulationData) -> None:
         env = self.env  # just a shorthand
@@ -219,8 +246,5 @@ class Simulator:
         # We also create a registry for each sensor
         for sensor_name, sensor in self.env.sensors.items():
             col = self.env.signal_registry_sensors.col_index(sensor_name, "")
-            if isinstance(sensor.current_measurement, (int, float)):
-                sim_data.sensors[time_id, col] = sensor.current_measurement
-            else:
-                sim_data.sensors[time_id, col] = sum(sensor.current_measurement) / len(sensor.current_measurement)
+            sim_data.sensors[time_id, col] = self._normalize_measurement(sensor.current_measurement)
         return sim_data

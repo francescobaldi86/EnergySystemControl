@@ -873,8 +873,8 @@ class TestRLControllerFull:
         # Run simulation
         results = sim.run()
         df_ports, df_controllers, df_sensors = results.to_dataframe()    
-        assert (df_sensors['storage_tank_temperature_sensor'] < C2K(40)).sum() < 500
-        assert (df_sensors['storage_tank_temperature_sensor'] > C2K(80)).sum() < 100
+        assert (df_sensors.loc[df_sensors.index[-500:], 'storage_tank_temperature_sensor'] < C2K(40)).sum() < 10
+        assert (df_sensors.loc[df_sensors.index[-500:], 'storage_tank_temperature_sensor'] > C2K(80)).sum() < 10
         assert True
 
     def test_RL_HybridDHW_application_TandP_with_minimum_switch_time(self, test_components, test_sensors):
