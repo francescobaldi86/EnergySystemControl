@@ -103,7 +103,9 @@ class RLControllerTabular(RLController):
                 state_discretizer: StateDiscretizer | Dict,
                 include_hour_of_day: bool = False,
                 include_day_of_the_year: bool = False,
-                minimum_time_between_state_switches_h: Dict[str, float] | None = None
+                minimum_time_between_state_switches_h: Dict[str, float] | None = None,
+                include_time_between_state_switches: bool = False,
+                keep_track_of_visited_states: bool = False,
                 ):
         controlled_components = list(actions.keys())
         self.state_discretizer = state_discretizer if isinstance(state_discretizer, StateDiscretizer) else StateDiscretizer(state_discretizer)
@@ -112,6 +114,8 @@ class RLControllerTabular(RLController):
         self.minimum_time_between_state_switches = {k: v * 3600 for k, v in minimum_time_between_state_switches_h.items()} if minimum_time_between_state_switches_h is not None else None
         self.include_hour_of_day = include_hour_of_day
         self.include_day_of_the_year = include_day_of_the_year
+        self.include_time_between_state_switches = include_time_between_state_switches
+        self.keep_track_of_visited_states = keep_track_of_visited_states
         super().__init__(name = name, controlled_components=controlled_components, sensors=sensors, agent = agent, predictors=predictors, reward_function=reward_function, exploration_policy = exploration_policy, valid_states_function=valid_states_function)
         
     def initialize(self, ctx):
@@ -119,21 +123,24 @@ class RLControllerTabular(RLController):
         if self.minimum_time_between_state_switches is not None:
             self.last_switch_time = {k: -3600 for k in self.controlled_component_names if k in self.minimum_time_between_state_switches.keys()}
             self.current_mode = {k: 0 for k in self.controlled_component_names if k in self.minimum_time_between_state_switches.keys()}
-            for component_name in self.minimum_time_between_state_switches.keys():
-                self.state_discretizer.discretizers[f'Time_since_last_switch_{component_name}'] = Discretizer(
-                    vmin = 0.0,
-                    vmax = self.minimum_time_between_state_switches[component_name] + 3600,
-                    n_bins = 10
-                )
+            if self.include_time_between_state_switches:
+                for component_name in self.minimum_time_between_state_switches.keys():
+                    self.state_discretizer.discretizers[f'Time_since_last_switch_{component_name}'] = Discretizer(
+                        vmin = 0.0,
+                        vmax = self.minimum_time_between_state_switches[component_name] + 3600,
+                        n_bins = 10
+                    )
         if self.include_hour_of_day:
             self.state_discretizer.discretizers[f'Hour of day (sin)'] = Discretizer(vmin = -1.0, vmax = 1.0, n_bins = 10)
             self.state_discretizer.discretizers[f'Hour of day (cos)'] = Discretizer(vmin = -1.0, vmax = 1.0, n_bins = 10)
         if self.include_day_of_the_year:
             self.state_discretizer.discretizers[f'Day of year (sin)'] = Discretizer(vmin = -1.0, vmax = 1.0, n_bins = 10)
             self.state_discretizer.discretizers[f'Day of year (cos)'] = Discretizer(vmin = -1.0, vmax = 1.0, n_bins = 10)
+        if self.keep_track_of_visited_states:
+            self.agent.activate_visited_states_tracker()  # Activates the state tracker
 
     def preprocess_state(self, state: SimulationState):
-        if self.minimum_time_between_state_switches:
+        if self.include_time_between_state_switches:
             for component, last_switch_time in self.last_switch_time.items():
                 self.obs[f'Time_since_last_switch_{component}'] = state.time - last_switch_time
                 self.obs[f'Current mode_{component}'] = int(self.current_mode[component])
@@ -152,14 +159,32 @@ class RLControllerTabular(RLController):
                     self.current_mode[component_name] = action
                     self.last_switch_time[component_name] = current_time
 
-    def get_valid_states_based_on_minimum_switch_time(self, valid_actions):
+    def get_valid_states_based_on_minimum_switch_time(self, state: SimulationState, valid_actions):
         if self.minimum_time_between_state_switches is not None:
             for component, minimum_switch_time in self.minimum_time_between_state_switches.items():
-                time_since_last_switch = self.obs[f'Time_since_last_switch_{component}']
+                time_since_last_switch = state.time - self.last_switch_time[component]
                 if time_since_last_switch < minimum_switch_time:
                     valid_actions[component] = [self.current_mode[component]]
         return valid_actions
+    
+    def get_action(self, state: SimulationState):
+        RL_state = self.preprocess_state(state)
+        reward = self.reward_function.compute(state)
+        idx, action = self.run_and_update_agent(state, RL_state, reward)
+        self.update_switch_state(action, state.time)
+        self.last_state = RL_state
+        self.previous_action = action
+        if state.time > 3600*24*50:
+            pass
+        return action
 
+
+    def select_action(self, state: SimulationState, RL_state: tuple):
+        valid_actions_temp = self.valid_states_function(self.obs)
+        valid_actions_temp = self.get_valid_states_based_on_minimum_switch_time(state, valid_actions_temp)
+        valid_actions = self.agent.map_to_action_space(valid_actions_temp)
+        idx, action = self.agent.select_action(RL_state, valid_actions, self.obs)
+        return idx, action
 
 
 
@@ -174,9 +199,11 @@ class QLearningController(RLControllerTabular):
                 valid_states_function: ValidStatesFunction | Dict = {},
                 include_hour_of_day: bool = False,
                 include_day_of_the_year: bool = False,
+                include_time_between_state_switches: bool = False,
                 agent_config_info: Dict = {},
                 minimum_time_between_state_switches_h: Dict[str, float] | None = None,
-                predictors: Dict[str, str] = {}):
+                predictors: Dict[str, str] = {},
+                keep_track_of_visited_states: bool = False,):
         super().__init__(name = name, 
                          agent = {'type': "q_learning", 'config info': agent_config_info},
                          sensors=sensors, 
@@ -187,12 +214,12 @@ class QLearningController(RLControllerTabular):
                          valid_states_function = valid_states_function, 
                          include_day_of_the_year = include_day_of_the_year,
                          include_hour_of_day = include_hour_of_day,
+                         include_time_between_state_switches = include_time_between_state_switches,
                          state_discretizer=state_discretizer,
-                         minimum_time_between_state_switches_h=minimum_time_between_state_switches_h)
+                         minimum_time_between_state_switches_h=minimum_time_between_state_switches_h,
+                         keep_track_of_visited_states = keep_track_of_visited_states)
 
-    def get_action(self, state: SimulationState):
-        RL_state = self.preprocess_state(state)
-        reward = self.reward_function.compute(state)
+    def run_and_update_agent(self, state: SimulationState, RL_state: tuple, reward: float) -> dict:
         if self.last_state is not None and self.previous_action is not None:
             self.agent.update(
                 state = state,
@@ -201,16 +228,14 @@ class QLearningController(RLControllerTabular):
                 current_reward = reward,
                 next_state = RL_state,
                 next_action = None) # In Q-learning the next action is not needed for the update)
-        valid_actions_temp = self.valid_states_function(self.obs)
-        valid_actions_temp = self.get_valid_states_based_on_minimum_switch_time(valid_actions_temp)
-        valid_actions = self.agent.map_to_action_space(valid_actions_temp)
-        action = self.agent.select_action(RL_state, valid_actions, self.obs)
+        idx, action = self.select_action(state, RL_state)
         self.update_switch_state(action, state.time)
         self.last_state = RL_state
         self.previous_action = action
-        if state.time > 3600*24*50:
-            pass
-        return action
+        return idx, action
+        
+    
+
     
 class SARSAController(RLControllerTabular):
     def __init__(self,
@@ -222,7 +247,9 @@ class SARSAController(RLControllerTabular):
                 state_discretizer: StateDiscretizer,
                 include_hour_of_day: bool = False,
                 include_day_of_the_year: bool = False,
+                include_time_between_state_switches: bool = False,
                 minimum_time_between_state_switches_h: Dict[str, float] | None = None,
+                keep_track_of_visited_states: bool = False,
                 agent_kwargs: dict = {}):
         super().__init__(name = name, 
                          sensors=sensors, 
@@ -232,15 +259,14 @@ class SARSAController(RLControllerTabular):
                          state_discretizer=state_discretizer, 
                          include_day_of_the_year = include_day_of_the_year,
                          include_hour_of_day = include_hour_of_day,
+                         include_time_between_state_switches = include_time_between_state_switches,
                          minimum_time_between_state_switches_h=minimum_time_between_state_switches_h,
+                         keep_track_of_visited_states = keep_track_of_visited_states,
                          agent_type="sarsa", 
                          agent_kwargs=agent_kwargs)
 
-    def get_action(self, state: SimulationState):
-        RL_state = self.preprocess_state()
-        reward = self.reward_function.compute(state)
-        valid_actions = self.agent.map_to_action_space(self.valid_states_function(self.obs))
-        action = self.agent.select_action(RL_state, valid_actions, self.obs)
+    def run_and_update_agent(self, state: SimulationState, RL_state: tuple, reward: float) -> dict:
+        idx, action = self.select_action(state, RL_state)
         if self.last_state is not None and self.previous_action is not None:
             self.agent.update(
                 state = state,
@@ -249,9 +275,4 @@ class SARSAController(RLControllerTabular):
                 current_reward = reward,
                 next_state = RL_state,
                 next_action = action) # In SARSA the next action is needed for the update)
-        self.last_state = RL_state
-        self.previous_action = action
-        return action
-
-
-
+        return idx, action

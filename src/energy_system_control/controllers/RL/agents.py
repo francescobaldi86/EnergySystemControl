@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Tuple
 from itertools import product
 import numpy as np
+import pandas as pd
 from collections import defaultdict
 from energy_system_control.controllers.RL.exploration_policies import ExplorationPolicy
 from energy_system_control.sim.state import SimulationState
@@ -41,6 +42,7 @@ class DiscreteActionRLAgent(RLAgent):
         self.min_epsilon = min_epsilon
         self._create_action_space()
         self.q_table = defaultdict(lambda: np.zeros(len(self.action_space)))
+
         self.last_reward = None
         self.last_td_error = None
         self.rng = np.random.default_rng()
@@ -73,7 +75,8 @@ class DiscreteActionRLAgent(RLAgent):
 
     def select_action(self, state, valid_actions, obs):
         if self.rng.random() < self.epsilon:
-            return self.action_space[int(self.exploration_policy.select_action(state, valid_actions, obs))]
+            idx = int(self.exploration_policy.select_action(state, valid_actions, obs))
+            return idx, self.action_space[idx]
         else:
             return self.greedy_action(state, valid_actions)
 
@@ -88,11 +91,26 @@ class DiscreteActionRLAgent(RLAgent):
         best_local_idxs = np.flatnonzero(permitted_q_values == permitted_q_values.max())
         best_global_idxs = [valid_indices[i] for i in best_local_idxs]
         idx = self.rng.choice(best_global_idxs)
-        return self.action_space[idx]
+        return idx, self.action_space[idx]
     
     def update(self, state: SimulationState):
         if self.decay:
             self.epsilon = self.min_epsilon + (self.epsilon_0 - self.min_epsilon) * np.exp(-(state.time/3600) / self.decay)
+
+    def activate_visited_states_tracker(self):
+        self.visited_states = defaultdict(lambda: np.zeros(len(self.action_space)))
+
+    def get_agent_data(self):
+        df = pd.DataFrame(index = self.q_table.keys())
+        temp = [v for _, v in self.action_space.items()]
+        q_value_columns = [f'Q-value {comp}: {state}' for x in temp for comp, state in x.items()]
+        df.loc[:, q_value_columns] = np.array([x for x in self.q_table.values()])
+        if getattr(self, "visited_states", None):
+            visied_columns = [f'Visits to {comp}: {state}' for x in temp for comp, state in x.items()]
+            df.loc[:, visied_columns] = np.array([x for x in self.visited_states.values()])
+        df.sort_index(ascending=True, inplace=True)
+        return df
+
 
 
 class QLearningAgent(DiscreteActionRLAgent):
@@ -108,6 +126,8 @@ class QLearningAgent(DiscreteActionRLAgent):
         td_target = current_reward + self.gamma * best_next
         td_error = td_target - self.q_table[last_state][a_idx]
         self.q_table[last_state][a_idx] += self.alpha * td_error
+        if getattr(self, "visited_states", None) is not None:
+            self.visited_states[last_state][a_idx] += 1
         self.last_td_error = td_error
         self.last_reward = current_reward
         self.exploration_policy.update()
@@ -126,6 +146,8 @@ class SARSAAgent(DiscreteActionRLAgent):
         td_target = current_reward + self.gamma * self.q_table[next_state][next_a_idx]
         td_error = td_target - self.q_table[last_state][a_idx]
         self.q_table[last_state][a_idx] += self.alpha * td_error
+        if getattr(self, "visited_states", None) is not None:
+            self.visited_states[last_state][a_idx] += 1
         self.last_td_error = td_error
         self.last_reward = current_reward
 
