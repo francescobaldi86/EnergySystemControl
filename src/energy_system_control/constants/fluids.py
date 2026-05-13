@@ -16,5 +16,10 @@ class Air(FrozenNamespace):
     rho: float = 1.2041    # [kg·m⁻³]
     cp: float = 1006.0     # [J·kg⁻¹·K⁻¹]
 
+@dataclass(frozen=True)
+class Methane(FrozenNamespace):
+    LHV: 50_000  # [kJ/kg]
+    rho: 0.72  # [kg/m3]
+
 WATER = Water()
 AIR = Air()
