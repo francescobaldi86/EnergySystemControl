@@ -48,6 +48,10 @@ class Port():
                 return FluidPort(port_name)
             case 'electricity':
                 return ElectricPort(port_name)
+            case 'fuel':
+                return FuelPort(port_name)
+            case 'biogas':
+                return BiogasPort(port_name)
 
 class HeatPort(Port):
     T: float
@@ -80,3 +84,17 @@ class FluidPort(Port):
 class ElectricPort(Port):
     def __init__(self, name):
         super().__init__(name, ['electricity'])
+
+class FuelPort(Port):
+    def __init__(self,name):
+        super().__init__(name, ['mass', 'chemical_energy'])
+        self.LHV=None 
+        
+    def propagate_port_values(self):
+        super().propagate_port_values()
+        self.connected_port = self.T
+
+class BiogasPort(FuelPort):
+    def __init__(self,name):
+        super().__init__(name)
+        self.methane_fraction=None 
