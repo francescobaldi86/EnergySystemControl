@@ -111,8 +111,14 @@ class IEAHotWaterDemand(HotWaterDemand):
             var_unit = 'kWh')
 
 class CustomProfileHotWaterDemand(HotWaterDemand):
-    def __init__(self, name: str, reference_temperature: float, data_path: str, filename:str, column_name: str, var_unit: str = 'kWh', **kwargs):
+    def __init__(self, name: str, reference_temperature: float, data_path: str | None = None, filename:str | None = None, column_name: str | None = None, series: pd.Series | None = None, var_unit: str = 'kWh', **kwargs):
         super().__init__(name, reference_temperature, **kwargs)
+        if data_path is not None:
+            raw = pd.read_csv(os.path.join(data_path, filename), sep = ";", decimal = '.', parse_dates = True)[column_name]
+        elif series is not None:
+            raw = series
+        else:
+            raise ValueError('The input should be either a pandas Series or a path to a csv file. None of the two was provided')
         self.ts = TimeSeriesData(
-            raw = pd.read_csv(os.path.join(data_path, filename), sep = ";", decimal = '.', parse_dates = True)[column_name],
+            raw = raw,
             var_unit = var_unit)
