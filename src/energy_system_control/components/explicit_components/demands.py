@@ -121,4 +121,5 @@ class CustomProfileHotWaterDemand(HotWaterDemand):
             raise ValueError('The input should be either a pandas Series or a path to a csv file. None of the two was provided')
         self.ts = TimeSeriesData(
             raw = raw,
+            var_type = 'energy',
             var_unit = var_unit)
