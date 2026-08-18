@@ -26,8 +26,8 @@ def test_1():
         ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port')
     ]
     env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
-    time_step = 0.5
-    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = time_step)
+    time_step = 1/60
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*365, time_step_h = time_step)
     sim = esc.Simulator(env, sim_config)
     results = sim.run()
     df_ports, df_controllers, df_sensors = results.to_dataframe()
