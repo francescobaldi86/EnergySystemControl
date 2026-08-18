@@ -111,8 +111,8 @@ class IEAHotWaterDemand(HotWaterDemand):
             var_unit = 'kWh')
 
 class CustomProfileHotWaterDemand(HotWaterDemand):
-    def __init__(self, name: str, reference_temperature: float, data_path: str, filename:str, var_unit: str = 'kWh', **kwargs):
+    def __init__(self, name: str, reference_temperature: float, data_path: str, filename:str, column_name: str, var_unit: str = 'kWh', **kwargs):
         super().__init__(name, reference_temperature, **kwargs)
         self.ts = TimeSeriesData(
-            raw = pd.read_csv(os.path.join(data_path, filename), sep = ";", decimal = '.', parse_dates = True),
+            raw = pd.read_csv(os.path.join(data_path, filename), sep = ";", decimal = '.', parse_dates = True)[column_name],
             var_unit = var_unit)

@@ -167,7 +167,7 @@ class CompositeComponent(Component):
 
 @dataclass()
 class TimeSeriesData:
-    raw: pd.Series | pd.DataFrame
+    raw: pd.Series
     var_type: Literal['energy', 'power', 'volume', 'mass', 'temperature']
     var_unit: Literal['Wh', 'kWh', 'MWh', 'W', 'kW', 'MW', 'l', 'm3', 'kg', 'C', 'K']
     data: np.ndarray | None = None
