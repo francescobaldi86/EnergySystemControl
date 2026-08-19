@@ -16,8 +16,8 @@ class PVpanel(Producer):
     def step(self, state: SimulationState, action = None):
         self.ports[self.port_name].flows['electricity'] = -self.ts.data[state.time_id]
 
-    def resample_data(self, time_step_h: float, sim_end_h: float):
-        self.ts.resample(time_step_h=time_step_h, sim_end_h=sim_end_h)
+    def resample_data(self, time_step_h: float, simulation_end_h: float, simulation_start_datetime: datetime | None = None):
+        self.ts.resample(time_step_h=time_step_h, simulation_end_h=simulation_end_h, simulation_start_datetime=simulation_start_datetime)
 
 
 class PVpanelFromData(PVpanel):
@@ -43,9 +43,18 @@ class PVpanelFromData(PVpanel):
     rescale_factor : float | None
         Factor to rescale the power data. Defaults to None.
     """
-    def __init__(self, name: str, data_path: str, filename: str, column_name: str = 'P', date_format: str = '%Y%m%d:%H%M', skipfooter: int = 0, var_unit: Literal['kW', 'W'] = 'W', rescale_factor: float | None = None):
+    def __init__(self, 
+                 name: str,
+                 time_alignment: TimeAlignment,
+                 data_path: str, 
+                 filename: str, 
+                 column_name: str = 'P', 
+                 date_format: str = '%Y%m%d:%H%M', 
+                 skipfooter: int = 0, 
+                 var_unit: Literal['kW', 'W'] = 'W', 
+                 rescale_factor: float | None = None):
         temp = pd.read_csv(os.path.join(data_path, filename), sep = ";", decimal = '.', skipfooter = skipfooter, engine='python', index_col = 0)
-        temp['time'] = pd.to_datetime(temp.index, format=date_format, utc=True)
+        temp['time'] = pd.to_datetime(temp.index, format=date_format, utc=False)
         temp = temp.set_index('time')
         temp = temp[column_name]
         if rescale_factor:
@@ -54,17 +63,18 @@ class PVpanelFromData(PVpanel):
             raw = temp,
             var_type = 'power',
             var_unit = var_unit,
+            time_alignment = time_alignment,
         )
         super().__init__(name, ts)
 
 
 class PVpanelFromPVGISData(PVpanelFromData):
-    def __init__(self, name: str, data_path: str, filename: str, rescale_factor: float | None = None):
-        super().__init__(name, data_path=data_path, filename=filename, column_name = 'P', date_format = '%Y%m%d:%H%M', skipfooter=11, var_unit = 'W', rescale_factor=rescale_factor)
+    def __init__(self, name: str, time_alignment: TimeAlignment, data_path: str, filename: str, rescale_factor: float | None = None):
+        super().__init__(name, time_alignment = time_alignment, data_path=data_path, filename=filename, column_name = 'P', date_format = '%Y%m%d:%H%M', skipfooter=11, var_unit = 'W', rescale_factor=rescale_factor)
 
 
 class PVpanelFromPVGIS(PVpanel):
-    def __init__(self, name: str, installed_power: float, latitude: float, longitude: float, tilt: float, azimuth: float, loss: float = 14, years: list[int] = [2023]):
+    def __init__(self, name: str, time_alignment: TimeAlignment, installed_power: float, latitude: float, longitude: float, tilt: float, azimuth: float, loss: float = 14, years: list[int] = [2023]):
         """
         Reads data from PVGIS for the selected location. 
 
@@ -93,7 +103,8 @@ class PVpanelFromPVGIS(PVpanel):
         ts = TimeSeriesData(
             raw = self.pvgis_api_call(),
             var_type = 'power',
-            var_unit = 'W'
+            var_unit = 'W',
+            time_alignment = time_alignment
         )
         super().__init__(name, ts)
 

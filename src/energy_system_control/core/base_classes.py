@@ -1,5 +1,5 @@
 from typing import Dict, List, Callable, Any, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 @dataclass(frozen=True, slots=True)
 class InitContext:
@@ -17,4 +17,5 @@ class EnvironmentalData:
     direct_irradiation: float = 0.0      # W/m^2
     diffuse_irradiation: float = 0.0     # W/m^2
     solar_zenith: float | None = None           # degrees
-    solar_azimuth: float | None = None         # degrees
+    solar_azimuth: float | None = None         # degrees       
+        

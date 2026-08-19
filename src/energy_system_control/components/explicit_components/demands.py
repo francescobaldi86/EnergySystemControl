@@ -8,6 +8,7 @@ import os, yaml
 import numpy as np
 from importlib.resources import files
 from typing import List, Dict, Literal
+from datetime import datetime
 
 
 class Demand(ExplicitComponent):
@@ -56,8 +57,8 @@ class TimeSeriesDemand(Demand):
         self.rescale_factor = rescale_factor
         super().__init__(name, demand_type, uncertainty_model, uncertainty_seed)
 
-    def resample_data(self, time_step_h: float, sim_end_h: float):
-        self.ts.resample(time_step_h=time_step_h, sim_end_h=sim_end_h)
+    def resample_data(self, time_step_h: float, simulation_end_h: float, simulation_start_datetime: datetime):
+        self.ts.resample(time_step_h=time_step_h, simulation_end_h=simulation_end_h, simulation_start_datetime=simulation_start_datetime)
         self.ts.data = self.ts.data * self.rescale_factor
     
 
@@ -90,6 +91,8 @@ class HotWaterDemand(TimeSeriesDemand):
         T_cold_water = state.environmental_data.temperature_cold_water
         T_hot_water = self.ports[self.port_name].T 
         demand_kW = self.ts.data[state.time_id]  # This calculates the required power in kW (note: time step is in [s], read value in [kWh], hence the 3600)
+        if demand_kW > 0:
+            pass
         mdot_dhw_th = demand_kW / WATER.cp / (self.T_ref - T_cold_water)  # Theroetical hot water mass flow, in kg/s
         if T_hot_water > self.T_ref:
             mdot = mdot_dhw_th * (self.T_ref - T_cold_water) / (T_hot_water - T_cold_water)  # Actual hot water mass flow, in kg/s
@@ -107,11 +110,12 @@ class IEAHotWaterDemand(HotWaterDemand):
         path = files("energy_system_control.data") / "dhw_profiles_iea.csv"
         self.ts = TimeSeriesData(
             raw = pd.read_csv(path, sep = ";", decimal = '.', index_col = 0, header = 0, parse_dates = True, date_format='%H:%M')[profile_name],
+            time_alignment = 'daily',
             var_type = 'energy',
             var_unit = 'kWh')
 
 class CustomProfileHotWaterDemand(HotWaterDemand):
-    def __init__(self, name: str, reference_temperature: float, data_path: str | None = None, filename:str | None = None, column_name: str | None = None, series: pd.Series | None = None, var_unit: str = 'kWh', **kwargs):
+    def __init__(self, name: str, time_alignment: TimeAlignment, reference_temperature: float, data_path: str | None = None, filename:str | None = None, column_name: str | None = None, series: pd.Series | None = None, var_type: str = "energy", var_unit: str = 'kWh', **kwargs):
         super().__init__(name, reference_temperature, **kwargs)
         if data_path is not None:
             raw = pd.read_csv(os.path.join(data_path, filename), sep = ";", decimal = '.', parse_dates = True)[column_name]
@@ -121,5 +125,6 @@ class CustomProfileHotWaterDemand(HotWaterDemand):
             raise ValueError('The input should be either a pandas Series or a path to a csv file. None of the two was provided')
         self.ts = TimeSeriesData(
             raw = raw,
-            var_type = 'energy',
+            time_alignment = time_alignment,
+            var_type = var_type,
             var_unit = var_unit)

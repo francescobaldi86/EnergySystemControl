@@ -14,9 +14,21 @@ class SimulationResults:
     signal_registry_sensors: Any
 
     def to_dataframe(self):
+        """Return the recorded ports, controllers, and sensors as data frames."""
         return self.data.to_dataframe(self.time_vector, self.signal_registry_ports, self.signal_registry_controllers, self.signal_registry_sensors)
 
     def _get_cumulated_result(self, port_name: str, layer_name: str, time_interval_h: Tuple[float, float] = None, scaling_factor: float = 1):
+        """Calculate the time-integrated value of a port signal.
+
+        Args:
+            port_name: Name of the port containing the signal.
+            layer_name: Name of the port layer containing the signal.
+            time_interval_h: Optional interval to integrate, in hours.
+            scaling_factor: Factor applied after integration.
+
+        Returns:
+            The integrated signal multiplied by ``scaling_factor``.
+        """
         col = self.signal_registry_ports.col_index(port_name, layer_name)
         if time_interval_h is None:
             return self.data.ports[:, col].sum() * self.time_step * scaling_factor
@@ -26,6 +38,18 @@ class SimulationResults:
             return self.data.ports[start_index : end_index, col].sum() * self.time_step * scaling_factor
 
     def _get_cumulated_result_with_sign(self, port_name: str, layer_name: str, sign: str, time_interval_h: Tuple[float, float] = None, scaling_factor: float = 1):
+        """Calculate a time-integrated port signal for one sign only.
+
+        Args:
+            port_name: Name of the port containing the signal.
+            layer_name: Name of the port layer containing the signal.
+            sign: Either ``"only positive"`` or ``"only negative"``.
+            time_interval_h: Optional interval to integrate, in hours.
+            scaling_factor: Factor applied after integration.
+
+        Returns:
+            The positive or negative contribution after integration.
+        """
         col = self.signal_registry_ports.col_index(port_name, layer_name)
         if time_interval_h is None:
             start_index = 0
@@ -42,6 +66,21 @@ class SimulationResults:
                 return -temp[temp <= 0.0].sum() * self.time_step * scaling_factor
 
     def get_cumulated_electricity(self, port_name: str, time_interval_h: Tuple[float, float] = None, unit: str = "kWh", sign: str = "net"):
+        """Calculate cumulative electricity exchanged through a port.
+
+        Args:
+            port_name: Name of the electricity port.
+            time_interval_h: Optional interval to integrate, in hours.
+            unit: Result unit, either ``"kWh"`` or ``"MWh"``.
+            sign: ``"net"`` for the signed total, or ``"only positive"`` /
+                ``"only negative"`` for one-sided contributions.
+
+        Returns:
+            Cumulative electricity in the requested unit.
+
+        Raises:
+            ValueError: If ``unit`` is not supported.
+        """
         match unit:
             case "kWh":
                 scaling_factor = 1 / 3_600
@@ -58,14 +97,34 @@ class SimulationResults:
 
 
     def get_DHW_temperature_comfort_index(self, port_name, boundary, time_interval_h: Tuple[float, float] = None):
-        # Measures the temperature-based comfort given a condition
+        """Calculate the fraction of DHW samples at or above a temperature boundary.
+
+        Args:
+            port_name: Name of the DHW port.
+            boundary: Temperature boundary in kelvin.
+            time_interval_h: Optional interval in hours. Currently unused.
+
+        Returns:
+            Fraction of active DHW samples meeting the temperature boundary.
+        """
         condition = abs(self.data.ports[port_name].flow['mass']) > 1e-6
         return sum(self.data.ports[port_name].T[condition] >= boundary) / len(self.simulation_data.ports[port_name].T[condition])
 
 
     
     def get_boundary_index(self, sensor_name: str, boundary: float, condition: str):
-        # Calculates the fraction of time over the simulation a certain value was above or below a certain boundary
+        """Calculate the fraction of sensor samples above or below a boundary.
+
+        Args:
+            sensor_name: Name of the sensor to evaluate.
+            boundary: Value against which sensor samples are compared.
+            condition: Comparison selector. Use ``"gt"``, ``">"``, ``">="``
+                for values above the boundary, or ``"lt"``, ``"<"``, ``"<="``
+                for values below it.
+
+        Returns:
+            Fraction of samples satisfying the selected comparison.
+        """
         match condition:
             case "gt" | ">" | ">=":
                 return sum(self.data.sensors[:, self.signal_registry_sensors.col_index(sensor_name, "")] >= boundary) / len(self.data.sensors[:, self.signal_registry_sensors.col_index(sensor_name, "")])
@@ -74,7 +133,18 @@ class SimulationResults:
 
 
     def plot_sensors(self, sensors: str | List[str] | None= None, labels: str | List[str] | None = None, ylabel: str | None= None, filename: str | None = None, reference_value: float | None = None):
-        # Plots the measured values of a sensor over time
+        """Plot one or more sensor signals against simulation time.
+
+        Args:
+            sensors: Sensor name or list of sensor names to plot.
+            labels: Optional label or list of labels for the plotted signals.
+            ylabel: Label for the y-axis.
+            filename: Optional path where the figure is saved.
+            reference_value: Optional horizontal reference line.
+
+        Returns:
+            The Matplotlib figure and primary axes.
+        """
         fig, ax = plt.subplots(figsize=(10, 6))
         if isinstance(sensors, str):
             sensors_list = [sensors]
@@ -96,12 +166,24 @@ class SimulationResults:
         return fig, ax
 
     def _plot_sensor(self, ax, sensor_name: str, label: str | None = None):
-        # Plots the measured values of a sensor over time
+        """Add one sensor signal to an existing Matplotlib axes."""
         col = self.signal_registry_sensors.col_index(sensor_name, "")
         label = label if label else sensor_name
         ax.plot(self.time_vector/3600, self.data.sensors[:,col], label=label)
         
     def plot_temperature_sensors(self, sensors: str | List[str] | None= None, labels: str | List[str] | None = None, ylabel: str | None= None, filename: str | None = None, comfort_temperature: float | None = None):
+        """Plot temperature sensor signals with an optional comfort boundary.
+
+        Args:
+            sensors: Temperature sensor name or list of names.
+            labels: Optional label or list of labels for the plotted signals.
+            ylabel: Optional y-axis label; defaults to ``"Temperature [K]"``.
+            filename: Optional path where the figure is saved.
+            comfort_temperature: Optional comfort temperature in kelvin.
+
+        Returns:
+            The Matplotlib figure and axes.
+        """
         fig, ax = self.plot_sensors(sensors, labels, 'Temperature [K]', filename, comfort_temperature)
         return fig, ax
 
@@ -112,6 +194,18 @@ class SimulationResults:
         labels: str | List[str] | None = None,
         filename: str | None = None
     ):
+        """Plot power sensors and optionally state of charge on a second axis.
+
+        Args:
+            power_sensors: Power sensor name or list of names to plot.
+            SOC_sensor: Optional normalized state-of-charge sensor name.
+            labels: Optional label or list of labels for the power signals.
+            filename: Optional path where the figure is saved.
+
+        Returns:
+            The Matplotlib figure and primary axes. If ``SOC_sensor`` is
+            provided, its signal is plotted on a secondary y-axis.
+        """
         fig, ax = self.plot_sensors(power_sensors, labels, 'Power [kW]', None)
 
         # Secondary axis for SOC

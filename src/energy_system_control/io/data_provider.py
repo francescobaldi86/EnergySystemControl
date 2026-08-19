@@ -19,8 +19,10 @@ from abc import ABC, abstractmethod
 import pandas as pd
 from energy_system_control.core.base_classes import EnvironmentalData
 from energy_system_control.sim.config import SimulationConfig
-from energy_system_control.helpers import resample_with_interpolation
+from energy_system_control.sim.state import SimulationState
+from energy_system_control.helpers import resample_with_interpolation, C2K
 from energy_system_control.io.weather_api import WeatherAPI
+import os
 
 
 class EnvironmentalDataProvider(ABC):
@@ -58,7 +60,7 @@ class EnvironmentalDataProvider(ABC):
         pass
 
 
-class CSVEnvironmentalProvider(EnvironmentalDataProvider):
+class CustomEnvironmentalProvider(EnvironmentalDataProvider):
     """
     Environmental data provider that reads from CSV files.
 
@@ -115,24 +117,28 @@ class CSVEnvironmentalProvider(EnvironmentalDataProvider):
     Additional custom columns may be included and will be loaded automatically.
     """
 
-    def __init__(self, csv_path, var_types=None):
+    def __init__(self, data_path: str | None = None, filename:str | None = None, column_names: dict[str,str] | None = None, df: pd.DataFrame | None = None, var_types=None):
         """
         Initialize the CSV environmental data provider.
 
         Parameters
         ----------
-        csv_path : str
-            Path to the CSV file containing environmental data.
-        var_types : dict, optional
-            Dictionary mapping variable names to 'intensive' or 'extensive' type.
-            If not provided, all variables default to 'intensive'.
+        data_path : str, optional
+            Path to the data folder in the project
+        filename: str, optional
+            Name of the CSV file containing the environmental data.
+        column_names: dict, optional
+            A dictionary mapping the required column names to the ones in the file (format: {'new_name': 'old_name'})
+        df: pandas Dataframe, optional
+            A pandas DataFrame containing the environmental data. If provided, the `data_path` and `filename` parameters are not used. If not provided, the data is loaded from the csv file
         """
-        self.csv_path = csv_path
-        self.var_types = var_types or {}
+        self.csv_path = os.path.join(data_path, filename) if data_path is not None else None
+        self.column_names = column_names
+        self.raw_data = df
         self.data = {}
         self.datetime_index = None
 
-    def initialize(self, cfg: SimulationConfig):
+    def initialize(self, state: SimulationState | None = None, cfg: SimulationConfig | None = None):
         """
         Load and resample environmental data from CSV file.
 
@@ -152,23 +158,22 @@ class CSVEnvironmentalProvider(EnvironmentalDataProvider):
         KeyError
             If required columns are missing from the CSV file.
         """
+        if self.raw_data is None:
+            self.raw_data = pd.read_csv(self.csv_path, parse_dates=["datetime"])
+            self.raw_data = self.raw_data.set_index("datetime")
+        if self.column_names is not None:
+            self.raw_data.rename(columns = self.column_names)
 
-        df = pd.read_csv(self.csv_path, parse_dates=["datetime"])
-        df = df.set_index("datetime")
+        target_freq = f"{int(cfg.time_step_h*3600)}s"
 
-        target_freq = f"{int(cfg.time_step_s)}S"
-
-        sim_end = (cfg.time_end_h - cfg.time_start_h) * 3600
-
-        for col in df.columns:
-
-            var_type = self.var_types.get(col, "intensive")
+        for col in self.raw_data.columns:
 
             arr = resample_with_interpolation(
-                df[[col]],
+                self.raw_data[[col]],
                 target_freq=target_freq,
-                sim_end=sim_end,
-                var_type=var_type,
+                simulation_end_s=cfg.simulation_end_h*3600.0,
+                simulation_start_datetime = cfg.simulation_start_datetime,
+                var_type='intensive',
             )
 
             # flatten (N,1) → (N,)
@@ -202,12 +207,20 @@ class CSVEnvironmentalProvider(EnvironmentalDataProvider):
         IndexError
             If time_id exceeds the available data range.
         """
-
+        temp_env_data = {}
+        for key in {'temperature_ambient', 'temperature_cold_water', 'direct_irradiation', 'diffuse_irradiation'}:
+            if key in self.data.keys():
+                temp_env_data[key] = self.data[key][time_id]
+            else:
+                temp_env_data[key] = None
+            if "temperature" in key:
+                if temp_env_data[key] < 200:  # Assuming we never work with temperatures below 200K
+                    temp_env_data[key] = C2K(temp_env_data[key])
         return EnvironmentalData(
-            temperature_ambient=self.data.get("temperature_ambient", [None])[time_id],
-            temperature_cold_water=self.data.get("temperature_cold_water", [None])[time_id],
-            direct_irradiation=self.data.get("direct_irradiation", [None])[time_id],
-            diffuse_irradiation=self.data.get("diffuse_irradiation", [None])[time_id],
+            temperature_ambient=temp_env_data["temperature_ambient"],
+            temperature_cold_water=temp_env_data["temperature_cold_water"],
+            direct_irradiation=temp_env_data["direct_irradiation"],
+            diffuse_irradiation=temp_env_data["diffuse_irradiation"]
         )
 
 

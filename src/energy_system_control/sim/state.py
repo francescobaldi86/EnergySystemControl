@@ -21,18 +21,18 @@ class SimulationState:
         self._init_environmental_data(cfg)
 
     def _init_time_vector(self, cfg: SimulationConfig) -> None:
-        self.time = cfg.time_start_h * 3600.0
+        self.time = 0.0
         self.time_id = 0
         self.time_vector = np.arange(
             cfg.time_start_h * 3600.0,
-            cfg.time_end_h * 3600.0,
+            cfg.simulation_end_h * 3600.0,
             cfg.time_step_s,
         )
         self.time_step = cfg.time_step_s
         self.simulation_start_datetime = cfg.simulation_start_datetime
         self.time_vector_for_prediction = np.arange(
             cfg.time_start_h * 3600.0,
-            (cfg.time_end_h + cfg.prediction_horizon_margin_h) * 3600.0,
+            (cfg.simulation_end_h + cfg.prediction_horizon_margin_h) * 3600.0,
             cfg.time_step_s,
         )
 

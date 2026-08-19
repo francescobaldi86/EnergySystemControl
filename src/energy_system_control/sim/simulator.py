@@ -1,5 +1,5 @@
 # energy_system_control/sim/simulator.py
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Any
 from numbers import Number
 import numpy as np
@@ -23,7 +23,7 @@ class Simulator:
     def run(self) -> SimulationData:
         self.state = SimulationState()
         self.state.initialize(self.cfg)
-        self.env.initialize(self.state)  # This allows the environment to initialize the provider if needed
+        self.env.initialize(self.state, self.cfg)  # This allows the environment to initialize the provider if needed
 
         # Prepare simulation data storage
         sim_data = SimulationData()
@@ -39,7 +39,7 @@ class Simulator:
         self._initialize_units()        
 
         # Main loop
-        while self.state.time < (self.cfg.time_end_h * 3600.0 - 1e-9):
+        while self.state.time < (self.cfg.simulation_end_h * 3600.0 - 1e-9):
             self._step(sim_data)
             self.state.time += self.cfg.time_step_s
             self.state.time_id += 1
@@ -71,7 +71,10 @@ class Simulator:
         # Read timeseries data from components
         for _, component in self.env.components.items():
             if callable(getattr(component, 'resample_data', None)):
-                component.resample_data(self.cfg.time_step_h, self.cfg.time_end_h + self.cfg.prediction_horizon_margin_h)
+                component.resample_data(
+                    time_step_h = self.cfg.time_step_h, 
+                    simulation_end_h = self.cfg.simulation_end_h + self.cfg.prediction_horizon_margin_h,
+                    simulation_start_datetime = self.cfg.simulation_start_datetime)
 
     def _normalize_measurement(self, value):
         """
@@ -138,6 +141,10 @@ class Simulator:
         # Example: overwrite with forecast / time series if available
         if self.env.environmental_data_provider:
             env_data = self.env.environmental_data_provider.get_environmental_data(self.state.time_id, self.state.simulation_start_datetime + pd.to_timedelta(self.state.time, unit='s'))
+            # Check for None values and substitute them with defaults
+            for field in fields(env_data):
+                if getattr(env_data, field.name) is None:
+                    setattr(env_data, field.name, getattr(self.cfg.environmental_defaults, field.name))
 
         # Automatically compute solar angles if not available
         if env_data.solar_zenith is None or env_data.solar_azimuth is None:

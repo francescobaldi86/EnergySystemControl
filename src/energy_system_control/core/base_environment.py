@@ -65,10 +65,10 @@ class Environment:
         self.components.update(new_components)
         self.connections += new_connections
 
-    def initialize(self, state: SimulationState):
+    def initialize(self, state: SimulationState, cfg: SimulationConfig):
         if self.environmental_data_provider:
             if hasattr(self.environmental_data_provider, "initialize"):
-                self.environmental_data_provider.initialize(state)
+                self.environmental_data_provider.initialize(state, cfg)
         self.create_data_registry()
 
     def add_component(self, component_name, component_type, **kwargs):

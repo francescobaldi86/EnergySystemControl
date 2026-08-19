@@ -2,10 +2,11 @@ from typing import Dict, List, Callable, Any, Literal
 from dataclasses import dataclass
 import pandas as pd
 import numpy as np
+from datetime import datetime
 from energy_system_control.core.port import Port
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.core.base_classes import InitContext
-from energy_system_control.helpers import resample_with_interpolation
+from energy_system_control.helpers import resample_with_interpolation, TimeAlignment
 
 class Component:
     name: str
@@ -170,24 +171,48 @@ class TimeSeriesData:
     raw: pd.Series
     var_type: Literal['energy', 'power', 'volume', 'mass', 'temperature']
     var_unit: Literal['Wh', 'kWh', 'MWh', 'W', 'kW', 'MW', 'l', 'm3', 'kg', 'C', 'K']
+    time_alignment: TimeAlignment
     data: np.ndarray | None = None
     energy_to_power_converter = {'Wh': 1e-3, 'kWh': 1.0, 'J': 1.0/3_600_000, 'kJ': 1.0/3600}
 
-    def resample(self, time_step_h: float, sim_end_h: float):
+    def resample(self, 
+                 time_step_h: float, 
+                 simulation_end_h: float, 
+                 simulation_start_datetime: datetime | None = None):
         # Resamples the raw data to the format required 
         if self.raw is not None:
             target_freq = f"{int(time_step_h*3600)}s"
             if self.var_type == 'temperature':
-                self.data = resample_with_interpolation(self.raw, target_freq, sim_end_h*3600.0, var_type="intensive")
+                self.data = resample_with_interpolation(df = self.raw, 
+                                                        target_freq = target_freq,
+                                                        simulation_end_s = simulation_end_h*3600.0,
+                                                        simulation_start_datetime = simulation_start_datetime,
+                                                        time_alignment = self.time_alignment,
+                                                        var_type="intensive")
             if self.var_type == 'power':
-                self.data = resample_with_interpolation(self.raw, target_freq, sim_end_h*3600.0, var_type="intensive")
+                self.data = resample_with_interpolation(df = self.raw, 
+                                                        target_freq = target_freq,
+                                                        simulation_end_s = simulation_end_h*3600.0,
+                                                        simulation_start_datetime = simulation_start_datetime,
+                                                        time_alignment = self.time_alignment,
+                                                        var_type="intensive")
                 if self.var_unit[0] != 'k':
                     self.data = self.data * 1.0e-3
             elif self.var_type == 'energy':
-                self.data = resample_with_interpolation(self.raw, target_freq, sim_end_h*3600.0, var_type="extensive")
+                self.data = resample_with_interpolation(df = self.raw, 
+                                                        target_freq = target_freq,
+                                                        simulation_end_s = simulation_end_h*3600.0,
+                                                        simulation_start_datetime = simulation_start_datetime,
+                                                        time_alignment = self.time_alignment,
+                                                        var_type="extensive")
                 self.data = self.data * (1.0 / time_step_h) * self.energy_to_power_converter[self.var_unit]
             elif self.var_type in {'volume', 'mass'}:
-                self.data = resample_with_interpolation(self.raw, target_freq, sim_end_h*3600.0, var_type="extensive")
+                self.data = resample_with_interpolation(df = self.raw, 
+                                                        target_freq = target_freq,
+                                                        simulation_end_s = simulation_end_h*3600.0,
+                                                        simulation_start_datetime = simulation_start_datetime,
+                                                        time_alignment = self.time_alignment,
+                                                        var_type="extensive")
             else:
                 raise(ValueError, f'Unknown variable type {self.var_type}')
         else:
