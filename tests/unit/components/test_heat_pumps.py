@@ -23,7 +23,7 @@ def test_system_with_fixed_efficiecy_heat_pump(base_environment_info):
         controllers = base_environment_info["controllers"], 
         sensors = base_environment_info["sensors"], 
         connections = base_environment_info["connections"])  # dt = 60 s
-    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 0.1)
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*7, time_step_h = 0.1)
     sim = esc.Simulator(env, sim_config)
     results = sim.run()
     df_ports, df_controllers, df_sensors = results.to_dataframe()
@@ -63,7 +63,7 @@ def test_system_with_lorentz_heat_pump_from_COP(base_environment_info):
         controllers = base_environment_info["controllers"], 
         sensors = base_environment_info["sensors"], 
         connections = base_environment_info["connections"])  # dt = 60 s
-    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 0.1)
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*7, time_step_h = 0.1)
     sim = esc.Simulator(env, sim_config)
     results = sim.run()
     df_ports, df_controllers, df_sensors = results.to_dataframe()
@@ -77,7 +77,7 @@ def test_system_with_lorentz_heat_pump_from_COP(base_environment_info):
 def base_environment_info():
     # One node: house thermal mass
     components = [
-        esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
+        esc.HotWaterDemand.from_iea(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45),
         esc.ElectricityGrid(name = 'electric_grid'),
        esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid')

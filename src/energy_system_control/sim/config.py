@@ -20,7 +20,7 @@ def _default_environmental_data():
 class SimulationConfig:
     simulation_end_h: float = 8760.0   # hours
     time_step_h: float = 0.5     # hours
-    simulation_start_datetime: pd.Timestamp | None = None
+    simulation_start_datetime: pd.Timestamp = pd.to_datetime('2025-01-01 00:00')
     time_start_h: float | None = 0.0    # hours
     environmental_defaults: EnvironmentalData = field(default_factory=_default_environmental_data)
     prediction_horizon_margin_h: float = 25  # Represents how much more data we load to leave space for prediction

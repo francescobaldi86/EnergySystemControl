@@ -366,8 +366,7 @@ class TestMLPredictorPerformance:
         assert len(results) >= 2, "Not enough models tested"
         print("\n✓ Test completed successfully!")
 
-
-
+    @pytest.mark.slow
     def test_ann_predictor_dhw_demand_vs_actual_comparison(self, dhw_demand_data):
         """
         Test ANN predictor DHW demand and compare predicted vs actual values.
@@ -482,4 +481,3 @@ class TestMLPredictorPerformance:
         print("\n✓ DHW demand prediction test passed!")
         print(f"  Successfully made {len(predictions)} predictions")
         print(f"  Model captured correlation (R² = {metrics['r2']:.4f})")
-

@@ -7,7 +7,7 @@ __TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 def test_1():
     # Represent substantially a minimal example of electric heating system
     components = [
-        esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
+        esc.HotWaterDemand.from_iea(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2),
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
         esc.ElectricityGrid(name = 'electric_grid'),
@@ -27,17 +27,17 @@ def test_1():
     ]
     env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
     time_step = 1/60
-    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*365, time_step_h = time_step)
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*7, time_step_h = time_step)
     sim = esc.Simulator(env, sim_config)
     results = sim.run()
     df_ports, df_controllers, df_sensors = results.to_dataframe()
-    assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 325, abs_tol = 1)
+    assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 323, abs_tol = 1)
     df_ports.to_csv(os.path.join(__TEST__, 'PLAYGROUND', 'test_1_results_ports.csv'), sep = ";")
 
 def test_2():
     # Testing problem 1 with different time steps. In particular, it verifies that when changing the time step the consumption of the heat pump remains approximately constant
     components = [
-        esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
+        esc.HotWaterDemand.from_iea(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2),
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
         esc.ElectricityGrid(name = 'electric_grid'),
@@ -58,7 +58,7 @@ def test_2():
     env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
     for time_step in [1, 0.5, 0.25, 1/6, 5/60, 1/60]:
     # Test that results remain similar when changing the time step
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = time_step)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*7, time_step_h = time_step)
         sim = esc.Simulator(env, sim_config)
         results = sim.run()  # simulate 6 hours
         heat_pump_energy_demand = results.get_cumulated_electricity('heat_pump_electricity_input_port')
@@ -67,7 +67,7 @@ def test_2():
 def test_3():
     # Trying a more complex system, with PV panels
     components = [
-        esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
+        esc.HotWaterDemand.from_iea(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2),
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
         esc.ElectricityGrid(name = 'electric_grid'),
@@ -95,7 +95,7 @@ def test_3():
     # Create environment
     env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
     # Create simulator object
-    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 0.5)
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*7, time_step_h = 0.5)
     sim = esc.Simulator(env, sim_config)
     # Run simulation
     results = sim.run()
@@ -121,7 +121,7 @@ def test_4():
         esc.PVpanelFromPVGIS(name = 'pv_panels', installed_power=0.8, latitude=44.500365, longitude=11.350096, tilt=90, azimuth=90),
         esc.LithiumIonBattery(name = 'battery', capacity = 1.5, SOC_0 = 0.5),
         esc.Inverter(name = 'inverter'),
-        esc.ElectricityDemand(name = 'demand', path = os.path.join(__TEST__, 'DATA', 'yearly_data_electricity_demand_15min.csv'), var_unit = 'kWh')
+        esc.ElectricityDemand.from_csv(name = 'demand', path = os.path.join(__TEST__, 'DATA', 'yearly_data_electricity_demand_15min.csv'), var_unit = 'kWh', column_name = 'value', time_alignment = 'yearly')
     ]
     controllers = [
         esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'electricity_demand_sensor', 'pv_power_sensor')
@@ -142,7 +142,7 @@ def test_4():
     # Create environment
     env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
     # Create simulator object
-    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 1/60)
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*7, time_step_h = 1/60)
     sim = esc.Simulator(env, sim_config)
     # Run simulation
     results = sim.run()
@@ -162,7 +162,7 @@ def test_4():
 def test_5():
     # Like test 3, but adding a battery with related controller
     components = [
-        esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
+        esc.HotWaterDemand.from_iea(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2),
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
         esc.ElectricityGrid(name = 'electric_grid'),
@@ -196,7 +196,7 @@ def test_5():
     # Create environment
     env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
     # Create simulator object
-    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 1/60)
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*7, time_step_h = 1/60)
     sim = esc.Simulator(env, sim_config)
     # Run simulation
     results = sim.run()

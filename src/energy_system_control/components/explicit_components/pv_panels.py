@@ -74,7 +74,7 @@ class PVpanelFromPVGISData(PVpanelFromData):
 
 
 class PVpanelFromPVGIS(PVpanel):
-    def __init__(self, name: str, time_alignment: TimeAlignment, installed_power: float, latitude: float, longitude: float, tilt: float, azimuth: float, loss: float = 14, years: list[int] = [2023]):
+    def __init__(self, name: str, installed_power: float, latitude: float, longitude: float, tilt: float, azimuth: float, loss: float = 14, years: list[int] = [2023], time_alignment: TimeAlignment = 'yearly'):
         """
         Reads data from PVGIS for the selected location. 
 
@@ -124,7 +124,7 @@ class PVpanelFromPVGIS(PVpanel):
         params = "&".join([f'{key}={value}' for key, value in pvgis_params.items()])
         url_pvcalc = f'{url_base}&{params}'
         temp = pd.DataFrame(requests.get(url_pvcalc).json()['outputs']['hourly'])
-        temp['time'] = pd.to_datetime(temp['time'], format="%Y%m%d:%H%M", utc=True)
+        temp['time'] = pd.to_datetime(temp['time'], format="%Y%m%d:%H%M", utc=False)
         temp = temp.set_index('time')
         return temp['P']
         # row_json = json.loads(response.text)   

@@ -5,6 +5,7 @@ from typing import List, Dict, Any, Literal
 from datetime import datetime
 
 TimeAlignment = Literal["datetime", "yearly", "daily"]
+TimeMatch = Literal["nearest", "forward", "exact"]
 
 def resample_with_interpolation(
     df: pd.DataFrame,
@@ -13,6 +14,8 @@ def resample_with_interpolation(
     var_type: Literal["extensive", "intensive"] = "extensive",
     simulation_start_datetime: datetime | None = None,
     time_alignment: TimeAlignment = "datetime",
+    match_method: TimeMatch = "nearest",
+    tolerance: pd.Timedelta = pd.Timedelta(minutes=30)
 ) -> np.ndarray:
     """
     Resample a time series DataFrame to a new frequency, handling both
@@ -59,11 +62,14 @@ def resample_with_interpolation(
         raise ValueError("DataFrame must have a DatetimeIndex.")
 
     if simulation_start_datetime is not None:
-        df = _align_to_simulation_start(
-            df=df,
-            simulation_start_datetime=simulation_start_datetime,
-            time_alignment=time_alignment,
-        )
+        matching_timestamp = _find_simulation_start_matching_index(
+                index=df.index,
+                simulation_start=pd.Timestamp(simulation_start_datetime),
+                time_alignment=time_alignment,
+                tolerance=tolerance,
+                match_method=match_method
+            )
+        df = df.loc[matching_timestamp:].copy()
     else:
         df = df.copy()
 
@@ -169,50 +175,82 @@ def resample_with_interpolation(
 
     return output.to_numpy().ravel()
 
-def _align_to_simulation_start(
-    df: pd.DataFrame,
-    simulation_start_datetime: datetime,
-    time_alignment: TimeAlignment,
-) -> pd.DataFrame:
 
-    simulation_start = pd.Timestamp(simulation_start_datetime)
+def _find_simulation_start_matching_index(
+    index: pd.DatetimeIndex,
+    simulation_start: pd.Timestamp,
+    time_alignment: TimeAlignment,
+    tolerance: pd.Timedelta | None = pd.Timedelta(minutes=30),
+    match_method: TimeMatch = "nearest"
+) -> pd.Timestamp:
 
     match time_alignment:
 
         case "datetime":
-            if simulation_start not in df.index:
-                raise ValueError(
-                    f"Simulation start {simulation_start} "
-                    "is not present in the DataFrame index."
-                )
+            target = simulation_start
 
-            return df.loc[simulation_start:].copy()
+            target_index = pd.DatetimeIndex([target])
 
         case "yearly":
-            mask = (
-                (df.index.month == simulation_start.month)
-                & (df.index.day == simulation_start.day)
-                & (df.index.time == simulation_start.time())
-            )
+            # Ignore the source year.
+            #
+            # Convert every source timestamp to the simulation year,
+            # preserving month, day and time.
+            try:
+                target_index = pd.DatetimeIndex(
+                    [
+                        timestamp.replace(year=simulation_start.year)
+                        for timestamp in index
+                    ]
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    "Cannot map the source timestamps to the "
+                    f"simulation year {simulation_start.year}. "
+                    "This may be caused by February 29 in a "
+                    "non-leap simulation year."
+                ) from exc
+
+            target = simulation_start
 
         case "daily":
-            mask = df.index.time == simulation_start.time()
+            # Replace the date of every source timestamp with the
+            # simulation date, preserving the time of day.
+            target_index = pd.DatetimeIndex(
+                [
+                    timestamp.replace(
+                        year=simulation_start.year,
+                        month=simulation_start.month,
+                        day=simulation_start.day,
+                    )
+                    for timestamp in index
+                ]
+            )
+
+            target = simulation_start
 
         case _:
             raise ValueError(
                 f"Invalid time_alignment: {time_alignment!r}."
             )
 
-    matching_indices = df.index[mask]
+    positions = target_index.get_indexer(
+        [target],
+        method=match_method,
+        tolerance=tolerance,
+    )
 
-    if len(matching_indices) == 0:
+    position = positions[0]
+
+    if position == -1:
         raise ValueError(
-            f"Could not find a timestamp corresponding to "
-            f"{simulation_start} with time_alignment="
-            f"{time_alignment!r}."
+            f"Could not find a matching timestamp for "
+            f"{simulation_start} using "
+            f"time_alignment={time_alignment!r} "
+            f"within tolerance={tolerance}."
         )
 
-    return df.loc[matching_indices[0]:].copy()
+    return index[position]
 
 
 def C2K(T):
