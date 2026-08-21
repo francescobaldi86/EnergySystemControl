@@ -170,9 +170,9 @@ class MultiNodeHotWaterTank(HotWaterStorage):
             Storage capacity of the tank [l]
         heat_injection_nodes : Dict[str, int]
          	Dictionary containing one element for each node where heat is added. The key is the node name, the corresponding element represents the integer corresponding to the node where the heat is added
-        height: float, optional
-            The height of the tank. If not specificed, it is assumed a height-to-diameter ratio equal to 2.0
-        height_cold_water_input: float, opional
+        tank_height: float, optional
+            The height of the tank [m]. If not specificed, it is assumed a height-to-diameter ratio equal to 2.0
+        height_cold_water_input [m]: float, opional
             The height at which cold water is injected in the tank. By default it is assumed that this happens in the bottom layer
         number_of_layers: int, optional
             The number of layers(nodes) used in the tank module. Mininum value is 3, defaults to 5
@@ -216,6 +216,7 @@ class MultiNodeHotWaterTank(HotWaterStorage):
             self.aux_heat_input_port_name: self.aux_heating_source_location}
         self.matrix_B = None
         self.matrix_A = None
+        self.water_mass_flow_t = None
     
     def identify_heat_input_layers(self, input_heights: float | list | None = None, default: int | None = None):
         vector_with_heat_input_layers = np.zeros(self.number_of_layers, dtype=np.float16)
@@ -223,7 +224,7 @@ class MultiNodeHotWaterTank(HotWaterStorage):
             default = default if default else 0
             vector_with_heat_input_layers[default] = 1
         elif isinstance(input_heights, (int, float)):
-            vector_with_heat_input_layers[self.identify_layer_by_height(height = input_heights, default = default)] = 1
+            vector_with_heat_input_layers[self.identify_layer_by_height(height = input_heights, default = default, output_type='layer_id')] = 1
         elif isinstance(input_heights, list):
             if len(input_heights) != 2:
                 raise(IndexError, f'The length of the heat input heights of the hot water storage {self.name} should be provided either as a float or as a list with two elements')
@@ -250,8 +251,9 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         elif output_type == 'layer_id':
             return layer_id
     
-    def step(self, state: SimulationState, action):
+    def step_backup(self, state: SimulationState, action):
         output = {}
+        self._check_state(state)
         change_in_water_mass_flow = not math.isclose(self.water_mass_flow_t, -self.ports[self.hot_water_output_port_name].flows['mass'], abs_tol = 1e-4)
         self.water_mass_flow_t = -self.ports[self.hot_water_output_port_name].flows['mass']
         self.update_A_matrix(change_in_water_mass_flow)
@@ -265,30 +267,155 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         self.ports[self.cold_water_input_port_name].flows['heat'] = self.water_mass_flow_t * WATER.cp * self.ports[self.cold_water_input_port_name].T
         return output
 
-    def update_A_matrix(self, change_in_water_mass_flow):
-        # First we check if the matrix need updating
-        relative_temperature_layers_state = np.array([0] * (self.number_of_layers + 1), dtype=bool)
-        relative_temperature_layers_state[1:-1] = self.T_layer[1:] > self.T_layer[:-1]
-        # Compare the relative temperature layers state with the existing one. Only recalculate the internal heat exchange coefficient vector if changes happen
-        if any(relative_temperature_layers_state != self.relative_temperature_layers_state) or change_in_water_mass_flow:
-            self.relative_temperature_layers_state = relative_temperature_layers_state
-            # First we update the vector of internal heat exchange coefficients
-            internal_heat_exchange_coefficient = np.ones(self.number_of_layers+1, dtype=np.float32) * WATER.k
-            internal_heat_exchange_coefficient[0] = 0.0
-            internal_heat_exchange_coefficient[self.number_of_layers] = 0.0
-            internal_heat_exchange_coefficient[self.relative_temperature_layers_state] = WATER.k * self.convection_effect_coefficient
-            # Calculating diagonals
-            alpha = - internal_heat_exchange_coefficient[1:-1] * self.surface_cross_section / self.layer_height * 1e-3  # Power values are converted to kW
-            beta = -self.matrix_B + self.water_mass_flow_t * WATER.cp + self.surface_cross_section / self.layer_height * (internal_heat_exchange_coefficient[1:]+internal_heat_exchange_coefficient[:-1]) * 1e-3 + self.convection_coefficient_losses * self.surface_losses_layer_vec * 1e-3
-            gamma = - self.water_mass_flow_t * WATER.cp - internal_heat_exchange_coefficient[1:-1] * self.surface_cross_section / self.layer_height * 1e-3
-            # Finally creating the A matrix
-            A = np.zeros((3, self.number_of_layers), dtype=np.float32)
-            A[0, 1:] = gamma
-            A[1, :] = beta
-            A[2, :-1] = alpha
-            self.matrix_A = A
+    def step(self, state: SimulationState, action):
+        # Sanity check of the current state
+        self._check_state(state)
+        # Checking if water mass flows changed with respect to the previous time step
+        update_coefficients = self._check_need_to_update_coefficients()
+        internal_water_flows, inlet_water_flow, outlet_water_flow = self._update_water_flows()
+        if update_coefficients is True:
+            internal_heat_exchange_coefficients = self._update_heat_transfer_coefficients()
+            self._update_A_matrix(internal_heat_exchange_coefficients, internal_water_flows, outlet_water_flow)
+        C = self._create_C_vector(state, inlet_water_flow)
+        D = -(self.matrix_B * self.T_layer + C)
+        # Solve the thrediagonal system
+        T_new = solve_banded((1, 1), self.matrix_A, D)
+        # Assign the new temperature values to the layer temperatures
+        self.T_layer = T_new
+        # Calculate the overall average temperature and related SOC
+        self.temperature = self.T_layer.mean()
+        self.SOC = self.temperature_to_SOC(state)
+        # In the end, the only value that needs updating is the input from the cold water grid
+        self.ports[self.cold_water_input_port_name].flows['mass'] = self.water_mass_flow_t
+        self.ports[self.cold_water_input_port_name].flows['heat'] = self.water_mass_flow_t * WATER.cp * self.ports[self.cold_water_input_port_name].T
+        return {}
+
+    def _check_need_to_update_coefficients(self):
+        """
+        Checks the need to update the heat transfer coefficients and, consequently, the matrix A. 
+        Returns a boolean (True: matrix A needs updating. False: it does not)
+        The decision is based on two checks:
+        - If there was a change in the water mass flow (that is, for instance, if there was a hot water demand at t-1 and not at t)
+        - If there is a change in the relative temperature of the layers (that is, if T_i(t-1) > T_i+1(t-1) and T_i(t) < T_i+1(t))
+        """
+        # Check for changes in water mass flows
+        change_in_water_mass_flow = not math.isclose(self.water_mass_flow_t, -self.ports[self.hot_water_output_port_name].flows['mass'], abs_tol = 1e-4)
+        self.water_mass_flow_t = -self.ports[self.hot_water_output_port_name].flows['mass']
+        # Check for changes in relative temperature layers
+        relative_temperature_layers_state_new = np.array([0] * (self.number_of_layers + 1), dtype=bool)
+        relative_temperature_layers_state_new[1:-1] = self.T_layer[1:] > self.T_layer[:-1]
+        change_in_relative_temperature_layers_state = any(relative_temperature_layers_state_new != self.relative_temperature_layers_state)
+        # Finally calculating the decision on whether to update the matrix A
+        output = change_in_relative_temperature_layers_state or change_in_water_mass_flow
+        # Updating the relative temperature layers state
+        self.relative_temperature_layers_state = relative_temperature_layers_state_new
+        return output
+
+    def _update_water_flows(self):
+        """
+        Determine water mass flows associated with the tank.
+
+        Returns
+        -------
+        internal_flows : np.ndarray
+            Mass flow between adjacent layers [kg/s].
+
+        inlet_flow : float
+            Mass flow entering the tank [kg/s].
+
+        outlet_flow : float
+            Mass flow leaving the tank [kg/s].
+        """
+
+        n = self.number_of_layers
+        internal_flows = np.zeros(n - 1)
+        # Retrieving the external water demand
+        if self.ports[self.hot_water_output_port_name].flows['mass'] is not None:
+            water_demand = -self.ports[self.hot_water_output_port_name].flows['mass']
+        else:
+            water_demand = 0.0
+        # If it's zero, simplifying the calculation: It's all zeros
+        if water_demand <= 0:
+            return internal_flows, 0.0, 0.0
+        # Retrieving inlet and outlet layers
+        inlet = self.cold_water_input_location.argmax()  # Finds the layer where the array is equal to 1
+        outlet = self.hot_water_output_location.argmax()  # same as above
+        # Setting inlet and outlet flows
+        inlet_flow = water_demand
+        outlet_flow = water_demand
+        # Checking relative node position
+        if inlet > outlet:
+            # Flow from lower layers toward upper layers
+            internal_flows[outlet:inlet] = water_demand
+        elif inlet < outlet:
+            # Flow from upper layers toward lower layers
+            internal_flows[inlet:outlet] = -water_demand
+
+        return internal_flows, inlet_flow, outlet_flow
+
+    def _update_heat_transfer_coefficients(self):
+        # First we update the vector of internal heat exchange coefficients
+        internal_heat_exchange_coefficients_new = np.ones(self.number_of_layers+1, dtype=np.float32) * WATER.k
+        internal_heat_exchange_coefficients_new[0] = 0.0
+        internal_heat_exchange_coefficients_new[self.number_of_layers] = 0.0
+        internal_heat_exchange_coefficients_new[self.relative_temperature_layers_state==1] = WATER.k * self.convection_effect_coefficient
+        return internal_heat_exchange_coefficients_new
+
+    def _update_A_matrix(self, 
+                         internal_heat_exchange_coefficients: np.ndarray, 
+                         internal_water_flows: np.ndarray, 
+                         outlet_water_flow: float):
+        n = self.number_of_layers
+        # ------------------------------------------------------------------
+        # Heat contributions
+        # ------------------------------------------------------------------
+        # Alpha term
+        alpha_heat = (-internal_heat_exchange_coefficients[1:-1] * self.surface_cross_section / self.layer_height * 1e-3)
+        # Beta term
+        beta_heat = (-self.matrix_B
+            + self.surface_cross_section / self.layer_height * (internal_heat_exchange_coefficients[1:] + internal_heat_exchange_coefficients[:-1])* 1e-3
+            + self.convection_coefficient_losses * self.surface_losses_layer_vec * 1e-3
+        ) 
+        # Gamma term
+        gamma_heat = (-internal_heat_exchange_coefficients[1:-1] * self.surface_cross_section / self.layer_height * 1e-3)
+        # ------------------------------------------------------------------
+        # Water-flow contributions
+        # ------------------------------------------------------------------
+        water_cp = WATER.cp
+        # Initialization
+        beta_water = np.zeros(n)
+        gamma_water = np.zeros(n - 1)
+        alpha_water = np.zeros(n - 1)
+        for i, flow in enumerate(internal_water_flows):
+            if flow > 0:
+                # Flow from layer i+1 -> layer i
+                # - layer i receives water from layer i+1
+                # - layer i+1 loses water
+                beta_water[i + 1] += flow * water_cp
+                gamma_water[i] -= flow * water_cp
+            elif flow < 0:
+                # Flow from layer i -> layer i+1
+                flow_abs = -flow
+                beta_water[i] += flow_abs * water_cp
+                alpha_water[i] -= flow_abs * water_cp
+        # ------------------------------------------------------------------
+        # External outlet
+        # ------------------------------------------------------------------
+        if outlet_water_flow > 0:
+            outlet_node = self.hot_water_output_location.argmax()
+            # Water leaving the tank carries enthalpy corresponding
+            # to the temperature of the outlet node.
+            beta_water[outlet_node] += outlet_water_flow * water_cp
+        # ------------------------------------------------------------------
+        # Assemble A
+        # ------------------------------------------------------------------
+        A = np.zeros((3, n), dtype=np.float32)
+        A[0, 1:] = gamma_heat + gamma_water
+        A[1, :] = beta_heat + beta_water
+        A[2, :-1] = alpha_heat + alpha_water
+        self.matrix_A = A
         
-    def create_C_vector(self, state: SimulationState):
+    def _create_C_vector(self, state: SimulationState, inlet_water_flow: float):
         ambient_temperature = self.T_amb if self.located_inside else state.environmental_data.temperature_ambient
         total_heat_from_main_heating_source = self.ports[self.main_heat_input_port_name].flows['heat']
         if self.aux_heat_input_port_name in self.ports.keys():
@@ -296,26 +423,12 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         else:
             total_heat_from_aux_heating_source = 0.0
         # Calculating useful vectors
-        vector_cold_water_input = self.cold_water_input_location * self.water_mass_flow_t * WATER.cp * self.ports[self.cold_water_input_port_name].T
-        vector_heat_from_main_heating_source = total_heat_from_main_heating_source / len([self.main_heating_source_location]) * self.main_heating_source_location
-        vector_heat_from_aux_heating_source = total_heat_from_aux_heating_source / len([self.aux_heating_source_location]) * self.aux_heating_source_location
+        vector_cold_water_input = self.cold_water_input_location * inlet_water_flow * WATER.cp * self.ports[self.cold_water_input_port_name].T
+        vector_heat_from_main_heating_source = total_heat_from_main_heating_source / self.main_heating_source_location.sum() * self.main_heating_source_location
+        vector_heat_from_aux_heating_source = total_heat_from_aux_heating_source / self.aux_heating_source_location.sum() * self.aux_heating_source_location
         # Finally calculating the C vector
         C = -self.convection_coefficient_losses * self.surface_losses_layer_vec * ambient_temperature * 1e-3 - vector_heat_from_main_heating_source - vector_heat_from_aux_heating_source - vector_cold_water_input
         return C
-
-    def calculate_heat_exchange_between_layers(self):
-        # Method to calculate the internal heat exchange between layers. 
-        # The output is a numpy array where each element represents the heat exchanged across the i-th interface. 
-        # Calculate the relationship between the temperatures across different layers. Each element is 1 if the temperature below the interface is higher than the temperature above the interface
-        relative_temperature_layers_state = np.array([0] * (self.number_of_layers + 1), dtype=bool)
-        relative_temperature_layers_state[1:-1] = self.T_layer[1:] > self.T_layer[:-1]
-        # Compare the relative temperature layers state with the existing one. Only recalculate the internal heat exchange coefficient vector if changes happen
-        if any(relative_temperature_layers_state != self.relative_temperature_layers_state):
-            self.relative_temperature_layers_state = relative_temperature_layers_state
-            self.internal_heat_exchange_coefficient = np.ones(self.number_of_layers-1) * WATER.k
-            self.internal_heat_exchange_coefficient[self.relative_temperature_layers_state] = WATER.k * self.convection_effect_coefficient
-        heat_exchange_between_layers = self.internal_heat_exchange_coefficient * self.surface_cross_section * (self.T_layer[1:] - self.T_layer[:-1]) * 1e-3  # [W/m2K] * [m2] * [K] * [kW/W] --> kW
-        return heat_exchange_between_layers
     
     def set_inherited_fluid_port_values(self, state):
         T_port = self.T_layer[np.nonzero(self.hot_water_output_location==1)][0]
@@ -336,7 +449,30 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         self.water_mass_flow_t = 0.0
         self.T_layer = self.T_layer = np.array([self.T_0 - 0.01 * x for x in range(self.number_of_layers)], dtype=np.float32)
         self.relative_temperature_layers_state = np.zeros(self.number_of_layers + 1, dtype=np.int16)
-        self.internal_heat_exchange_coefficient = np.ones(self.number_of_layers - 1, dtype=np.float32) * WATER.k
+        internal_heat_exchange_coefficients = self._update_heat_transfer_coefficients()
+        internal_water_flows, inlet_water_flow, outlet_water_flow = self._update_water_flows()
         self.matrix_B = np.array([-self.layer_mass * WATER.cp / state.time_step] * self.number_of_layers, dtype=np.float32)
-        self.update_A_matrix(True)
+        self._update_A_matrix(internal_heat_exchange_coefficients, internal_water_flows, outlet_water_flow)
         super().initialize(ctx)
+
+    def _check_state(self, state, stage="unknown"):
+        """
+        Function that makes a "sanity check" before each simulation step. 
+        This helps in an early identification of potential issues
+        """
+        Tmin = C2K(0)
+        Tmax = C2K(100)
+
+        if not np.all(np.isfinite(self.T_layer)):
+            raise RuntimeError(
+                f"{self.name}: non-finite temperature at "
+                f"t={state.time}, step={state.time_id}, stage={stage}\n"
+                f"T_layer={self.T_layer}"
+            )
+
+        if np.any(self.T_layer < Tmin) or np.any(self.T_layer > Tmax):
+            raise RuntimeError(
+                f"{self.name}: physically unreasonable temperature at "
+                f"t={state.time}, step={state.time_id}, stage={stage}\n"
+                f"T_layer={self.T_layer}"
+            )

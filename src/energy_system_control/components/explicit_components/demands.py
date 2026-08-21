@@ -119,10 +119,10 @@ class TimeSeriesDemand(Demand):
     @classmethod
     def from_dataframe(cls,
                     name: str,
-                    demand_type: str,
-                    time_alignment: TimeAlignment,
                     df: pd.DataFrame | pd.Series, 
-                    column_name: str,
+                    time_alignment: TimeAlignment,
+                    demand_type: str | None = None,
+                    column_name: str | None = None,
                     var_type: VariableType = "energy", 
                     var_unit: VariableUnit = 'kWh',
                     rescale_factor: float = 1.0,
@@ -201,7 +201,6 @@ class ElectricityDemand(TimeSeriesDemand):
         self,
         name: str,
         ts_data: TimeSeriesData,
-        var_unit: Literal["Wh", "kWh"] = "kWh",
         rescale_factor: float = 1.0,
         **kwargs,
     ):

@@ -45,9 +45,18 @@ class Simulator:
             self.state.time_id += 1
 
         # Creating results object
+        if self.cfg.simulation_start_datetime is not None:
+            results_index = pd.date_range(start = self.cfg.simulation_start_datetime,
+                                          end = self.cfg.simulation_start_datetime + pd.Timedelta(hours = self.cfg.simulation_end_h),
+                                          freq = pd.Timedelta(hours = self.cfg.time_step_h),
+                                          inclusive = "left"
+                                          )
+        else:
+            results_index = self.state.time_vector
+
         simulation_results = SimulationResults(sim_data, 
                                                self.state.time_step, 
-                                               self.state.time_vector,
+                                               results_index,
                                                self.env.signal_registry_ports,
                                                self.env.signal_registry_controllers,
                                                self.env.signal_registry_sensors,)

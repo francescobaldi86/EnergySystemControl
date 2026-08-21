@@ -189,7 +189,8 @@ def _find_simulation_start_matching_index(
         case "datetime":
             target = simulation_start
 
-            target_index = pd.DatetimeIndex([target])
+            # target_index = pd.DatetimeIndex([target])
+            target_index = index
 
         case "yearly":
             # Ignore the source year.

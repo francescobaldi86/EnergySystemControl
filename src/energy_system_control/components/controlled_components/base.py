@@ -53,5 +53,9 @@ class HeatSource(ControlledComponent):
         return self.get_heat_output(state) / self.get_efficiency(state)
 
     def step(self, state: SimulationState, action):
-        self.ports[self.heat_output_port_name].flows['heat'] = -self.get_heat_output(state) * action
-        self.ports[self.power_input_port_name].flows[self.source_type] = self.get_power_input(state) * action
+        if action == 0.0:
+            self.ports[self.heat_output_port_name].flows['heat'] = 0.0
+            self.ports[self.power_input_port_name].flows[self.source_type] = 0.0
+        else:
+            self.ports[self.heat_output_port_name].flows['heat'] = -self.get_heat_output(state) * action
+            self.ports[self.power_input_port_name].flows[self.source_type] = self.get_power_input(state) * action
