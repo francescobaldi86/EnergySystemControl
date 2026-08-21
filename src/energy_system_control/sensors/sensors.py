@@ -89,15 +89,15 @@ class TankTemperatureSensor(Sensor):
         self.sensor_height_id = None
 
     def measure(self, environment, state):
-        if isinstance(environment.components[self.component_name], HotWaterStorage):
-            self.current_measurement = environment.components[self.component_name].temperature
-        elif isinstance(environment.components[self.component_name], MultiNodeHotWaterTank):
+        if isinstance(environment.components[self.component_name], MultiNodeHotWaterTank):
             if not self.sensor_height_id:
                 self.sensor_height_id = environment.components[self.component_name].identify_layer_by_height(
                     height = self.sensor_height, 
                     default = environment.components[self.component_name].number_of_layers // 2 - 1, 
                     output_type = 'layer_id')
             self.current_measurement = environment.components[self.component_name].T_layer[self.sensor_height_id]
+        elif isinstance(environment.components[self.component_name], HotWaterStorage):
+            self.current_measurement = environment.components[self.component_name].temperature
         return self.current_measurement
 
 
