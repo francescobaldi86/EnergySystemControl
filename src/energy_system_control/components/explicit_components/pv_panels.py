@@ -17,7 +17,8 @@ class PVpanel(Producer):
         self.ports[self.port_name].flows['electricity'] = -self.ts.data[state.time_id]
 
     def resample_data(self, time_step_h: float, simulation_end_h: float, simulation_start_datetime: datetime | None = None):
-        self.ts.resample(time_step_h=time_step_h, simulation_end_h=simulation_end_h, simulation_start_datetime=simulation_start_datetime)
+        if self.ts is not None:  # In the case of the PV from irradiation data, self.ts is None
+            self.ts.resample(time_step_h=time_step_h, simulation_end_h=simulation_end_h, simulation_start_datetime=simulation_start_datetime)
 
 
 class PVpanelFromData(PVpanel):
@@ -136,7 +137,7 @@ class PVpanelFromIrradiation(PVpanel):
     PV panel model that calculates power output from solar irradiation.
     """
 
-    def __init__(self, name: str, tilt: float, azimuth: float, installed_power: float):
+    def __init__(self, name: str, tilt: float, azimuth: float, installed_power: float, latitude: float, longitude: float):
         """
         Parameters
         ----------
@@ -153,15 +154,35 @@ class PVpanelFromIrradiation(PVpanel):
         self.tilt = tilt
         self.azimuth = azimuth
         self.installed_power = installed_power
+        self.latitude = latitude
+        self.longitude = longitude
 
     def step(self, state: SimulationState, action=None):
         env_data = state.environmental_data
-
+        lat = np.radians(self.latitude)
+        lon = np.radians(self.longitude)
         # Convert angles to radians
         tilt_rad = np.radians(self.tilt)
         panel_az_rad = np.radians(self.azimuth)
-        sun_zenith_rad = np.radians(env_data.solar_zenith)
-        sun_az_rad = np.radians(env_data.solar_azimuth)
+        # Calculating solar declination
+        current_datetime = state.simulation_start_datetime + pd.Timedelta(seconds=state.time)
+        day_of_year = current_datetime.dayofyear
+        day_angle = np.radians(360 * (day_of_year - 81) / 365)
+        solar_declination_rad = np.radians(
+            23.45 * np.sin(np.radians(360 * (284 + day_of_year) / 365))
+        )
+        # Calculate the hour angle
+        hour_angle_rad = np.radians(15 * (current_datetime.hour + current_datetime.minute/60 - 12))
+        # Calculate solar zenith
+        sun_zenith_rad = np.arccos(
+            np.sin(lat) * np.sin(solar_declination_rad)
+            + np.cos(lat) * np.cos(solar_declination_rad) * np.cos(hour_angle_rad)
+        )
+        # Calculate solar azimuth
+        sun_az_rad = np.atan2(
+            -np.cos(solar_declination_rad) * np.sin(hour_angle_rad),
+            np.sin(solar_declination_rad) * np.cos(lat) - np.cos(solar_declination_rad) * np.sin(lat) * np.cos(hour_angle_rad)
+        )
 
         # Incidence angle
         cos_theta = (

@@ -65,6 +65,6 @@ class HeatPumpRuleBasedController(HeaterControllerWithBandwidth):
             external_input = 1
         else:
             external_input = 0
-        action = super().get_action(state, external_input)
+        action = super()._compute_action(state, external_input)
         self.previous_action = action
         return action
