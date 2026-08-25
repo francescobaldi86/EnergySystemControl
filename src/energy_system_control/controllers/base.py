@@ -58,7 +58,7 @@ class Controller(ABC):
         self.load_sensors(ctx.environment.sensors)
         self.load_predictors(ctx.environment.predictors)
         self.previous_action = {comp: 0 for comp in self.controlled_components}
-        self.time_elapsed_since_last_state_change = {comp: 0.0 for comp in self.controlled_components}
+        self.time_since_last_state_change = {comp: 0.0 for comp in self.controlled_components}
 
     def get_obs(self, environment, state) -> Dict[str, Any]:
         self.obs = {var: sensor.get_measurement() for var, sensor in self.sensors.items()}
@@ -74,6 +74,24 @@ class Controller(ABC):
     def load_predictors(self, predictors: Dict[str, Any]):
         self.predictors = {var: predictors[predictor_name] for var, predictor_name in self.predictor_names.items()}
 
+    def get_action(self, state, **kwargs):
+        action = self._compute_action(state, **kwargs)
+        action = self.check_dynamic_limitations(state, action)
+        self.previous_action = action
+        return action
+
+    @abstractmethod
+    def _compute_action(self, state, **kwargs):
+        raise NotImplementedError
+
+    def check_dynamic_limitations(self, state, action):
+        action = self.check_time_elapsed_since_last_state_change(
+            state, action
+        )
+        # Future:
+        # action = self.check_ramp_limits(state, action)
+        return action
+
     def check_time_elapsed_since_last_state_change(self, state, action):
         # Method to ensure that the controlled component is not turned ON/OFF too often
         if self.on_off_time_limitations:
@@ -81,27 +99,23 @@ class Controller(ABC):
                 # Check whether the action is valid
                 # First, if no change of action is required, all is good and we simply update the time elapsed since last state change
                 if action[component_name] == self.previous_action[component_name]:
-                    self.time_elapsed_since_last_state_change[component_name] += state.time_step
+                    self.time_since_last_state_change[component_name] += state.time_step
                 elif action[component_name] == True and self.previous_action[component_name] == False:
-                    if self.time_elapsed_since_last_state_change[component_name] >= self.minimum_time_off_between_deactivations[component_name]:
-                        self.time_elapsed_since_last_state_change[component_name] = 0.0
+                    if self.time_since_last_state_change[component_name] >= self.minimum_time_off_between_deactivations[component_name]:
+                        self.time_since_last_state_change[component_name] = 0.0
                     else:
                         action[component_name] = False
-                        self.time_elapsed_since_last_state_change[component_name] += state.time_step
+                        self.time_since_last_state_change[component_name] += state.time_step
                 elif action[component_name] == False and self.previous_action[component_name] == True:
-                    if self.time_elapsed_since_last_state_change[component_name] >= self.minimum_time_on_between_activations[component_name]:
-                        self.time_elapsed_since_last_state_change[component_name] = 0.0
+                    if self.time_since_last_state_change[component_name] >= self.minimum_time_on_between_activations[component_name]:
+                        self.time_since_last_state_change[component_name] = 0.0
                     else:
                         action[component_name] = True
-                        self.time_elapsed_since_last_state_change[component_name] += state.time_step
+                        self.time_since_last_state_change[component_name] += state.time_step
                 else:
                     raise ValueError('There should be no other option')
 
         return action
-
-    @abstractmethod
-    def get_action(self) -> Dict[str, Any]:
-        return None
     
     
 
@@ -135,13 +149,13 @@ class HeaterControllerWithBandwidth(Controller):
         self.temperature_sensor_name = temperature_sensor
         self.controlled_heater_name = controlled_component
 
-    def get_action(self, state: SimulationState, external_input: int | float = 0):
+    def _compute_action(self, state: SimulationState, external_input: int | float = 0):
         temperature = self.obs["Storage temperature"]
         action = {}
         if temperature <= self.temperature_comfort:
             action[self.controlled_heater_name] = 1
         elif temperature <= self.temperature_comfort + self.temperature_bandwidth:
-            action = self.previous_action
+            action = self.previous_action.copy()
         else: 
             action[self.controlled_heater_name] = 0
         if external_input > 0:
@@ -183,7 +197,7 @@ class ChargeController(Controller):
     def initialize(self, ctx):
         super().initialize(ctx)      
 
-    def get_action(self, state: SimulationState):
+    def _compute_action(self, state: SimulationState):
         # In the case of the inverter, the action is the energy required to balance the controlled sensor node (normally the exchange with the grid)
         # This involves two checks:
         #   - Power check (the power should not be higher than what is allowed by the battery)

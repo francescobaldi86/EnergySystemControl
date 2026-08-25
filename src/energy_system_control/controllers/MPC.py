@@ -65,6 +65,7 @@ class MPCController_HybridDHW(MPCController):
     def __init__(self,
                     name: str,
                     horizon: float,
+                    time_step_h: float,
                     heat_pump_name: str,
                     storage_temperature_sensor: str | None = None,
                     battery_SOC_sensor: str | None = None,
@@ -85,6 +86,7 @@ class MPCController_HybridDHW(MPCController):
         self.bounds_SOC = bounds_SOC
         self.bounds_temperature = bounds_temperature
         self.cost_of_temperature_violation = cost_of_temperature_violation
+        self.optimization_time_step_h = time_step_h
         super().__init__(
             name = name,
             controlled_components = [heat_pump_name],
@@ -133,8 +135,7 @@ class MPCController_HybridDHW(MPCController):
         problem = self.problem
         
         # Calculating first parameters
-        TIME_STEP = ctx.state.time_step / 3600
-        TIME_HORIZON = int(self.horizon // TIME_STEP)
+        TIME_HORIZON = int(self.horizon // (self.optimization_time_step_h))
         problem.variables = {
             'temperature_hot_water_storage': cp.Variable(TIME_HORIZON),
             'energy_battery': cp.Variable(TIME_HORIZON),
@@ -179,18 +180,18 @@ class MPCController_HybridDHW(MPCController):
         }
         # Matrices and vectors for thermal storage temperature update
         A_TES = np.zeros(shape=[TIME_HORIZON-1,TIME_HORIZON])
-        A_TES_main = np.array([problem.constant_parameters['DISPERSION_COEFFICIENT'] * problem.constant_parameters['DISPERSION_SURFACE'] * TIME_STEP / (problem.constant_parameters['MASS_STORAGE'] * WATER.cp) - 1] * TIME_HORIZON)
+        A_TES_main = np.array([problem.constant_parameters['DISPERSION_COEFFICIENT'] * problem.constant_parameters['DISPERSION_SURFACE'] * self.optimization_time_step_h / (problem.constant_parameters['MASS_STORAGE'] * WATER.cp) - 1] * TIME_HORIZON)
         A_TES_above = np.array([1] * (TIME_HORIZON-1))
         A_TES = np.diag(A_TES_main) + np.diag(A_TES_above, k=1)
         problem.constant_parameters['A_TES'] = A_TES = A_TES[:-1, :]
-        problem.constant_parameters['B1_TES'] = TIME_STEP / (problem.constant_parameters['MASS_STORAGE'] * problem.constant_parameters['HEAT_CAPACITY_WATER'])
+        problem.constant_parameters['B1_TES'] = self.optimization_time_step_h / (problem.constant_parameters['MASS_STORAGE'] * problem.constant_parameters['HEAT_CAPACITY_WATER'])
 
         # Matrices and vectors for electrical storage energy update
         A_EES = np.zeros(shape=[TIME_HORIZON-1,TIME_HORIZON])
         A_EES = np.diag(np.ones(TIME_HORIZON-1), k=1) - np.diag(np.ones(TIME_HORIZON)) 
         problem.constant_parameters['A_EES'] = A_EES = A_EES[:-1, :]
-        problem.constant_parameters['B1_EES_CHA'] = TIME_STEP * problem.constant_parameters['EFFICIENCY_EES_CHA']
-        problem.constant_parameters['B1_EES_DIS'] = TIME_STEP / problem.constant_parameters['EFFICIENCY_EES_DIS']
+        problem.constant_parameters['B1_EES_CHA'] = self.optimization_time_step_h * problem.constant_parameters['EFFICIENCY_EES_CHA']
+        problem.constant_parameters['B1_EES_DIS'] = self.optimization_time_step_h / problem.constant_parameters['EFFICIENCY_EES_DIS']
 
         # Update problem parameters, with values available at start
         self.update_problem_parameters(state = ctx.state)
@@ -219,7 +220,7 @@ class MPCController_HybridDHW(MPCController):
         objective = cp.Minimize(problem.constant_parameters['ENERGY_COST'] *np.ones([1,TIME_HORIZON]) @ problem.variables['power_from_grid'] - problem.constant_parameters['ENERGY_VALUE']*np.ones([1,TIME_HORIZON]) @ problem.variables['power_to_grid'] + problem.constant_parameters['COST_OF_TEMPERATURE_VIOLATION'] * cp.sum(problem.variables['slack_temperature']))
         self.problem.problem = cp.Problem(objective, constraints)
     
-    def get_action(self, state):
+    def _compute_action(self, state):
         action = {}
         self.update_problem_parameters(state)
         self.problem.problem.solve(self.solver)
@@ -263,7 +264,7 @@ class MPCController_HybridDHW(MPCController):
     
     def safe_predict(self, predictor: Predictor | None, state: SimulationState):
         if predictor:  # If no predictor is loaded, it takes "None" value
-            return predictor.predict(self.horizon, state)
+            return predictor.predict(self.horizon, state, self.optimization_time_step_h)
         else:  # If there is no predictor, we interpret it as that there is no demand
             return np.zeros(int(self.horizon // (state.time_step/3600)))
 

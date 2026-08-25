@@ -56,7 +56,7 @@ class HeatPumpRuleBasedController(HeaterControllerWithBandwidth):
         self.power_PV_activation = power_PV_activation
         self.PV_power_sensor_name = PV_power_sensor
 
-    def get_action(self, state = SimulationState):
+    def _compute_action(self, state = SimulationState):
         # The principle of this controller is: 
         # - It tries to keep the temperature within limits, thus working as a "standard" bandwidth controller
         # - However, it also measures the power 

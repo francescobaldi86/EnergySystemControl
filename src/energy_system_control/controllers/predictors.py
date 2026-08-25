@@ -317,9 +317,33 @@ class PerfectTimeSeriesPredictor(Predictor):
 
     def initialize(self, ctx):
         self.data = ctx.environment.components[self.read_component].ts.data
+        self.time_step_simulation = float(np.diff(ctx.state.time_vector[:2])[0])
 
-    def predict(self, horizon, state):
-        return self.data[state.time_id: np.where(state.time_vector_for_prediction == state.time + horizon*3600)[0][0]]
+    def predict(
+        self,
+        horizon: float,
+        state: SimulationState,
+        time_step_prediction_h: float | None = None,
+    ) -> np.ndarray:
+        """Return source data averaged over the requested prediction time step."""
+        time_step_prediction = time_step_prediction_h * 3600
+        prediction_at_simulation_time_step = self.data[state.time_id: np.where(state.time_vector_for_prediction == state.time + horizon*3600)[0][0]]
+        if time_step_prediction is None:
+            time_step_prediction = self.time_step_simulation
+            return prediction_at_simulation_time_step
+        if time_step_prediction < self.time_step_simulation:
+            raise ValueError(
+                "time_step_prediction cannot be smaller than the simulation time step"
+            )
+        if time_step_prediction % self.time_step_simulation != 0:
+            raise ValueError(f'The prediction time step must be a multiple of the simulation time step. Current values are ts_sim: {self.time_step_simulation/3600:.1f} h, ts_pred: {time_step_prediction_h:.1f} h')
+        if time_step_prediction <= 0:
+            raise ValueError("time_step_prediction must be positive")
+
+        samples_per_bin = int(time_step_prediction / self.time_step_simulation)
+
+        return prediction_at_simulation_time_step.reshape(-1, samples_per_bin).mean(axis=1)
+
     
 
 class MLBasedPredictor(Predictor):
