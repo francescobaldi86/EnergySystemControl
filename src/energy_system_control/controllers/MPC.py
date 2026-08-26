@@ -38,8 +38,16 @@ class MPCController(Controller):
         predictors: Dict[str, str],
         horizon: float,
         solver: SolverName = "HIGHS",
+        minimum_time_off_between_activations_h: dict = {},
+        minimum_time_on_between_deactivations_h: dict = {},
     ):
-        super().__init__(name, controlled_components, sensors, predictors)
+        super().__init__(
+            name = name, 
+            controlled_components = controlled_components, 
+            sensors = sensors, 
+            predictors = predictors,
+            minimum_time_off_between_activations_h = minimum_time_off_between_activations_h,
+            minimum_time_on_between_deactivations_h = minimum_time_on_between_deactivations_h)
         if horizon <= 0:
             raise ValueError("horizon_steps must be > 0")
         self.horizon = horizon 
@@ -74,7 +82,9 @@ class MPCController_HybridDHW(MPCController):
                     electricity_demand_predictor_name: str | None = None,
                     bounds_SOC: Tuple[float, float] = (0.3, 0.9),
                     bounds_temperature: Tuple[float, float] = (313.15, 353.15),
-                    cost_of_temperature_violation: float = 1000.0
+                    cost_of_temperature_violation: float = 1000.0,
+                    minimum_time_off_between_activations_h: float | None = None,
+                    minimum_time_on_between_deactivations_h: float | None = None
                     ):
         self.PV_power_predictor_name = PV_power_predictor_name
         self.heat_demand_predictor_name = heat_demand_predictor_name
@@ -87,13 +97,23 @@ class MPCController_HybridDHW(MPCController):
         self.bounds_temperature = bounds_temperature
         self.cost_of_temperature_violation = cost_of_temperature_violation
         self.optimization_time_step_h = time_step_h
+        if minimum_time_off_between_activations_h is not None:
+            minimum_time_off_between_activations_h = {heat_pump_name: minimum_time_off_between_activations_h}
+        else:
+            minimum_time_off_between_activations_h = {}
+        if minimum_time_on_between_deactivations_h is not None:
+            minimum_time_on_between_deactivations_h = {heat_pump_name: minimum_time_on_between_deactivations_h}
+        else:
+            minimum_time_on_between_deactivations_h = {}
         super().__init__(
             name = name,
             controlled_components = [heat_pump_name],
             sensors = sensors,
             predictors = predictors,
             horizon = horizon,
-            solver = cp.HIGHS)
+            solver = cp.HIGHS,
+            minimum_time_off_between_activations_h=minimum_time_off_between_activations_h,
+            minimum_time_on_between_deactivations_h=minimum_time_on_between_deactivations_h)
         
     def load_controlled_components(self, components):
         self.heat_pump = find_object_of_type(HeatPump, components)

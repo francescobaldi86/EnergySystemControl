@@ -10,10 +10,6 @@ from importlib.resources import files
 from typing import List, Dict, Literal
 from datetime import datetime
 
-DemandType = Literal['electricity', 'fluid']
-VariableType = Literal['energy', 'power', 'volume', 'mass', 'temperature']
-VariableUnit = Literal['Wh', 'kWh', 'MWh', 'W', 'kW', 'MW', 'l', 'm3', 'kg', 'C', 'K']
-
 class Demand(ExplicitComponent):
     port_name: str
     demand_type: DemandType

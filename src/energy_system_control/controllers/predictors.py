@@ -11,7 +11,9 @@ from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegresso
 from sklearn.preprocessing import StandardScaler
 from sklearn.multioutput import MultiOutputRegressor
 from energy_system_control.sim.state import SimulationState
-from energy_system_control.components.base import Component
+from energy_system_control.components.base import TimeSeriesData
+from energy_system_control.helpers import *
+
 AlignMethod = Literal["raise", "ffill", "linear"]
 ANNModelType = Literal["pure regressor", "regressor-classifier"]
 
@@ -310,13 +312,19 @@ class DailyProfilePredictor(Predictor):
 
 
 class PerfectTimeSeriesPredictor(Predictor):
-    read_component: str
-    def __init__(self, name: str, read_component: str, variable_to_predict: str = None):
+    data_source: str
+    def __init__(self, name: str, data_source: str, ts_data: TimeSeriesData | None = None, read_component: str | None = None, variable_to_predict: str = None):
         super().__init__(name = name, variable_to_predict=variable_to_predict)
+        self.data_source = data_source
+        self.ts_data = ts_data
         self.read_component = read_component
 
     def initialize(self, ctx):
-        self.data = ctx.environment.components[self.read_component].ts.data
+        match self.data_source:
+            case 'component data':
+                self.data = ctx.environment.components[self.read_component].ts.data
+            case 'external data':
+                self.data = self.ts_data.data
         self.time_step_simulation = float(np.diff(ctx.state.time_vector[:2])[0])
 
     def predict(
@@ -343,6 +351,49 @@ class PerfectTimeSeriesPredictor(Predictor):
         samples_per_bin = int(time_step_prediction / self.time_step_simulation)
 
         return prediction_at_simulation_time_step.reshape(-1, samples_per_bin).mean(axis=1)
+
+    @staticmethod
+    def from_component_data(
+        cls,
+        name: str,
+        read_component: str,
+        variable_to_predict: str = None,
+        **kwargs
+    ):
+        return cls(name = name, 
+                   data_source = 'component data',
+                   read_component = read_component,
+                   variable_to_predict = variable_to_predict
+                    **kwargs)
+
+    @staticmethod
+    def from_external_data(
+        cls,
+        name: str,
+        variable_to_predict: str,
+        time_alignment: TimeAlignment,
+        df: pd.DataFrame | pd.Series,
+        var_type: VariableType = "energy", 
+        var_unit: VariableUnit = 'kWh',
+        column_name: str | None = None,
+        **kwargs
+    ):
+        if isinstance(df, pd.DataFrame):
+            raw = df[column_name]
+        elif isinstance(df, pd.Series):
+            raw = df
+        else:
+            raise TypeError('The input "df" provided should be either a pandas Series or DataFrame.')
+        ts_data = TimeSeriesData(
+                    raw = raw,
+                    time_alignment = time_alignment,
+                    var_type = var_type,
+                    var_unit = var_unit)
+        return cls(name = name, 
+                   variable_to_predict = variable_to_predict,
+                   data_source = 'external data',
+                   ts_data = ts_data,
+                   **kwargs)
 
     
 
