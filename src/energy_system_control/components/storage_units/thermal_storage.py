@@ -340,3 +340,27 @@ class MultiNodeHotWaterTank(HotWaterStorage):
         self.matrix_B = np.array([-self.layer_mass * WATER.cp / state.time_step] * self.number_of_layers, dtype=np.float32)
         self.update_A_matrix(True)
         super().initialize(ctx)
+
+class BiogasStorage(StorageUnit):
+
+    def __init__(
+    self,
+    name: str,
+    capacity: float,
+    initial_mass: float = 0.0
+):
+
+
+        self.capacity = capacity
+        self.mass = initial_mass
+
+        self.input_port = f"{name}_input"
+        self.output_port = f"{name}_output"
+
+        super().__init__(
+            name,
+            {
+                self.input_port: "biogas",
+                self.output_port: "biogas"
+            }
+        )

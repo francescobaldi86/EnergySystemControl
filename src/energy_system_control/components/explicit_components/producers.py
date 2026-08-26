@@ -1,5 +1,7 @@
 from energy_system_control.components.base import ExplicitComponent
 from energy_system_control.sim.state import SimulationState
+from energy_system_control.constants.fluids import Methane, CarbonDioxide
+
 
 
 class Producer(ExplicitComponent):
@@ -19,53 +21,8 @@ class ConstantPowerProducer(Producer):
     def step(self, state: SimulationState, action = None): 
         self.ports[self.port_name].flows[self.production_type] = -self.power  # Since it is a producer, the net energy flow is always negative
 
-class AnaerobicDigester(Producer):
-    def __init__(self, name: str, biogas_rate: float, methane_fraction: float):
-        self.biogas_rate = biogas_rate
-        self.methane_fraction = methane_fraction
 
-        super().__init__(name, "biogas")
-
-    def step(self, state, action=None):
-        self.ports[self.port_name].flows["mass"] = -biogas_produced
-        self.ports[self.port_name].flows["chemical_energy"] = -biogas_produced
-        self.ports[self.port_name].methane_fraction=self.methane_fraction
-        self.ports[self.port_name].calculate_LHV()
-
-class AnaerobicDigester(Producer):
-
-    BIOGAS_DENSITY = 1.2  # kg/m3
-
-    def __init__(self, name: str, biogas_rate: float, methane_fraction: float):
-
-        # biogas_rate arriva in kg/s
-        self.biogas_rate = biogas_rate
-        self.methane_fraction = methane_fraction
-
-        super().__init__(name, "biogas")
-
-    def step(self, state, action=None):
-
-        # kg/s
-        biogas_mass_flow = self.biogas_rate
-
-        # conversione in L/h
-        biogas_volume_flow = (
-            biogas_mass_flow
-            / self.BIOGAS_DENSITY
-            * 1000
-            * 3600
-        )
-
-        port = self.ports[self.port_name]
-
-        # ora il flusso massa contiene L/h
-        port.flows["mass"] = -biogas_volume_flow
-
-        port.methane_fraction = self.methane_fraction
-
-        port.calculate_LHV()
-class AnaerobicDigester(Producer):
+'''class AnaerobicDigester(Producer):
 
     # Densità gas puri a circa:
     # 1 atm, 20-25 °C
@@ -157,4 +114,60 @@ class AnaerobicDigester(Producer):
 
         port.flows["mass"] = -biogas_mass_flow              # kg/s
 #        port.flows["volume"] = -biogas_volume_flow_lh       # L/h
-        port.flows["chemical_energy"] = -chemical_energy_flow  # W
+        port.flows["chemical_energy"] = -chemical_energy_flow  # W'''
+
+
+class AnaerobicDigester(Producer):
+
+    def __init__(
+        self,
+        name: str,
+        biogas_rate: float,      # kg/s
+        methane_fraction: float
+    ):
+
+        super().__init__(name, "biogas")
+
+        self.biogas_rate = biogas_rate
+        self.methane_fraction = methane_fraction
+
+    @property
+    def biogas_density(self):
+
+        return (
+            self.methane_fraction * Methane.rho +
+            (1 - self.methane_fraction) * CarbonDioxide.rho
+        )
+
+    @property
+    def biogas_LHV(self):
+        """
+        LHV massico del biogas [J/kg]
+        """
+
+        methane_mass_fraction = (
+            self.methane_fraction * Methane.rho
+        ) / self.biogas_density
+
+        return methane_mass_fraction * Methane.LHV
+
+    def step(self, state, action=None):
+
+        mass_flow = self.biogas_rate                    # kg/s
+
+        volume_flow = (
+            mass_flow / self.biogas_density
+        )
+
+        chemical_energy = (
+            mass_flow * self.biogas_LHV
+        )
+
+        port = self.ports[self.port_name]
+
+        port.methane_fraction = self.methane_fraction
+        port.LHV = self.biogas_LHV
+
+        port.flows["mass"] = -mass_flow
+        port.flows["volume"] = -volume_flow
+        port.flows["chemical_energy"] = -chemical_energy

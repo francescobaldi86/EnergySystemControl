@@ -21,5 +21,10 @@ class Methane(FrozenNamespace):
     LHV: 50_000  # [kJ/kg]
     rho: 0.72  # [kg/m3]
 
+@dataclass(frozen=True)
+class CarbonDioxide(FrozenNamespace):
+    rho = 1.98          # kg/m3
+
+
 WATER = Water()
 AIR = Air()
