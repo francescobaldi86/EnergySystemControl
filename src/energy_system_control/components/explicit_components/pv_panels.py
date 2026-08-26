@@ -151,52 +151,33 @@ class PVpanelFromIrradiation(PVpanel):
             Installed nominal power of the panel at standard test conditions (kW)
         """
         super().__init__(name, ts=None)  # no external time series
-        self.tilt = tilt
-        self.azimuth = azimuth
+        self.tilt_deg = tilt
+        self.azimuth_deg = azimuth
+        self.tilt_rad = np.radians(tilt)
+        self.azimuth_rad = np.radians(azimuth)
         self.installed_power = installed_power
         self.latitude = latitude
         self.longitude = longitude
 
+    @property
+    def tilt(self, unit: str = 'deg') -> float:
+        match unit:
+            case 'deg':
+                return self.tilt_deg
+            case 'rad':
+                return self.tilt_rad
+            case _:
+                raise ValueError(f'The unit for the tilt should be either rad or deg. {unit} was provided.')
+            
+
     def step(self, state: SimulationState, action=None):
         env_data = state.environmental_data
-        lat = np.radians(self.latitude)
-        lon = np.radians(self.longitude)
-        # Convert angles to radians
-        tilt_rad = np.radians(self.tilt)
-        panel_az_rad = np.radians(self.azimuth)
-        # Calculating solar declination
         current_datetime = state.simulation_start_datetime + pd.Timedelta(seconds=state.time)
-        day_of_year = current_datetime.dayofyear
-        day_angle = np.radians(360 * (day_of_year - 81) / 365)
-        solar_declination_rad = np.radians(
-            23.45 * np.sin(np.radians(360 * (284 + day_of_year) / 365))
-        )
-        # Calculate the hour angle
-        hour_angle_rad = np.radians(15 * (current_datetime.hour + current_datetime.minute/60 - 12))
-        # Calculate solar zenith
-        sun_zenith_rad = np.arccos(
-            np.sin(lat) * np.sin(solar_declination_rad)
-            + np.cos(lat) * np.cos(solar_declination_rad) * np.cos(hour_angle_rad)
-        )
-        # Calculate solar azimuth
-        sun_az_rad = np.atan2(
-            -np.cos(solar_declination_rad) * np.sin(hour_angle_rad),
-            np.sin(solar_declination_rad) * np.cos(lat) - np.cos(solar_declination_rad) * np.sin(lat) * np.cos(hour_angle_rad)
-        )
-
+        solar_zenith, solar_azimuth = calculate_solar_angles(self.latitude, self.longitude, current_datetime)
         # Incidence angle
-        cos_theta = (
-            np.cos(sun_zenith_rad) * np.cos(tilt_rad) +
-            np.sin(sun_zenith_rad) * np.sin(tilt_rad) * np.cos(sun_az_rad - panel_az_rad)
-        )
-        cos_theta = max(cos_theta, 0)
-
-        # POA irradiance
-        poa_irradiation = env_data.direct_irradiation * cos_theta + env_data.diffuse_irradiation * (1 + np.cos(tilt_rad)) / 2
-
-        # AC power
+        poa_irradiation = calculate_effective_irradiance(solar_zenith, solar_azimuth, self.tilt_rad, self.azimuth_rad, env_data.direct_irradiation, env_data.diffuse_irradiation)
+        # DC power
         power_output = poa_irradiation / 1000 * self.installed_power
-
         # Update PV port
         self.ports[self.port_name].flows['electricity'] = -power_output
 

@@ -375,6 +375,46 @@ def calculate_solar_angles(latitude: float, longitude: float, timestamps: pd.Dat
 
     return zenith, azimuth
 
+def calculate_effective_irradiance(solar_zenith: float, solar_azimuth: float, surface_tilt: float, surface_azimuth: float, direct_irradiation: float, diffuse_irradiation: float):
+    """
+    Calculate the effective irradiance incident on a tilted surface.
+
+    The direct component is projected onto the surface using the angle of
+    incidence. Negative projections, which occur when the sun is behind the
+    surface, are clipped to zero. The diffuse component is estimated as
+    isotropic sky diffuse irradiance over the visible hemisphere.
+
+    Parameters
+    ----------
+    solar_zenith : float
+        Solar zenith angle in radians.
+    solar_azimuth : float
+        Solar azimuth angle in radians.
+    surface_tilt : float
+        Surface tilt from horizontal in radians.
+    surface_azimuth : float
+        Surface azimuth angle in radians.
+    direct_irradiation : float
+        Direct normal irradiance incident on the surface, in W/m2.
+    diffuse_irradiation : float
+        Diffuse horizontal irradiance, in W/m2
+
+    Returns
+    -------
+    float
+        Effective plane-of-array irradiance in the same units as the input
+        irradiances.
+    """
+    cos_theta = (
+                np.cos(solar_zenith) * np.cos(surface_tilt) +
+                np.sin(solar_zenith) * np.sin(surface_tilt) * np.cos(solar_azimuth - surface_azimuth)
+            )
+    cos_theta = max(cos_theta, 0)
+
+    # POA irradiance
+    return direct_irradiation * cos_theta + diffuse_irradiation * (1 + np.cos(surface_tilt)) / 2
+    
+
 
 class NodeImbalanceError(Exception):
     pass
