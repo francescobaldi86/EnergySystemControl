@@ -84,6 +84,12 @@ class Simulator:
                     time_step_h = self.cfg.time_step_h, 
                     simulation_end_h = self.cfg.simulation_end_h + self.cfg.prediction_horizon_margin_h,
                     simulation_start_datetime = self.cfg.simulation_start_datetime)
+        for _, predictor in self.env.predictors.items():
+            if callable(getattr(predictor, 'resample_data', None)):
+                predictor.resample_data(
+                    time_step_h = self.cfg.time_step_h, 
+                    simulation_end_h = self.cfg.simulation_end_h + self.cfg.prediction_horizon_margin_h,
+                    simulation_start_datetime = self.cfg.simulation_start_datetime)
 
     def _normalize_measurement(self, value):
         """

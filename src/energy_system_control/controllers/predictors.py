@@ -25,7 +25,7 @@ class Predictor(ABC):
         self.name = name
         self.variable_to_predict = variable_to_predict
 
-    def initialize(self):
+    def initialize(self, ctx):
         return None
     
     def update(self):
@@ -325,6 +325,8 @@ class PerfectTimeSeriesPredictor(Predictor):
                 self.data = ctx.environment.components[self.read_component].ts.data
             case 'external data':
                 self.data = self.ts_data.data
+            case _:
+                raise KeyError(f'Data source {self.data_source} not among the admissible options: ["component data", "external data"]')
         self.time_step_simulation = float(np.diff(ctx.state.time_vector[:2])[0])
 
     def predict(
@@ -352,7 +354,7 @@ class PerfectTimeSeriesPredictor(Predictor):
 
         return prediction_at_simulation_time_step.reshape(-1, samples_per_bin).mean(axis=1)
 
-    @staticmethod
+    @classmethod
     def from_component_data(
         cls,
         name: str,
@@ -363,10 +365,10 @@ class PerfectTimeSeriesPredictor(Predictor):
         return cls(name = name, 
                    data_source = 'component data',
                    read_component = read_component,
-                   variable_to_predict = variable_to_predict
+                   variable_to_predict = variable_to_predict,
                     **kwargs)
 
-    @staticmethod
+    @classmethod
     def from_external_data(
         cls,
         name: str,
@@ -389,11 +391,19 @@ class PerfectTimeSeriesPredictor(Predictor):
                     time_alignment = time_alignment,
                     var_type = var_type,
                     var_unit = var_unit)
+
         return cls(name = name, 
                    variable_to_predict = variable_to_predict,
                    data_source = 'external data',
                    ts_data = ts_data,
                    **kwargs)
+
+    def resample_data(self, time_step_h: float, simulation_end_h: float, simulation_start_datetime: datetime):
+        if self.ts_data is not None:
+            self.ts_data.resample(
+                time_step_h=time_step_h, 
+                simulation_end_h=simulation_end_h, 
+                simulation_start_datetime=simulation_start_datetime)
 
     
 

@@ -373,7 +373,10 @@ def calculate_solar_angles(latitude: float, longitude: float, timestamps: pd.Dat
     zenith = solpos['zenith']
     azimuth = solpos['azimuth']
 
-    return zenith, azimuth
+    if isinstance(timestamps, pd.Timestamp):
+        return zenith.values[0], azimuth.values[0]
+    elif isinstance(timestamps, pd.DatetimeIndex):
+        return zenith, azimuth
 
 def calculate_effective_irradiance(solar_zenith: float, solar_azimuth: float, surface_tilt: float, surface_azimuth: float, direct_irradiation: float, diffuse_irradiation: float):
     """
@@ -409,7 +412,7 @@ def calculate_effective_irradiance(solar_zenith: float, solar_azimuth: float, su
                 np.cos(solar_zenith) * np.cos(surface_tilt) +
                 np.sin(solar_zenith) * np.sin(surface_tilt) * np.cos(solar_azimuth - surface_azimuth)
             )
-    cos_theta = max(cos_theta, 0)
+    cos_theta = np.max(np.array([cos_theta, np.zeros_like(cos_theta)]), 0)
 
     # POA irradiance
     return direct_irradiation * cos_theta + diffuse_irradiation * (1 + np.cos(surface_tilt)) / 2
