@@ -13,6 +13,7 @@ from energy_system_control import HotWaterDemand, HotWaterStorage, ElectricityDe
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.helpers import find_object_of_type
 from energy_system_control.constants import WATER
+from energy_system_control.helpers import calculate_solar_angles, calculate_effective_irradiance
 
 
 SolverName = Literal["OSQP", "HIGHS"]
@@ -84,9 +85,11 @@ class MPCController_HybridDHW(MPCController):
                     bounds_temperature: Tuple[float, float] = (313.15, 353.15),
                     cost_of_temperature_violation: float = 1000.0,
                     minimum_time_off_between_activations_h: float | None = None,
-                    minimum_time_on_between_deactivations_h: float | None = None
+                    minimum_time_on_between_deactivations_h: float | None = None,
+                    pv_power_prediction_type: str = 'PV power'
                     ):
         self.PV_power_predictor_name = PV_power_predictor_name
+        self.PV_power_prediction_type = pv_power_prediction_type
         self.heat_demand_predictor_name = heat_demand_predictor_name
         self.electricity_demand_predictor_name = electricity_demand_predictor_name
         sensors = {"temperature_storage": storage_temperature_sensor, "soc_battery": battery_SOC_sensor}
@@ -275,18 +278,40 @@ class MPCController_HybridDHW(MPCController):
         # Method that updates problem parameters depending on the current state of the simulation
         param = self.problem.variable_parameters
         # Prediction of future heat demand
-        param['TH_DEMAND'].value = self.safe_predict(self.heat_demand_predictor, state)[:param['TH_DEMAND'].size]
-        param['POWER_PV'].value = self.safe_predict(self.PV_power_predictor, state)[:param['TH_DEMAND'].size]
-        param['EL_DEMAND'].value = self.safe_predict(self.electricity_demand_predictor, state)[:param['TH_DEMAND'].size]
+        prediction_required_size = param['TH_DEMAND'].size
+        param['TH_DEMAND'].value = self.safe_predict(self.heat_demand_predictor, state, prediction_required_size)
+        param['EL_DEMAND'].value = self.safe_predict(self.electricity_demand_predictor, state, prediction_required_size)
         param['TEMPERATURE_STORAGE_0'].value = self.obs['temperature_storage'] if 'temperature_storage' in self.obs.keys() else 273.15+50
         param['SOC_0'].value = self.obs['soc_battery'] if 'soc_battery' in self.obs.keys() else 0.5
         param['B_TES'].value = param['TH_DEMAND'].value[:-1] * self.problem.constant_parameters['B1_TES']
+        pv_related_prediction = self.safe_predict(self.PV_power_predictor, state, prediction_required_size)
+        match self.PV_power_prediction_type:
+            case 'PV power':
+                param['POWER_PV'].value = pv_related_prediction
+            case 'Solar radiation':
+                current_datetime = state.simulation_start_datetime + pd.Timedelta(seconds = state.time)
+                prediction_index = pd.DatetimeIndex(data = current_datetime + np.array([pd.Timedelta(hours = n * self.optimization_time_step_h) for n in range(pv_related_prediction.shape[0])]))
+                solar_zenith, solar_azimuth = calculate_solar_angles(self.pv_panel.latitude, self.pv_panel.longitude, prediction_index)
+                poa_irradiation = calculate_effective_irradiance(
+                    solar_zenith, 
+                    solar_azimuth, 
+                    self.pv_panel.tilt_rad, 
+                    self.pv_panel.azimuth_rad, 
+                    pv_related_prediction[:, 0],
+                    pv_related_prediction[:, 1])
+                param['POWER_PV'].value = poa_irradiation / 1000 * self.pv_panel.installed_power
+                
     
-    def safe_predict(self, predictor: Predictor | None, state: SimulationState):
+    def safe_predict(self, predictor: Predictor | None, state: SimulationState, prediction_required_size: int):
         if predictor:  # If no predictor is loaded, it takes "None" value
-            return predictor.predict(self.horizon, state, self.optimization_time_step_h)
+            pred = predictor.predict(self.horizon, state, self.optimization_time_step_h)
+            try:
+                pred = pred[:prediction_required_size]
+            except (IndexError, TypeError):
+                pred = np.zeros(int(self.horizon // (state.time_step/3600)))[:prediction_required_size]
+            return pred    
         else:  # If there is no predictor, we interpret it as that there is no demand
-            return np.zeros(int(self.horizon // (state.time_step/3600)))
+            return np.zeros(int(self.horizon // (state.time_step/3600)))[:prediction_required_size]
 
 @dataclass
 class MPCProblem:

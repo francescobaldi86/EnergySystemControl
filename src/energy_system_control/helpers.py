@@ -417,7 +417,14 @@ def calculate_effective_irradiance(solar_zenith: float, solar_azimuth: float, su
     # POA irradiance
     return direct_irradiation * cos_theta + diffuse_irradiation * (1 + np.cos(surface_tilt)) / 2
     
-
+def safe_to_list(x):
+    """
+    If x is a list, returns x. If x is not a list, returns [x]
+    """
+    if isinstance(x, list):
+        return x
+    else:
+        return [x]
 
 class NodeImbalanceError(Exception):
     pass
