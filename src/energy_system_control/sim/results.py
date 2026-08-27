@@ -107,8 +107,16 @@ class SimulationResults:
         Returns:
             Fraction of active DHW samples meeting the temperature boundary.
         """
-        condition = abs(self.data.ports[port_name].flow['mass']) > 1e-6
-        return sum(self.data.ports[port_name].T[condition] >= boundary) / len(self.simulation_data.ports[port_name].T[condition])
+        if time_interval_h is None:
+            start_index = 0
+            end_index = self.data.ports.shape[0]
+        else:
+            start_index = int(time_interval_h[0] * 3_600 / self.time_step)
+            end_index = int(time_interval_h[1] * 3_600 / self.time_step)
+        col_T = self.signal_registry_ports.col_index(port_name, 'temperature')
+        col_mfr = self.signal_registry_ports.col_index(port_name, 'mass')
+        condition = abs(self.data.ports[start_index: end_index, col_mfr]) > 1e-6
+        return sum(self.data.ports[start_index: end_index, col_T][condition] >= boundary) / sum(condition)
 
 
     
