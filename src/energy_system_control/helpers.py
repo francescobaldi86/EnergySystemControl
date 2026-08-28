@@ -373,9 +373,9 @@ def calculate_solar_angles(latitude: float, longitude: float, timestamps: pd.Dat
     zenith = solpos['zenith']
     azimuth = solpos['azimuth']
 
-    if isinstance(timestamps, pd.Timestamp):
+    if isinstance(timestamps, pd.Timestamp):  # If only one value is required
         return zenith.values[0], azimuth.values[0]
-    elif isinstance(timestamps, pd.DatetimeIndex):
+    elif isinstance(timestamps, pd.DatetimeIndex):  # If the input "timestamps" is a vector
         return zenith, azimuth
 
 def calculate_effective_irradiance(solar_zenith: float, solar_azimuth: float, surface_tilt: float, surface_azimuth: float, direct_irradiation: float, diffuse_irradiation: float):
@@ -390,9 +390,9 @@ def calculate_effective_irradiance(solar_zenith: float, solar_azimuth: float, su
     Parameters
     ----------
     solar_zenith : float
-        Solar zenith angle in radians.
+        Solar zenith angle in degrees.
     solar_azimuth : float
-        Solar azimuth angle in radians.
+        Solar azimuth angle in degrees.
     surface_tilt : float
         Surface tilt from horizontal in radians.
     surface_azimuth : float
@@ -408,6 +408,8 @@ def calculate_effective_irradiance(solar_zenith: float, solar_azimuth: float, su
         Effective plane-of-array irradiance in the same units as the input
         irradiances.
     """
+    solar_zenith = np.radians(solar_zenith)
+    solar_azimuth = np.radians(solar_azimuth)
     cos_theta = (
                 np.cos(solar_zenith) * np.cos(surface_tilt) +
                 np.sin(solar_zenith) * np.sin(surface_tilt) * np.cos(solar_azimuth - surface_azimuth)
