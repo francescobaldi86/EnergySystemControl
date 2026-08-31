@@ -1,3 +1,4 @@
+from abc import abstractmethod
 from typing import Any, Dict, Literal, List, Tuple
 from numpy import sin, cos, pi
 from energy_system_control.controllers.base import Controller  # or move Controller to core/model.py
@@ -68,6 +69,13 @@ class RLController(Controller):
         sensor_measurements = list(self.obs.values()) 
         predictions = list(self.predictions.values())
         return sensor_measurements + predictions
+
+    @abstractmethod
+    def run_and_update_agent(state, RL_state, reward):
+        """
+        Method to run the agent and update it with the new state
+        """
+        raise NotImplementedError
         
     @classmethod
     def from_config(
@@ -167,7 +175,7 @@ class RLControllerTabular(RLController):
                     valid_actions[component] = [self.current_mode[component]]
         return valid_actions
     
-    def get_action(self, state: SimulationState):
+    def _compute_action(self, state: SimulationState):
         RL_state = self.preprocess_state(state)
         reward = self.reward_function.compute(state)
         idx, action = self.run_and_update_agent(state, RL_state, reward)
