@@ -3,6 +3,7 @@ import numpy as np
 import pvlib
 from typing import List, Dict, Any, Literal
 from datetime import datetime
+from math import isclose
 
 TimeAlignment = Literal["datetime", "yearly", "daily"]
 TimeMatch = Literal["nearest", "forward", "exact"]
@@ -427,6 +428,24 @@ def safe_to_list(x):
         return x
     else:
         return [x]
+
+def return_not_none(x1: float, x2: float):
+    """
+    Compares x1 and x2.
+    - If both are None, returns None
+    - If only one of the two is not None, returns its value
+    - If both are not None, checks that they are equal. If so, returns the value. If not, raises an error.
+    """
+    if x1 is None and x2 is None:
+        return None
+    elif x1 is None:
+        return x2
+    elif x2 is None:
+        return x1
+    elif not isclose(x1, x2, abs_tol = 1e-4):
+        raise ValueError(f"a1 ({x1}) and a2 ({x2}) must be equal when both are not None")
+    else:
+        return x1 
 
 class NodeImbalanceError(Exception):
     pass

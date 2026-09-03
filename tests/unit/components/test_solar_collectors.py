@@ -4,7 +4,7 @@ from math import isclose
 import numpy as np
 import pytest
 
-from energy_system_control.components.implicit_components.thermal_solar_panels import (
+from energy_system_control.components.implicit_components.solar_collectors import (
     EvacuatedTubeCollector,
     FlatPlateCollector,
     SolarCollector,

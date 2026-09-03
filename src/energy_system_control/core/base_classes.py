@@ -9,6 +9,12 @@ class InitContext:
     logger: Optional[Any] = None
     config: Optional[dict] = None
 
+    def get_component(self, component_name):
+        return self.environment.components[component_name]
+
+    def get_sensor(self, sensor_name):
+        return self.environment.sensors[sensor_name]
+
 
 @dataclass
 class EnvironmentalData:
