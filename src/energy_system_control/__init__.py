@@ -4,6 +4,9 @@ from .sim.config import SimulationConfig
 from .sim.simulator import Simulator
 from .components.explicit_components.producers import ConstantPowerProducer
 from .components.explicit_components.pv_panels import PVpanel, PVpanelFromPVGISData, PVpanelFromData, PVpanelFromPVGIS
+from .components.implicit_components.solar_collectors import SolarCollector, UnglazedCollector, FlatPlateCollector, EvacuatedTubeCollector
+from .components.controlled_components.pumps import Pump, SimplePump
+from .components.implicit_components.heat_exchangers import HeatExchanger, HeatExchangerCoilTank, HeatExchangerTwoFluids
 from .components.storage_units.thermal_storage import HotWaterStorage, MultiNodeHotWaterTank
 from .components.composite_components.batteries import LithiumIonBattery, Battery
 from .components.explicit_components.demands import ConstantPowerDemand, ElectricityDemand, HotWaterDemand
@@ -25,5 +28,8 @@ __all__ = [
     "HeatPumpLorentzEfficiency", "HeatPumpConstantEfficiency", "HeatPump",
     "HeaterControllerWithBandwidth", "ChargeController",
     "HeatPumpRuleBasedController", 
+    "SolarCollector", "FlatPlateCollector", "UnglazedCollector", "EvacuatedTubeCollector",
+    "Pump", "SimplePump",
+    "HeatExchanger", "HeatExchangerCoilTank", "HeatExchangerTwoFluids",
     "Sensor", "FlowTemperatureSensor", "PowerSensor", "TankTemperatureSensor", "SOCSensor", "ElectricPowerSensor", "HotWaterDemandSensor", "SensorWithMemory",
 ]

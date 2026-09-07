@@ -13,7 +13,12 @@ Tests cover:
 import pytest
 import numpy as np
 import math
-from energy_system_control.components.implicit_components.heat_exchangers import HeatExchanger
+from energy_system_control.components.implicit_components.heat_exchangers import HeatExchangerTwoFluids, HeatExchangerCoilTank, HeatExchanger
+from energy_system_control.components.controlled_components.pumps import SimplePump
+from energy_system_control.components.storage_units.thermal_storage import HotWaterStorage, MultiNodeHotWaterTank
+from energy_system_control.components.implicit_components.solar_collectors import FlatPlateCollector
+from energy_system_control.components.explicit_components.demands import HotWaterDemand
+from energy_system_control.controllers.base import FixedController
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.core.base_classes import InitContext
 from energy_system_control.constants import WATER
@@ -27,7 +32,7 @@ class TestHeatExchangerInitialization:
     
     def test_heat_exchanger_creation_default_flow(self):
         """Test creation of heat exchanger with default counter-current flow."""
-        hx = HeatExchanger(
+        hx = HeatExchangerTwoFluids(
             name='test_hx',
             exchange_surface=10.0,
             heat_exchange_coefficient=500.0
@@ -39,7 +44,7 @@ class TestHeatExchangerInitialization:
     
     def test_heat_exchanger_creation_parallel_flow(self):
         """Test creation of heat exchanger with parallel flow configuration."""
-        hx = HeatExchanger(
+        hx = HeatExchangerTwoFluids(
             name='test_hx_parallel',
             exchange_surface=20.0,
             heat_exchange_coefficient=400.0,
@@ -51,7 +56,7 @@ class TestHeatExchangerInitialization:
     
     def test_heat_exchanger_creation_cross_flow(self):
         """Test creation of heat exchanger with cross flow configuration."""
-        hx = HeatExchanger(
+        hx = HeatExchangerTwoFluids(
             name='test_hx_cross',
             exchange_surface=15.0,
             heat_exchange_coefficient=450.0,
@@ -61,7 +66,7 @@ class TestHeatExchangerInitialization:
     
     def test_heat_exchanger_port_names_generation(self):
         """Test that port names are generated correctly."""
-        hx = HeatExchanger(
+        hx = HeatExchangerTwoFluids(
             name='my_hx',
             exchange_surface=10.0,
             heat_exchange_coefficient=500.0
@@ -132,14 +137,14 @@ class TestEffectivenessCalculation:
     
     def test_effectiveness_increases_with_ntu(self):
         """Test that effectiveness increases with higher NTU (larger heat exchanger)."""
-        hx_small = HeatExchanger(
+        hx_small = HeatExchangerTwoFluids(
             name='small_hx',
             exchange_surface=5.0,
             heat_exchange_coefficient=100.0,
             heat_exchanger_type='counter-current flow'
         )
         
-        hx_large = HeatExchanger(
+        hx_large = HeatExchangerTwoFluids(
             name='large_hx',
             exchange_surface=20.0,
             heat_exchange_coefficient=100.0,
@@ -159,14 +164,14 @@ class TestEffectivenessCalculation:
         surface_area = 10.0
         U_coeff = 100.0
         
-        hx_parallel = HeatExchanger(
+        hx_parallel = HeatExchangerTwoFluids(
             name='parallel_hx',
             exchange_surface=surface_area,
             heat_exchange_coefficient=U_coeff,
             heat_exchanger_type='parallel flow'
         )
         
-        hx_counter = HeatExchanger(
+        hx_counter = HeatExchangerTwoFluids(
             name='counter_hx',
             exchange_surface=surface_area,
             heat_exchange_coefficient=U_coeff,
@@ -187,7 +192,7 @@ class TestHeatTransferCalculation:
     
     def test_basic_heat_transfer_hot_to_cold(self):
         """Test heat transfer from hot fluid to cold fluid."""
-        hx = HeatExchanger(
+        hx = HeatExchangerTwoFluids(
             name='test_hx',
             exchange_surface=20.0,
             heat_exchange_coefficient=200.0,
@@ -219,7 +224,7 @@ class TestHeatTransferCalculation:
     
     def test_energy_conservation(self):
         """Test that energy is conserved (heat lost by hot fluid = heat gained by cold fluid)."""
-        hx = HeatExchanger(
+        hx = HeatExchangerTwoFluids(
             name='test_hx',
             exchange_surface=20.0,
             heat_exchange_coefficient=200.0,
@@ -258,7 +263,7 @@ class TestHeatTransferCalculation:
     
     def test_mass_flow_rate_pass_through(self):
         """Test that mass flow rates are passed through unchanged."""
-        hx = HeatExchanger(
+        hx = HeatExchangerTwoFluids(
             name='test_hx',
             exchange_surface=10.0,
             heat_exchange_coefficient=150.0,
@@ -284,7 +289,7 @@ class TestHeatTransferCalculation:
     
     def test_no_heat_transfer_equal_inlet_temperatures(self):
         """Test that no heat transfer occurs when inlet temperatures are equal."""
-        hx = HeatExchanger(
+        hx = HeatExchangerTwoFluids(
             name='test_hx',
             exchange_surface=10.0,
             heat_exchange_coefficient=200.0,
@@ -312,7 +317,7 @@ class TestHeatTransferCalculation:
     
     def test_zero_mass_flow_returns_false(self):
         """Test that simulation returns False when mass flow rates are None."""
-        hx = HeatExchanger(
+        hx = HeatExchangerTwoFluids(
             name='test_hx',
             exchange_surface=10.0,
             heat_exchange_coefficient=200.0,
@@ -344,8 +349,8 @@ class TestHeatExchangerDifferentFlowTypes:
             'heat_exchange_coefficient': 150.0,
         }
         
-        hx_parallel = HeatExchanger(name='parallel', heat_exchanger_type='parallel flow', **params)
-        hx_counter = HeatExchanger(name='counter', heat_exchanger_type='counter-current flow', **params)
+        hx_parallel = HeatExchangerTwoFluids(name='parallel', heat_exchanger_type='parallel flow', **params)
+        hx_counter = HeatExchangerTwoFluids(name='counter', heat_exchanger_type='counter-current flow', **params)
         
         # Test at equal mass flow rates
         cmin = 0.5
@@ -359,7 +364,7 @@ class TestHeatExchangerDifferentFlowTypes:
     
     def test_unequal_mass_flows_counter_current(self):
         """Test counter-current heat exchanger with unequal mass flow rates."""
-        hx = HeatExchanger(
+        hx = HeatExchangerTwoFluids(
             name='test_hx',
             exchange_surface=12.0,
             heat_exchange_coefficient=180.0,
@@ -390,9 +395,9 @@ class TestHeatExchangerDifferentFlowTypes:
 class TestHeatExchangerWithSimulation:
     """Integration tests with full simulation environment."""
     
-    def test_heat_exchanger_in_environment(self, base_environment_with_hx):
+    def test_heat_exchanger_in_environment(self, base_environment_with_coiled_hx):
         """Test heat exchanger as part of a full simulation environment."""
-        env = base_environment_with_hx
+        env = base_environment_with_coiled_hx
         sim_config = SimulationConfig(time_start_h=0.0, simulation_end_h=1.0, time_step_h=0.1)
         sim = Simulator(env, sim_config)
         results = sim.run()
@@ -421,7 +426,7 @@ class TestHeatExchangerEdgeCases:
     
     def test_very_small_temperature_difference(self):
         """Test with very small temperature differences."""
-        hx = HeatExchanger(
+        hx = HeatExchangerTwoFluids(
             name='test_hx',
             exchange_surface=10.0,
             heat_exchange_coefficient=100.0,
@@ -444,7 +449,7 @@ class TestHeatExchangerEdgeCases:
     
     def test_very_large_temperature_difference(self):
         """Test with very large temperature differences."""
-        hx = HeatExchanger(
+        hx = HeatExchangerTwoFluids(
             name='test_hx',
             exchange_surface=10.0,
             heat_exchange_coefficient=100.0,
@@ -466,7 +471,7 @@ class TestHeatExchangerEdgeCases:
     
     def test_very_small_mass_flow(self):
         """Test with very small mass flow rates."""
-        hx = HeatExchanger(
+        hx = HeatExchangerTwoFluids(
             name='test_hx',
             exchange_surface=10.0,
             heat_exchange_coefficient=100.0,
@@ -486,7 +491,7 @@ class TestHeatExchangerEdgeCases:
     
     def test_very_large_mass_flow(self):
         """Test with very large mass flow rates."""
-        hx = HeatExchanger(
+        hx = HeatExchangerTwoFluids(
             name='test_hx',
             exchange_surface=10.0,
             heat_exchange_coefficient=100.0,
@@ -515,7 +520,7 @@ class TestHeatExchangerParameterSensitivity:
         
         effectiveness_values = []
         for area in areas:
-            hx = HeatExchanger(
+            hx = HeatExchangerTwoFluids(
                 name=f'hx_area_{area}',
                 exchange_surface=area,
                 heat_exchange_coefficient=U,
@@ -535,7 +540,7 @@ class TestHeatExchangerParameterSensitivity:
         
         effectiveness_values = []
         for U in U_values:
-            hx = HeatExchanger(
+            hx = HeatExchangerTwoFluids(
                 name=f'hx_U_{U}',
                 exchange_surface=A,
                 heat_exchange_coefficient=U,
@@ -560,7 +565,7 @@ class TestHeatExchangerParameterSensitivity:
         
         for area, U in test_cases:
             for flow_type in ['parallel flow', 'counter-current flow']:
-                hx = HeatExchanger(
+                hx = HeatExchangerTwoFluids(
                     name=f'hx_{area}_{U}_{flow_type}',
                     exchange_surface=area,
                     heat_exchange_coefficient=U,
@@ -576,33 +581,47 @@ class TestHeatExchangerParameterSensitivity:
 # Fixtures
 
 @pytest.fixture
-def base_environment_with_hx():
+def base_environment_with_coiled_hx():
     """Create a basic environment with a heat exchanger for testing."""
     components = [
-        esc.HeatExchanger(
+        HeatExchangerCoilTank(
             name='heat_exchanger',
             exchange_surface=10.0,
             heat_exchange_coefficient=150.0,
-            heat_exchanger_type='counter-current flow'
+            storage_tank_name = 'hot_water_tank'
         ),
-        esc.ConstantTemperatureFluidSource(
-            name='hot_source',
-            temperature=80.0,
-            utility_type='fluid'
+        SimplePump(
+            name = 'circulation_pump',
+            mass_flow_rate = 20/60  # 20 litres per minute
         ),
-        esc.ConstantTemperatureFluidSink(
-            name='cold_sink',
-            temperature=20.0,
-            utility_type='fluid'
+        HotWaterStorage(
+            name='hot_water_tank',
+            tank_volume = 200,
         ),
+        FlatPlateCollector(
+            name = 'solar_collector',
+            tilt = 30,
+            azimuth = 90,
+            surface_area = 2,
+            latitude = 52.5200,
+            longitude = 13.4050,
+        )
     ]
     
     connections = [
-        ('hot_source_fluid_port', 'heat_exchanger_fluid_1_input_port'),
-        ('heat_exchanger_fluid_1_output_port', 'cold_sink_fluid_port'),
-        ('heat_exchanger_fluid_2_input_port', 'cold_sink_fluid_port'),
-        ('cold_sink_fluid_port', 'heat_exchanger_fluid_2_output_port'),
+        ('heat_exchanger_fluid_input_port', 'solar_collector_water_output_port'),
+        ('heat_exchanger_fluid_output_port', 'circulation_pump_water_input_port'),
+        ('circulation_pump_water_output_port', 'solar_collector_water_input_port'),
+        ('heat_exchanger_heat_port', 'hot_water_tank_main_heat_input_port'),
+    ]
+
+    controllers = [
+        FixedController(
+            name = 'pump_controller',
+            controlled_component = 'circulation_pump',
+            action = 1
+        )
     ]
     
-    env = esc.Environment(components=components, connections=connections)
+    env = esc.Environment(components=components, connections=connections, controllers = controllers)
     return env

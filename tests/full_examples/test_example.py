@@ -213,3 +213,56 @@ def test_5():
     assert math.isclose(electricity_from_grid, 1, abs_tol = 2)
     assert math.isclose(electricity_to_grid, 12, abs_tol = 2)
     assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 323, abs_tol = 1)
+
+
+
+def test_6():
+    """Test heat exchanger as part of a full simulation environment."""
+    components = [
+            esc.HeatExchangerCoilTank(
+                name='heat_exchanger',
+                exchange_surface=10.0,
+                heat_exchange_coefficient=150.0,
+                storage_tank_name = 'hot_water_tank'
+            ),
+            esc.SimplePump(
+                name = 'circulation_pump',
+                mass_flow_rate = 20/60  # 20 litres per minute
+            ),
+            esc.HotWaterStorage(
+                name='hot_water_tank',
+                tank_volume = 200,
+            ),
+            esc.FlatPlateCollector(
+                name = 'solar_collector',
+                tilt = 30,
+                azimuth = 90,
+                surface_area = 2,
+                latitude = 52.5200,
+                longitude = 13.4050,
+            )
+        ]
+        
+    connections = [
+        ('heat_exchanger_fluid_input_port', 'solar_collector_water_output_port'),
+        ('heat_exchanger_fluid_output_port', 'circulation_pump_water_input_port'),
+        ('circulation_pump_water_output_port', 'solar_collector_water_input_port'),
+        ('heat_exchanger_heat_port', 'hot_water_tank_main_heat_input_port'),
+    ]
+    
+    controllers = [
+        esc.FixedController(
+            name = 'pump_controller',
+            controlled_component = 'circulation_pump',
+            action = 1
+        )
+    ]
+        
+    env = esc.Environment(components=components, connections=connections, controllers = controllers)
+    sim_config = esc.SimulationConfig(time_start_h=0.0, simulation_end_h=48.0, time_step_h=5/60)
+    sim = esc.Simulator(env, sim_config)
+    results = sim.run()
+    # Verify simulation completed successfully
+    assert results is not None
+    df_ports, _, _ = results.to_dataframe()
+    assert not df_ports.empty

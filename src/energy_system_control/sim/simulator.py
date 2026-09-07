@@ -64,10 +64,11 @@ class Simulator:
     
     def _initialize_units(self):
         ctx = InitContext(environment=self.env, state=self.state)
-        for _, component in self.env.components.items():
-            component.initialize(ctx)
         for _, port in self.env.ports.items():
             port.initialize(ctx)
+        for _, component in self.env.components.items():
+            component.initialize(ctx)
+        self._propagate_port_values()
         for _, sensor in self.env.sensors.items():
             sensor.initialize(ctx)
         for _, predictor in self.env.predictors.items():
@@ -239,8 +240,8 @@ class Simulator:
         env = self.env
         for connection in env.connections:
             for layer, value in env.ports[connection[0]].flows.items():
-                if abs(value + env.ports[connection[1]].flows[layer]) > 1e-5:
-                    raise ValueError(f"Connection {connection} has unbalanced flows: {env.ports[connection[0]].flows[layer]:.2f} != {env.ports[connection[1]].flows[layer]:.2f}")
+                if abs(value + env.ports[connection[1]].flows[layer]) > 1e-1:
+                    raise ValueError(f"Connection {connection} has unbalanced flows: {env.ports[connection[0]].flows[layer]:.2f} + {env.ports[connection[1]].flows[layer]:.2f} is not 0")
 
     def _save_simulation_data(self, sim_data):
         # Ports

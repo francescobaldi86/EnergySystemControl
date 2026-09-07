@@ -439,13 +439,13 @@ def return_not_none(x1: float, x2: float):
     if x1 is None and x2 is None:
         return None
     elif x1 is None:
-        return x2
+        return abs(x2)
     elif x2 is None:
-        return x1
-    elif not isclose(x1, x2, abs_tol = 1e-4):
+        return abs(x1)
+    elif not isclose(abs(x1), abs(x2), abs_tol = 1e-4):
         raise ValueError(f"a1 ({x1}) and a2 ({x2}) must be equal when both are not None")
     else:
-        return x1 
+        return abs(x1 )
 
 class NodeImbalanceError(Exception):
     pass

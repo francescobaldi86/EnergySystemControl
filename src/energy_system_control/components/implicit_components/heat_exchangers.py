@@ -1,4 +1,4 @@
-from energy_system_control.constants import WATER
+from energy_system_control.constants import WATER, EPSILON
 from energy_system_control.components.base import ImplicitComponent
 from energy_system_control.core.base_classes import InitContext
 from energy_system_control.helpers import *
@@ -9,9 +9,35 @@ import pandas as pd
 from typing import Literal
 from math import log
 
-HeatExchangerType = Literal['parallel flow', 'counter-current flow', 'cross flow']
+HeatExchangeConfiguration = Literal['parallel flow', 'counter-current flow', 'cross flow']
+HeatExchangerType = Literal['two fluids', 'coil in tank']
 
-class HeatExchangerTwoFluids(ImplicitComponent):
+
+class HeatExchanger(ImplicitComponent):
+    """
+    Generic class for all heat exchangers
+    """
+
+    @staticmethod
+    def from_type(
+        cls,
+        heat_exchanger_type: HeatExchangerType,
+        **kwargs
+    ):
+        match heat_exchanger_type:
+            case 'two fluids':
+                return HeatExchangerTwoFluids(**kwargs)
+            case 'coil in tank':
+                return HeatExchangerCoilTank(**kwargs)
+
+    def set_inherited_fluid_port_values(self, state: SimulationState):
+        ports_to_update = {}
+        for port_name, port in self.ports.items():
+            if "output" in port_name:
+                ports_to_update[port_name] = port.T
+        return ports_to_update
+
+class HeatExchangerTwoFluids(HeatExchanger):
     """
     Fluid-to-fluid heat exchanger model using the epsilon-NTU method.
     
@@ -37,11 +63,11 @@ class HeatExchangerTwoFluids(ImplicitComponent):
         Heat exchange surface area (m²)
     U : float
         Overall heat transfer coefficient (W/(m²·K))
-    heat_exchanger_type : HeatExchangerType
+    heat_exchanger_type : HeatExchangeConfiguration
         Configuration of the heat exchanger flow ('parallel flow', 'counter-current flow', or 'cross flow')
     """
 
-    def __init__(self, name, exchange_surface: float, heat_exchange_coefficient: float, heat_exchanger_type: HeatExchangerType = 'counter-current flow'):
+    def __init__(self, name, exchange_surface: float, heat_exchange_coefficient: float, heat_exchanger_type: HeatExchangeConfiguration = 'counter-current flow'):
         """
         Initialize a heat exchanger component.
         
@@ -53,7 +79,7 @@ class HeatExchangerTwoFluids(ImplicitComponent):
             Heat exchange surface area in m²
         heat_exchange_coefficient : float
             Overall heat transfer coefficient in W/(m²·K)
-        heat_exchanger_type : HeatExchangerType, optional
+        heat_exchanger_type : HeatExchangeConfiguration, optional
             Flow configuration of the heat exchanger. Options are:
             - 'parallel flow': Fluids flow in the same direction
             - 'counter-current flow': Fluids flow in opposite directions (default)
@@ -105,15 +131,16 @@ class HeatExchangerTwoFluids(ImplicitComponent):
         # If any of the two is None, the component is not ready to be simulated
         if mfr_1 is None or mfr_2 is None:
             return False, []
-        self.ports[self.fluid_1_output_port_name].flow['mass'] = mfr_1
-        self.ports[self.fluid_2_output_port_name].flow['mass'] = mfr_2
+        self.ports[self.fluid_1_output_port_name].flow['mass'] = -mfr_1
+        self.ports[self.fluid_2_output_port_name].flow['mass'] = -mfr_2
         cmin = min(mfr_1, mfr_2) * WATER.cp
         cmax = max(mfr_1, mfr_2) * WATER.cp
         epsilon = self.calculate_epsilon(cmin, cmax)
-        # Convention: if T1_in > T2_in, then Qdot is positive
+        # Convention: if T1_in > T2_in, then Qdot flows from fluid 1 to fluid 2 and is calculated as positive
         Qdot = epsilon * cmin * self.ports[self.fluid_1_input_port_name].T - self.ports[self.fluid_2_input_port_name].T
-        self.ports[self.fluid_1_output_port_name].flow['heat'] = self.ports[self.fluid_1_input_port_name].flow['heat'] - Qdot
-        self.ports[self.fluid_2_output_port_name].flow['heat'] = self.ports[self.fluid_2_input_port_name].flow['heat'] + Qdot
+        # Flow leaving the component is negative. If T1_in > T2_in Qdot is positive and H1_out < H1_in in absolute value. Hence the positive sign
+        self.ports[self.fluid_1_output_port_name].flow['heat'] = self.ports[self.fluid_1_input_port_name].flow['heat'] + Qdot  
+        self.ports[self.fluid_2_output_port_name].flow['heat'] = self.ports[self.fluid_2_input_port_name].flow['heat'] - Qdot
         self.ports[self.fluid_1_output_port_name].T = self.ports[self.fluid_1_input_port_name].T - Qdot / (mfr_1 * WATER.cp)
         self.ports[self.fluid_2_output_port_name].T = self.ports[self.fluid_2_input_port_name].T + Qdot / (mfr_2 * WATER.cp)
         return True, [self.fluid_1_output_port_name, self.fluid_2_output_port_name]
@@ -156,7 +183,7 @@ class HeatExchangerTwoFluids(ImplicitComponent):
                 return (1 - np.exp(-NTU * (1 + cr))) / (1 - cr * np.exp(-NTU * (1 + cr)))
 
 
-class HeatExchangerCoilTank(ImplicitComponent):
+class HeatExchangerCoilTank(HeatExchanger):
     """
     Fluid-to-fluid heat exchanger model using the epsilon-NTU method.
     Meant for a heat exchanger located in a storage tank.
@@ -197,19 +224,23 @@ class HeatExchangerCoilTank(ImplicitComponent):
         temperature_sensor_name : float
             The name of the temperature sensor that provides the fixed temperature on the other (non fluid) side of the heat exchanger
         """
-        self.fluid_input_port_name = f'{name}_fluid_1_input_port'
-        self.fluid_output_port_name = f'{name}_fluid_1_output_port'
+        self.fluid_input_port_name = f'{name}_fluid_input_port'
+        self.fluid_output_port_name = f'{name}_fluid_output_port'
         self.heat_port_name = f'{name}_heat_port'
         self.A = exchange_surface
         self.U = heat_exchange_coefficient
         self.storage_tank_name = storage_tank_name
         super().__init__(name, ports_info = {
-            self.input_port_name: 'fluid',
-            self.output_port_name: 'fluid'
+            self.fluid_input_port_name: 'fluid',
+            self.fluid_output_port_name: 'fluid',
+            self.heat_port_name: 'heat',
         })
 
     def initialize(self, ctx: InitContext):
         self.storage_tank = ctx.get_component(self.storage_tank_name)
+        # We initialize the temperature of the fluid input port as the temperature in the storage tank
+        self.ports[self.fluid_input_port_name].T = self.storage_tank.T_0
+        self.ports[self.fluid_output_port_name].T = self.storage_tank.T_0
         
     def balance(self, state: SimulationState, action=None):
         """
@@ -239,37 +270,47 @@ class HeatExchangerCoilTank(ImplicitComponent):
             List of output port names that were updated during this time step
         """
         # Implements the eps NTU method
-        mfr = return_not_none(self.ports[self.fluid_1_input_port_name].flow['mass'], self.ports[self.fluid_1_output_port_name].flow['mass'])
+        mfr = return_not_none(self.ports[self.fluid_input_port_name].flows['mass'], self.ports[self.fluid_output_port_name].flows['mass'])
         # If any of the two is None, the component is not ready to be simulated
-        if mfr is None:
+        if mfr is None or self.ports[self.fluid_input_port_name].T is None:
             return False, []
-        self.ports[self.fluid_output_port_name].flow['mass'] = mfr
+        if self.ports[self.fluid_input_port_name].flows['heat'] is None:
+            return False, []
+        self.ports[self.fluid_output_port_name].flows['mass'] = -mfr
         cmin = mfr * WATER.cp
-        NTU = self.U * self.A / cmin
-        epsilon = 1 - np.exp(-NTU)
+        if mfr > EPSILON:
+            NTU = self.U * self.A / cmin
+            epsilon = 1 - np.exp(-NTU)
+        else:
+            epsilon = 0
         # Convention: if T1_in > T2_in, then Qdot is positive
         if isinstance(self.storage_tank, MultiNodeHotWaterTank):
             # iterative calculation of Qdot
             pass
         else:
             Qdot = epsilon * cmin * (self.ports[self.fluid_input_port_name].T - self.storage_tank.temperature)
-        self.ports[self.fluid_output_port_name].flow['heat'] = self.ports[self.fluid_1_input_port_name].flow['heat'] - Qdot
-        self.ports[self.fluid_output_port_name].T = self.ports[self.fluid_1_input_port_name].T - Qdot / (mfr * WATER.cp)
+        self.ports[self.fluid_output_port_name].flows['heat'] = -self.ports[self.fluid_input_port_name].flows['heat'] + Qdot
+        self.ports[self.fluid_output_port_name].T = self.ports[self.fluid_input_port_name].T - Qdot / (mfr * WATER.cp)
         self.ports[self.heat_port_name].T = self.storage_tank.temperature + log_mean_temperature_difference(
                                                                                                     self.ports[self.fluid_input_port_name].T, 
                                                                                                     self.ports[self.fluid_output_port_name].T, 
                                                                                                     self.storage_tank.temperature, 
                                                                                                     self.storage_tank.temperature)
-        return True, [self.fluid_1_output_port_name, self.fluid_2_output_port_name, self.heat_port_name]
+        self.ports[self.heat_port_name].flows['heat'] = -Qdot  # If calculated Qdot is positive it heats the storage, hence the flow is negative
+        return True, [self.fluid_output_port_name, self.heat_port_name]
 
 
 
-def log_mean_temperature_difference(T1_in: float, T1_out: float, T2_in: float, T2_out: float, hex_type: HeatExchangerType = 'counter-current flow'):
+def log_mean_temperature_difference(T1_in: float, T1_out: float, T2_in: float, T2_out: float, hex_type: HeatExchangeConfiguration = 'counter-current flow'):
     """
     Calculates the log mean temperature difference between two fluids in a heat exchanger
     """
     match hex_type:
         case 'counter-current flow':
+            if abs(T1_out - T2_in) < EPSILON:
+                return 0.0
             return (T1_in - T2_out) - (T1_out - T2_in) / log((T1_in - T2_out) / (T1_out - T2_in))
         case 'parallel flow':
+            if abs(T1_out - T2_out) < EPSILON:
+                return 0.0
             return (T1_in - T2_in) - (T1_out - T2_out) / log((T1_in - T2_in) / (T1_out - T2_out))

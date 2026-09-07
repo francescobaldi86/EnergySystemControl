@@ -75,15 +75,18 @@ class HotWaterStorage(StorageUnit):
     
     def step(self, state: SimulationState, action):
         # Heat port inputs are provided from external sources. Hot water output also. Hence, only the cold water input is updated
-        self.ports[self.cold_water_input_port_name].flows['mass'] = -self.ports[self.hot_water_output_port_name].flows['mass']
-        self.ports[self.cold_water_input_port_name].flows['heat'] = abs(self.ports[self.cold_water_input_port_name].flows['mass']) * WATER.cp * self.ports[self.cold_water_input_port_name].T
+        if self.cold_water_input_port_name in self.ports.keys():
+            self.ports[self.cold_water_input_port_name].flows['mass'] = -self.ports[self.hot_water_output_port_name].flows['mass']
+        if self.hot_water_output_port_name in self.ports.keys():
+            self.ports[self.cold_water_input_port_name].flows['heat'] = abs(self.ports[self.cold_water_input_port_name].flows['mass']) * WATER.cp * self.ports[self.cold_water_input_port_name].T
         heat_losses = self.calculate_losses(state)
         heat_input = 0.0
         for input_port in self.heat_input_port_names:
             if input_port in self.ports.keys():
                 heat_input += self.ports[input_port].flows['heat']
-        heat_fluid = self.ports[self.hot_water_output_port_name].flows['heat'] + self.ports[self.cold_water_input_port_name].flows['heat']
-        self.temperature += (heat_input + heat_fluid + heat_losses) * state.time_step / (WATER.cp * self.volume * WATER.rho)
+        heat_fluid_output_port = self.ports[self.hot_water_output_port_name].flows['heat'] if self.hot_water_output_port_name in self.ports.keys() else 0.0
+        heat_fluid_input_port = self.ports[self.cold_water_input_port_name].flows['heat'] if self.cold_water_input_port_name in self.ports.keys() else 0.0
+        self.temperature += (heat_input + heat_fluid_output_port + heat_fluid_input_port + heat_losses) * state.time_step / (WATER.cp * self.volume * WATER.rho)
         self.SOC = self.temperature_to_SOC(state)
 
     def calculate_losses(self, state: SimulationState):
@@ -95,7 +98,8 @@ class HotWaterStorage(StorageUnit):
         # Allows for the temperature of the fluid leaving the tank to be set by the storage unit
         if self.hot_water_output_port_name in self.ports.keys():
             self.ports[self.hot_water_output_port_name].T = self.temperature
-        return {self.hot_water_output_port_name: self.temperature}
+            return {self.hot_water_output_port_name: self.temperature}
+        return {}
     
     def set_inherited_heat_port_values(self, state: SimulationState):
         output = {}
@@ -112,13 +116,13 @@ class HotWaterStorage(StorageUnit):
             T_cold_water = C2K(20)
         return (self.temperature - T_cold_water) / (self.max_temperature - T_cold_water)
 
-    def initialize(self, state: SimulationState):
+    def initialize(self, ctx: InitContext):
         self.temperature = self.T_0
-        self.SOC_0 = self.temperature_to_SOC(state)
+        self.SOC_0 = self.temperature_to_SOC(ctx)
         for port_name in self.heat_input_port_names:
             if port_name in self.ports.keys():
                 self.ports[port_name].T = self.T_0
-        super().initialize(state)
+        super().initialize(ctx)
 
 
 class MultiNodeHotWaterTank(HotWaterStorage):

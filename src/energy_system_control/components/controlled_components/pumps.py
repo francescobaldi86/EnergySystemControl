@@ -66,9 +66,12 @@ class SimplePump(ControlledComponent):
         flow = self.mass_flow_rate * action
         self.ports[self.input_water_port_name].flows['mass'] = flow
         self.ports[self.input_water_port_name].flows['heat'] = flow * WATER.cp * self.ports[self.input_water_port_name].T
-        self.ports[self.output_water_port_name].flows['mass'] = flow
-        self.ports[self.output_water_port_name].flows['heat'] = self.ports[self.input_water_port_name].flows['heat']
+        self.ports[self.output_water_port_name].flows['mass'] = -flow
+        self.ports[self.output_water_port_name].flows['heat'] = -self.ports[self.input_water_port_name].flows['heat']
         self.ports[self.output_water_port_name].T = self.ports[self.input_water_port_name].T
+
+    def set_inherited_fluid_port_values(self, state: SimulationState):
+        return {self.output_water_port_name: self.ports[self.output_water_port_name].T}
 
 
 

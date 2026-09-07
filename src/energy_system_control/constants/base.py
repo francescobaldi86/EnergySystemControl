@@ -4,6 +4,8 @@ from dataclasses import dataclass, replace
 from contextlib import contextmanager
 from typing import Any, Iterator
 
+EPSILON = 1e-5
+
 @dataclass(frozen=True)
 class FrozenNamespace:
     """Immutable bag of constants. Values are plain floats (SI)."""

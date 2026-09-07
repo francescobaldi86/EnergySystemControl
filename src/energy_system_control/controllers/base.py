@@ -116,7 +116,25 @@ class Controller(ABC):
                     raise ValueError('There should be no other option')
 
         return action
-    
+
+
+class FixedController(Controller):
+    """
+    Very simple controller that always returns the same action
+    """
+    def __init__(self,
+                 name: str,
+                 controlled_component: str,
+                 action: int):
+        self.fixed_action = action
+        super().__init__( 
+                 name = name, 
+                 controlled_components = [controlled_component],
+                 sensors = {})
+
+    def _compute_action(self, state):
+        return {self.controlled_component_names[0]: self.fixed_action}
+        
     
 
 class HeaterControllerWithBandwidth(Controller):

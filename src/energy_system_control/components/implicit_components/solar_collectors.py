@@ -2,6 +2,7 @@ from energy_system_control.constants import WATER
 from energy_system_control.components.base import ImplicitComponent
 from energy_system_control.helpers import *
 from energy_system_control.sim.state import SimulationState
+from energy_system_control.constants.base import EPSILON
 import numpy as np
 import pandas as pd
 from typing import Literal
@@ -49,7 +50,7 @@ class SolarCollector(ImplicitComponent):
             Linear efficiency loss coefficient (W/(m²·K)), typically 1.0-25.0
         """
         self.input_port_name = f'{name}_water_input_port'
-        self.output_port_name = f'{name}_water_outlet_port'
+        self.output_port_name = f'{name}_water_output_port'
         super().__init__(name, ports_info = {
             self.input_port_name: 'fluid',
             self.output_port_name: 'fluid'
@@ -129,8 +130,8 @@ class SolarCollector(ImplicitComponent):
             return False, []
         mfr = self.ports[self.input_port_name].flows['mass']
         Qdot = poa_irradiation * self.surface_area * efficiency if mfr > 0.0001 else 0.0
-        self.ports[self.output_port_name].flows['mass'] = mfr
-        self.ports[self.output_port_name].flows['heat'] = self.ports[self.input_port_name].flows['heat'] + Qdot
+        self.ports[self.output_port_name].flows['mass'] = -mfr
+        self.ports[self.output_port_name].flows['heat'] = -(self.ports[self.input_port_name].flows['heat'] + Qdot)
         self.ports[self.output_port_name].T = (
             self.ports[self.input_port_name].T + Qdot / (mfr * WATER.cp)
             if mfr > 0.0001
@@ -159,8 +160,14 @@ class SolarCollector(ImplicitComponent):
         float
             Thermal efficiency of the collector (dimensionless, typically 0.0-0.9)
         """
-        efficiency = self.efficiency_0 + self.efficiency_1 * (inlet_fluid_temperature - ambient_air_temperature) / solar_irradiation
+        if solar_irradiation > EPSILON:
+            efficiency = self.efficiency_0 + self.efficiency_1 * (inlet_fluid_temperature - ambient_air_temperature) / solar_irradiation
+        else:
+            efficiency = self.efficiency_0
         return efficiency
+
+    def set_inherited_fluid_port_values(self, state: SimulationState):
+        return {self.output_port_name: self.ports[self.output_port_name].T}
 
 class UnglazedCollector(SolarCollector):
     """

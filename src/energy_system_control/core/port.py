@@ -34,10 +34,7 @@ class Port():
     def propagate_port_values(self):
         for layer in self.layers:
             if self.flows[layer] is not None and self.connected_port.flows[layer] is None:
-                self.connected_port.flows[layer] = -self.flows[layer]
-            if isinstance(self, FluidPort) or isinstance(self, HeatPort):
-                if self.T is not None and self.connected_port.T is None:
-                    self.connected_port.T = self.T
+                self.connected_port.flows[layer] = -self.flows[layer]                
 
     @staticmethod
     def create_port_of_type(port_name: str, port_type: str):
@@ -60,6 +57,11 @@ class HeatPort(Port):
     def initialize(self, ctx: InitContext):
         self.T = None
 
+    def propagate_port_values(self):
+        super().propagate_port_values()
+        if self.T is not None and self.connected_port.T is None:
+            self.connected_port.T = self.T
+
 
 class FluidPort(Port):
     T: float
@@ -75,7 +77,8 @@ class FluidPort(Port):
 
     def propagate_port_values(self):
         super().propagate_port_values()
-        self.connected_port = self.T
+        if self.T is not None and self.connected_port.T is None:
+            self.connected_port.T = self.T
 
 class ElectricPort(Port):
     def __init__(self, name):
