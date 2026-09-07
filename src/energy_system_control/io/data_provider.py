@@ -211,11 +211,11 @@ class CustomEnvironmentalProvider(EnvironmentalDataProvider):
         for key in {'temperature_ambient', 'temperature_cold_water', 'direct_irradiation', 'diffuse_irradiation'}:
             if key in self.data.keys():
                 temp_env_data[key] = self.data[key][time_id]
+                if "temperature" in key:
+                    if temp_env_data[key] < 200:  # Assuming we never work with temperatures below 200K
+                        temp_env_data[key] = C2K(temp_env_data[key])
             else:
                 temp_env_data[key] = None
-            if "temperature" in key:
-                if temp_env_data[key] < 200:  # Assuming we never work with temperatures below 200K
-                    temp_env_data[key] = C2K(temp_env_data[key])
         return EnvironmentalData(
             temperature_ambient=temp_env_data["temperature_ambient"],
             temperature_cold_water=temp_env_data["temperature_cold_water"],

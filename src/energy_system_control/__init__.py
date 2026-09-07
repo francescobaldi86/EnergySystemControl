@@ -14,7 +14,7 @@ from .components.grids.grids import ElectricityGrid, ColdWaterGrid
 from .components.composite_components.inverters import Inverter
 from .components.controlled_components.other_heat_sources import ResistanceHeater
 from .components.controlled_components.heat_pumps import HeatPumpConstantEfficiency, HeatPumpLorentzEfficiency, HeatPump
-from .controllers.base import HeaterControllerWithBandwidth, ChargeController
+from .controllers.base import HeaterControllerWithBandwidth, ChargeController, FixedController
 from .controllers.rule_based import HeatPumpRuleBasedController
 from .sensors.sensors import Sensor, PowerSensor, ElectricPowerSensor, FlowTemperatureSensor, SOCSensor, TankTemperatureSensor, HotWaterDemandSensor, SensorWithMemory
 
@@ -26,7 +26,7 @@ __all__ = [
     "HotWaterDemand", "ThermalLoss", "ConstantPowerDemand", "ElectricityDemand",
     "ResistanceHeater", "BalancingUtility", "ColdWaterGrid", "GenericUtility", "Inverter", "ElectricityGrid",
     "HeatPumpLorentzEfficiency", "HeatPumpConstantEfficiency", "HeatPump",
-    "HeaterControllerWithBandwidth", "ChargeController",
+    "HeaterControllerWithBandwidth", "ChargeController","FixedController",
     "HeatPumpRuleBasedController", 
     "SolarCollector", "FlatPlateCollector", "UnglazedCollector", "EvacuatedTubeCollector",
     "Pump", "SimplePump",

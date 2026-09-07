@@ -129,7 +129,7 @@ class SolarCollector(ImplicitComponent):
         if self.ports[self.input_port_name].flows['mass'] is None:
             return False, []
         mfr = self.ports[self.input_port_name].flows['mass']
-        Qdot = poa_irradiation * self.surface_area * efficiency if mfr > 0.0001 else 0.0
+        Qdot = poa_irradiation * 1e-3 * self.surface_area * efficiency if mfr > 0.0001 else 0.0
         self.ports[self.output_port_name].flows['mass'] = -mfr
         self.ports[self.output_port_name].flows['heat'] = -(self.ports[self.input_port_name].flows['heat'] + Qdot)
         self.ports[self.output_port_name].T = (
@@ -161,7 +161,7 @@ class SolarCollector(ImplicitComponent):
             Thermal efficiency of the collector (dimensionless, typically 0.0-0.9)
         """
         if solar_irradiation > EPSILON:
-            efficiency = self.efficiency_0 + self.efficiency_1 * (inlet_fluid_temperature - ambient_air_temperature) / solar_irradiation
+            efficiency = max(0.0, self.efficiency_0 - self.efficiency_1 * (inlet_fluid_temperature - ambient_air_temperature) / (solar_irradiation))
         else:
             efficiency = self.efficiency_0
         return efficiency

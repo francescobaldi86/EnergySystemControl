@@ -1,5 +1,6 @@
 from energy_system_control.components.base import ControlledComponent
 from energy_system_control.sim.state import SimulationState
+from energy_system_control.core.base_classes import InitContext
 from energy_system_control.helpers import *
 from energy_system_control.constants import WATER
 from abc import abstractmethod
@@ -47,6 +48,10 @@ class SimplePump(ControlledComponent):
         }
         super().__init__(name, ports_info)
 
+    def initialize(self, ctx: InitContext):
+        # The temperature of the input water port name is initialized at the cold water temperature
+        self.ports[self.input_water_port_name].T = ctx.state.environmental_data.temperature_cold_water
+
     def step(self, state: SimulationState, action=None):
         """
         Execute the pump for one simulation time step.
@@ -64,11 +69,11 @@ class SimplePump(ControlledComponent):
             Actual flow = mass_flow_rate * action. Default is None.
         """
         flow = self.mass_flow_rate * action
-        self.ports[self.input_water_port_name].flows['mass'] = flow
-        self.ports[self.input_water_port_name].flows['heat'] = flow * WATER.cp * self.ports[self.input_water_port_name].T
+        # self.ports[self.input_water_port_name].flows['mass'] = flow
+        # self.ports[self.input_water_port_name].flows['heat'] = flow * WATER.cp * self.ports[self.input_water_port_name].T
         self.ports[self.output_water_port_name].flows['mass'] = -flow
-        self.ports[self.output_water_port_name].flows['heat'] = -self.ports[self.input_water_port_name].flows['heat']
         self.ports[self.output_water_port_name].T = self.ports[self.input_water_port_name].T
+        self.ports[self.output_water_port_name].flows['heat'] = -flow * WATER.cp * self.ports[self.output_water_port_name].T
 
     def set_inherited_fluid_port_values(self, state: SimulationState):
         return {self.output_water_port_name: self.ports[self.output_water_port_name].T}

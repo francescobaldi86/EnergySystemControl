@@ -231,7 +231,8 @@ class Simulator:
         for _, port in component.ports.items():
             for layer, value in port.flows.items():
                 if port.connected_port:
-                    port.connected_port.flows[layer] = -value
+                    if value is not None:
+                        port.connected_port.flows[layer] = -value
                     if isinstance(port.connected_port, FluidPort | HeatPort):
                         port.connected_port.T = self.env.ports[port.name].T
     

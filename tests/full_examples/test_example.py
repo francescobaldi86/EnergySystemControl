@@ -1,5 +1,7 @@
 import energy_system_control as esc
+from energy_system_control.io.data_provider import CustomEnvironmentalProvider
 import pytest, math, os
+import pandas as pd
 
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -218,6 +220,15 @@ def test_5():
 
 def test_6():
     """Test heat exchanger as part of a full simulation environment."""
+    # Prepare environmental data
+    env_data_raw = pd.read_csv(os.path.join(__TEST__,'DATA', 'open_meteo_api_radiation_data_2025-03-29.csv'),
+                               sep = ';', header = 0, index_col = 0, parse_dates = True)
+    env_data = pd.DataFrame(index = env_data_raw.index, columns = ['direct_irradiation', 'diffuse_irradiation'])
+    env_data['direct_irradiation'] = env_data_raw['Direct radiation']
+    env_data['diffuse_irradiation'] = env_data_raw['Diffuse radiation']
+    env_data_provider = CustomEnvironmentalProvider(
+            df = env_data
+        )
     components = [
             esc.HeatExchangerCoilTank(
                 name='heat_exchanger',
@@ -232,12 +243,13 @@ def test_6():
             esc.HotWaterStorage(
                 name='hot_water_tank',
                 tank_volume = 200,
+                T_0 = 20,
             ),
             esc.FlatPlateCollector(
                 name = 'solar_collector',
                 tilt = 30,
                 azimuth = 90,
-                surface_area = 2,
+                surface_area = 5,
                 latitude = 52.5200,
                 longitude = 13.4050,
             )
@@ -257,12 +269,25 @@ def test_6():
             action = 1
         )
     ]
+
+    sensors = [
+        esc.TankTemperatureSensor('hot_water_tank_temperature_sensor', 'hot_water_tank')
+    ]
         
-    env = esc.Environment(components=components, connections=connections, controllers = controllers)
-    sim_config = esc.SimulationConfig(time_start_h=0.0, simulation_end_h=48.0, time_step_h=5/60)
+    env = esc.Environment(
+        components=components, 
+        connections=connections, 
+        controllers = controllers,
+        sensors = sensors,
+        environmental_data_provider = env_data_provider)
+    sim_config = esc.SimulationConfig(
+        simulation_start_datetime = pd.to_datetime('2025-03-27 00:00'),
+        time_start_h=0.0, 
+        simulation_end_h=48.0, 
+        time_step_h=15/60)
     sim = esc.Simulator(env, sim_config)
     results = sim.run()
     # Verify simulation completed successfully
     assert results is not None
-    df_ports, _, _ = results.to_dataframe()
+    df_ports, _, df_sensors = results.to_dataframe()
     assert not df_ports.empty

@@ -228,7 +228,7 @@ class HeatExchangerCoilTank(HeatExchanger):
         self.fluid_output_port_name = f'{name}_fluid_output_port'
         self.heat_port_name = f'{name}_heat_port'
         self.A = exchange_surface
-        self.U = heat_exchange_coefficient
+        self.U = heat_exchange_coefficient * 1e-3  # (input value is in W/m2K), system works in kW
         self.storage_tank_name = storage_tank_name
         super().__init__(name, ports_info = {
             self.fluid_input_port_name: 'fluid',
