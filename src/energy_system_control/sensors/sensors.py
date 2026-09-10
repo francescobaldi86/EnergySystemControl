@@ -101,6 +101,20 @@ class TankTemperatureSensor(Sensor):
         return self.current_measurement
 
 
+class HeatFlowSensor(Sensor):
+    """
+    Sensor that measures a heat flow
+    """
+    def __init__(self, name: str, component_name: str, port_name: str):
+        super().__init__(name)
+        self.component_name = component_name
+        # The port name follows the pattern: {component_name}_fluid_port
+        self.port_name = port_name
+
+    def measure(self, environment, state):
+        self.current_measurement = environment.components[self.component_name].ports[self.port_name].flows['heat']
+        return self.current_measurement
+
 class HotWaterDemandSensor(Sensor):
     """
     Sensor that measures the net heat flow from a hot water demand component.

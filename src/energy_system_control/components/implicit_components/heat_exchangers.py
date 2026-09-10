@@ -290,7 +290,10 @@ class HeatExchangerCoilTank(HeatExchanger):
         else:
             Qdot = epsilon * cmin * (self.ports[self.fluid_input_port_name].T - self.storage_tank.temperature)
         self.ports[self.fluid_output_port_name].flows['heat'] = -self.ports[self.fluid_input_port_name].flows['heat'] + Qdot
-        self.ports[self.fluid_output_port_name].T = self.ports[self.fluid_input_port_name].T - Qdot / (mfr * WATER.cp)
+        if mfr > EPSILON:
+            self.ports[self.fluid_output_port_name].T = self.ports[self.fluid_input_port_name].T - Qdot / (mfr * WATER.cp)
+        else:
+            self.ports[self.fluid_output_port_name].T = self.ports[self.fluid_input_port_name].T 
         self.ports[self.heat_port_name].T = self.storage_tank.temperature + log_mean_temperature_difference(
                                                                                                     self.ports[self.fluid_input_port_name].T, 
                                                                                                     self.ports[self.fluid_output_port_name].T, 

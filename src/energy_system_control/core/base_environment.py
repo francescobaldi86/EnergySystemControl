@@ -137,8 +137,12 @@ class Environment:
 
     def connect_ports(self):
         for connection in self.connections:
-            self.ports[connection[0]].connect_port(self.ports[connection[1]])
-            self.ports[connection[1]].connect_port(self.ports[connection[0]])
+            try:
+                self.ports[connection[0]].connect_port(self.ports[connection[1]])
+                self.ports[connection[1]].connect_port(self.ports[connection[0]])
+            except KeyError as err:
+                raise KeyError(f"Error connecting ports {connection[0]} and {connection[1]}")
+            
 
     def read_timeseries_data(self):
         for _, component in self.components.items():

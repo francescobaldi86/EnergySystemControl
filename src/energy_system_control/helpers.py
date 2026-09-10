@@ -149,6 +149,16 @@ def resample_with_interpolation(
                     f"Invalid var_type: {var_type!r}. "
                     "Expected 'extensive' or 'intensive'."
                 )
+        if isinstance(output, pd.DataFrame):
+            number_of_nan_values = output.isna().sum().values[0]
+        elif isinstance(output, pd.Series):
+            number_of_nan_values = output.isna().sum()
+        if number_of_nan_values > 0:
+            if number_of_nan_values < output.size * 0.05:  # We allow for maximum 5% NaN values
+                print('Warning! Some NaN values were found in the resample. They will be filled with the previous value using ffill')
+                output = output.ffill()
+            else:
+                raise ValueError('Something went wrong with the reasmpling of input data time series, more than 5\% of the values are NaN')
 
     else:
         # Upsampling
@@ -363,7 +373,7 @@ def calculate_solar_angles(latitude: float, longitude: float, timestamps: pd.Dat
     """
     # Assume UTC if no timezone
     if timestamps.tz is None:
-        timestamps = timestamps.tz_localize('UTC')
+        timestamps = timestamps.tz_localize('CET')
     
     solpos = pvlib.solarposition.get_solarposition(
         time=timestamps,

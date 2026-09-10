@@ -123,6 +123,8 @@ class SolarCollector(ImplicitComponent):
         current_datetime = state.simulation_start_datetime + pd.Timedelta(seconds=state.time)
         solar_zenith, solar_azimuth = calculate_solar_angles(self.latitude, self.longitude, current_datetime)
         poa_irradiation = calculate_effective_irradiance(solar_zenith, solar_azimuth, self.tilt_rad, self.azimuth_rad, env_data.direct_irradiation, env_data.diffuse_irradiation)
+        if current_datetime.hour > 15:
+            pass
         # Calculate panel efficiency
         efficiency = self.get_efficiency(poa_irradiation, self.ports[self.input_port_name].T, env_data.temperature_ambient)
         # Understand if we are ready or not to simulate the component
@@ -208,7 +210,7 @@ class FlatPlateCollector(SolarCollector):
     They feature a transparent glazing layer and insulation, offering a good balance between
     efficiency and cost. Typical efficiency: 70-80% zero-loss, 3.5-6.0 W/(m²·K) linear loss.
     """
-    def __init__(self, name: str, tilt: float, azimuth: float, surface_area: float, latitude: float, longitude: float):
+    def __init__(self, name: str, tilt: float, azimuth: float, surface_area: float, latitude: float, longitude: float, efficiency_0: float | None = None, efficiency_1: float | None = None):
         """
         Initialize a flat-plate solar thermal collector.
         
@@ -227,8 +229,8 @@ class FlatPlateCollector(SolarCollector):
         longitude : float
             Location longitude in degrees
         """
-        efficiency_0 = (0.7 + 0.8) / 2
-        efficiency_1 = (3.5 + 6.0) / 2
+        efficiency_0 = (0.7 + 0.8) / 2 if efficiency_0 is None else efficiency_0
+        efficiency_1 = (3.5 + 6.0) / 2 if efficiency_1 is None else efficiency_1
         super().__init__(name, tilt, azimuth, surface_area, latitude, longitude, efficiency_0 = efficiency_0, efficiency_1 = efficiency_1)
 
 class EvacuatedTubeCollector(SolarCollector):
