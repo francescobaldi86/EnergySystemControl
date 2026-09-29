@@ -31,14 +31,14 @@ class ResistanceHeater(HeatSource):
         return self.efficiency
 
 class GasBoiler(HeatSource):
-    def __init__(self, name: str, efficiency: float, max_power: float, source_type:str):
-        self.efficiency = efficiency      # rendimento (0-1)
-        self.max_power = max_power        # limite potenza termica
 
+    def __init__(self, name: str, efficiency: float, max_power: float, source_type: str = "biogas"):
         super().__init__(name, source_type)
-  
-    def get_heat_output(self, state: SimulationState):
+        self.efficiency = efficiency    # Rendimento (0.0 - 1.0)
+        self.max_power = max_power      # Potenza termica massima [kW]
+
+    def get_heat_output(self, state):
         return self.max_power
-    
-    def get_efficiency(self, state: SimulationState):
-        raise self.efficiency
+
+    def get_efficiency(self, state=None) -> float:
+        return self.efficiency

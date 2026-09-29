@@ -1,5 +1,6 @@
 from energy_system_control.components.base import ControlledComponent
 from energy_system_control.sim.state import SimulationState
+from energy_system_control.core.port import FuelPort
 from abc import abstractmethod
 
 class GenericControlledComponent(ControlledComponent):
@@ -34,7 +35,7 @@ class HeatSource(ControlledComponent):
     power_input_port_name: str
     source_type: str
     def __init__(self, name: str, source_type: str):
-        if source_type not in {'electricity', 'fuel'}:
+        if source_type not in {'electricity', 'fuel', 'biogas'}:
             raise(KeyError, f'Source type for heat source {name} is not accepted. {source_type} was provided')
         self.heat_output_port_name = f'{name}_heat_output_port'
         self.power_input_port_name = f'{name}_{source_type}_input_port'
@@ -54,4 +55,7 @@ class HeatSource(ControlledComponent):
 
     def step(self, state: SimulationState, action):
         self.ports[self.heat_output_port_name].flows['heat'] = -self.get_heat_output(state) * action
-        self.ports[self.power_input_port_name].flows[self.source_type] = self.get_power_input(state) * action
+        if isinstance(self.ports[self.power_input_port_name], FuelPort):
+            self.ports[self.power_input_port_name].flows['chemical_energy'] = self.get_power_input(state) * action
+        else:
+            self.ports[self.power_input_port_name].flows[self.source_type] = self.get_power_input(state) * action

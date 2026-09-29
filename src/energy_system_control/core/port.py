@@ -86,8 +86,8 @@ class ElectricPort(Port):
         super().__init__(name, ['electricity'])
 
 class FuelPort(Port):
-    def __init__(self,name):
-        super().__init__(name, ['mass', 'chemical_energy'])
+    def __init__(self,name, other_properties: list = []):
+        super().__init__(name, ['mass', 'chemical_energy']+other_properties)
         self.LHV=None 
         
     def propagate_port_values(self):
@@ -96,5 +96,5 @@ class FuelPort(Port):
 
 class BiogasPort(FuelPort):
     def __init__(self,name):
-        super().__init__(name)
+        super().__init__(name, ['volume'])
         self.methane_fraction=None 
