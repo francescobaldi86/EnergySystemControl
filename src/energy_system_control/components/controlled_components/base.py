@@ -1,6 +1,6 @@
 from energy_system_control.components.base import ControlledComponent
 from energy_system_control.sim.state import SimulationState
-from energy_system_control.core.port import FuelPort
+from energy_system_control.core.port import FuelPort, BiogasPort
 from abc import abstractmethod
 
 class GenericControlledComponent(ControlledComponent):
@@ -55,7 +55,11 @@ class HeatSource(ControlledComponent):
 
     def step(self, state: SimulationState, action):
         self.ports[self.heat_output_port_name].flows['heat'] = -self.get_heat_output(state) * action
-        if isinstance(self.ports[self.power_input_port_name], FuelPort):
+        if isinstance(self.ports[self.power_input_port_name], BiogasPort):
+            self.ports[self.power_input_port_name].flows['chemical_energy'] = self.get_power_input(state) * action
+            self.ports[self.power_input_port_name].flows['mass'] = self.ports[self.power_input_port_name].flows['chemical_energy'] / self.ports[self.power_input_port_name].LHV
+            self.ports[self.power_input_port_name].flows['volume'] = self.ports[self.power_input_port_name].flows['mass'] / self.ports[self.power_input_port_name].density
+        elif isinstance(self.ports[self.power_input_port_name], FuelPort):
             self.ports[self.power_input_port_name].flows['chemical_energy'] = self.get_power_input(state) * action
         else:
             self.ports[self.power_input_port_name].flows[self.source_type] = self.get_power_input(state) * action

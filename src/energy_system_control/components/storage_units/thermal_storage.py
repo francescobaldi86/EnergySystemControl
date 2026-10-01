@@ -385,6 +385,14 @@ class BiogasStorage(StorageUnit):
         """ LHV in [kJ/kg]. """
         return self.methane_mass_fraction * METHANE.LHV
 
+    def initialize(self, ctx: InitContext):
+        output_port = self.ports[self.output_port_name]
+        output_port.methane_fraction = self.methane_fraction
+        output_port.LHV = self.biogas_LHV
+        output_port.density = self.biogas_density
+
+        super().initialize(ctx)
+
     def step(self, state, action=None):
         dt = getattr(state, "dt", 1.0)  
         input_port = self.ports[self.input_port_name]
@@ -423,4 +431,5 @@ class BiogasStorage(StorageUnit):
         # 3. AGGIORNAMENTO PORTE
         output_port.methane_fraction = self.methane_fraction
         output_port.LHV = self.biogas_LHV
+        output_port.density = self.biogas_density
         output_port.flows["mass"] = mass_flow_out  # Positivo in uscita dallo storage

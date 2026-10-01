@@ -64,9 +64,9 @@ class InverterConverter(ImplicitComponent):
                 self.ports[self.dc_port_name].flows['electricity'] = -ac_flow / self.efficiency
             return True, [self.dc_port_name]
         elif dc_flow is not None:
-            if self.ports[self.dc_port_name].flows['electricity'] >= 0:  # Positive DC flow: the inverter is converting DC to AC
+            if dc_flow >= 0:  # Positive DC flow: the inverter is converting DC to AC
                 self.ports[self.ac_port_name].flows['electricity'] = -dc_flow * self.efficiency
-            elif self.ports[self.dc_port_name].flows['electricity'] < 0:  # Negative DC flow: the inverter is converting AC to DC
+            elif dc_flow < 0:  # Negative DC flow: the inverter is converting AC to DC
                 self.ports[self.ac_port_name].flows['electricity'] = -dc_flow / self.efficiency
             return True, [self.ac_port_name]
         else:
