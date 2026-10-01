@@ -17,3 +17,8 @@ class ColdWaterGrid(Grid):
     def set_inherited_fluid_port_values(self, state: SimulationState):
         self.ports[self.port_name].T = state.environmental_data.temperature_cold_water
         return {self.port_name: state.environmental_data.temperature_cold_water}
+
+class GasGrid(Grid):
+    def set_inherited_fluid_port_values(self, state: SimulationState):
+        self.ports[self.port_name].T = state.environmental_data.temperature_cold_water
+        return {self.port_name: state.environmental_data.temperature_cold_water}

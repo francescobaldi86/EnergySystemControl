@@ -7,12 +7,13 @@ from .components.explicit_components.pv_panels import PVpanel, PVpanelFromPVGISD
 from .components.storage_units.thermal_storage import HotWaterStorage, MultiNodeHotWaterTank
 from .components.composite_components.batteries import LithiumIonBattery, Battery
 from .components.explicit_components.demands import ConstantPowerDemand, ElectricityDemand, HotWaterDemand
-from .components.grids.grids import ElectricityGrid, ColdWaterGrid
+from .components.grids.grids import ElectricityGrid, ColdWaterGrid, GasGrid
 from .components.composite_components.inverters import Inverter
 from .components.controlled_components.other_heat_sources import ResistanceHeater
 from .components.controlled_components.heat_pumps import HeatPumpConstantEfficiency, HeatPumpLorentzEfficiency, HeatPump
+from .components.controlled_components.combustion_engine import InternalCombustionEngine
 from .controllers.base import HeaterControllerWithBandwidth, ChargeController
-from .controllers.rule_based import HeatPumpRuleBasedController
+from .controllers.rule_based import HeatPumpRuleBasedController, EngineRuleBasedController
 from .sensors.sensors import Sensor, PowerSensor, ElectricPowerSensor, FlowTemperatureSensor, SOCSensor, TankTemperatureSensor, HotWaterDemandSensor, SensorWithMemory
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "HeaterControllerWithBandwidth", "ChargeController",
     "HeatPumpRuleBasedController", 
     "Sensor", "FlowTemperatureSensor", "PowerSensor", "TankTemperatureSensor", "SOCSensor", "ElectricPowerSensor", "HotWaterDemandSensor", "SensorWithMemory",
+    "GasGrid", "InternalCombustionEngine", "EngineRuleBasedController",
 ]

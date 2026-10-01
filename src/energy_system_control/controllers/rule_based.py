@@ -1,6 +1,7 @@
 from energy_system_control.controllers.base import HeaterControllerWithBandwidth
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.helpers import *
+from energy_system_control.controllers.base import Controller
 
 class HeatPumpRuleBasedController(HeaterControllerWithBandwidth):
     """
@@ -68,3 +69,79 @@ class HeatPumpRuleBasedController(HeaterControllerWithBandwidth):
         action = super()._compute_action(state, external_input)
         self.previous_action = action
         return action
+
+class EngineRuleBasedController(Controller):
+    """
+    calcola il deficit di potenza elettrica come la differenza tra la domanda e la produzione di potenza fotovoltaica, entramnbi letti come valori positivi
+    se il deficit supera una certa soglia allora il motore si accende. la soglia di è necessaria per evitare di avviare il motore nel caso di bassissimi valori del deficit
+    si introduce anche un tempo minimo di accensione 
+    """
+    def __init__(self, name: str, 
+                controlled_component: str, 
+                electricity_demand_sensor: str, 
+                pv_power_sensor: str,
+                battery_soc_sensor: str, 
+                net_power_activation: float,
+                min_soc_activation: float = 0.2,
+                min_time_on_h: float = 1.0): 
+        
+        super().__init__(name=name,
+                         controlled_components=[controlled_component],
+                         sensors={'demand': electricity_demand_sensor,
+                                  'PV_power': pv_power_sensor,
+                                  'battery_SOC': battery_soc_sensor})
+        
+        self.controlled_component = controlled_component
+        self.electricity_demand_sensor = electricity_demand_sensor
+        self.min_soc_activation = min_soc_activation
+        self.pv_power_sensor = pv_power_sensor
+
+        '''    
+        if not hasattr(self, 'sensor_names'):
+            self.sensor_names = {}
+                
+        self.sensor_names.update({
+            'demand': electricity_demand_sensor,
+            'PV_power': pv_power_sensor
+        })
+        '''
+            
+        self.net_power_activation = net_power_activation
+        self.min_time_on_h = min_time_on_h
+            
+        self.last_activation_time = -float('inf')
+        self.is_running = False
+        self.previous_action = 0.0
+
+    def _compute_action(self, state: SimulationState):
+        # Valori dai sensori (ora attesi entrambi come positivi in modulo)
+        demand = abs(self.obs['demand'])      
+        pv_power = abs(self.obs['PV_power'])
+        soc = self.obs['battery_SOC']  
+        
+        # Deficit netto: potenza richiesta non coperta dal fotovoltaico
+        net_deficit = demand - pv_power
+        
+        # 1. Determinazione azione teorica: il motore si accende quando il deficit è alto e quando la batteria è al di sotto della soglia stabilita
+        if net_deficit >= self.net_power_activation and soc <= self.min_soc_activation:
+            desired_action = 1.0
+        else:
+            desired_action = 0.0
+            
+        # 2. Logica tempo minimo di accensione (override)
+        if self.is_running:
+            time_elapsed = state.time - self.last_activation_time
+            if time_elapsed < self.min_time_on_h:
+                action = 1.0
+            else:
+                action = desired_action
+                if action == 0.0:
+                    self.is_running = False
+        else:
+            action = desired_action
+            if action == 1.0:
+                self.is_running = True
+                self.last_activation_time = state.time
+                
+        self.previous_action = action
+        return {self.controlled_component: action}

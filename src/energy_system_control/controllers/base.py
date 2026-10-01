@@ -217,3 +217,5 @@ class ChargeController(Controller):
         action = {self.battery_charger_name: action_value}
         self.previous_action = action
         return action
+
+    class ChargeControllerWithEngine(ChargeController)
