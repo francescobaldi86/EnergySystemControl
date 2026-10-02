@@ -150,14 +150,12 @@ class Simulator:
     def _propagate_port_values(self):
         env = self.env
         for _, component in env.components.items():
-            inherited_fluid_ports_info = component.set_inherited_fluid_port_values(self.state)
-            for port_name, temperature in inherited_fluid_ports_info.items():
-                if port_name and env.ports[port_name].connected_port is not None:
-                    env.ports[port_name].connected_port.T = temperature
-            inherited_heat_ports_info = component.set_inherited_heat_port_values(self.state)
-            for port_name, temperature in inherited_heat_ports_info.items():
-                if port_name and env.ports[port_name].connected_port is not None:
-                    env.ports[port_name].connected_port.T = temperature
+            ports_to_update = component.set_inherited_port_values(self.state)
+            for port_name in ports_to_update:
+                port = env.ports[port_name]
+                if port_name and port.connected_port is not None:
+                    for attribute_name in port.attribute_names:
+                        setattr(port.connected_port, attribute_name, getattr(port, attribute_name))
     
     def _simulate_all_components(self):
         self.components_to_simulate = list(self.env.components.keys())
@@ -206,11 +204,8 @@ class Simulator:
         component.step(self.state, action)
         # Update values of connected ports
         for _, port in component.ports.items():
-            for layer, value in port.flows.items():
-                if port.connected_port:
-                    port.connected_port.flows[layer] = -value
-                    if isinstance(port.connected_port, FluidPort | HeatPort):
-                        port.connected_port.T = self.env.ports[port.name].T
+            if port.connected_port:
+                port.propagate_port_values()
     
     def _check_connection_balance(self):
         # Checks that all connections have the same flow on both sides
