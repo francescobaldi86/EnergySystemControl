@@ -4,6 +4,7 @@ from energy_system_control.components.storage_units.thermal_storage import Bioga
 from energy_system_control.components.controlled_components.other_heat_sources import GasBoiler
 from energy_system_control.controllers.base import Controller
 from energy_system_control.components.controlled_components.base import HeatSource
+from energy_system_control.components.base import ControlledComponent
 import math
 
 
@@ -12,14 +13,17 @@ class FakeController(Controller):
     def get_action(self, state):
         return {k: 0.0 for k in self.controlled_component_names}
 
-class FakeBoiler(HeatSource):
+class FakeBoiler(ControlledComponent):
+    def __init__(self, name, consumption: float = 0.0):
+        self.biogas_input_port_name = f'{name}_biogas_input_port'
+        self.biogas_consumption = consumption / 3600 # Biogas consumption, in [m3/s]. The input value is in m3/h
+        super().__init__(name, {self.biogas_input_port_name: 'biogas'})
 
-    def get_efficiency(self, state):
-        return None
-    def get_heat_output(self, state):
-        return None
     def step(self, state, action):
-        self.ports[self.power_input_port_name].flows['chemical_energy'] = 0.0
+        self.ports[self.biogas_input_port_name].flows['volume'] = self.biogas_consumption * action
+        self.ports[self.biogas_input_port_name].flows['mass'] = self.ports[self.biogas_input_port_name].flows['volume'] * self.ports[self.biogas_input_port_name].density  # m3/s * kg/m3 --> kg/s
+        self.ports[self.biogas_input_port_name].flows['chemical_energy'] = self.ports[self.biogas_input_port_name].flows['mass'] * self.ports[self.biogas_input_port_name].LHV  # kg/s * kJ/kg --> kW
+        
 
 
 def test_biogas_production_and_storage():
@@ -28,7 +32,7 @@ def test_biogas_production_and_storage():
     components = [
         AnaerobicDigester(name="anaerobic_digester",biogas_rate=10.0,methane_fraction=0.60),
         BiogasStorage(name="biogas_storage",capacity=500.0,initial_ch4_mass=50.0,initial_co2_mass=30.0),
-        FakeBoiler(name='boiler', source_type='biogas')
+        FakeBoiler(name='boiler')
         ]
 
     controllers = [

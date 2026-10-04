@@ -9,6 +9,7 @@ class Port():
         self.name = name
         self.layers = layers
         self.connected_port = None
+        self.attribute_names = []
         self.reset_flow_data()  # Sets each 
 
     def reset_flow_data(self):
@@ -35,9 +36,8 @@ class Port():
         for layer in self.layers:
             if self.flows[layer] is not None and self.connected_port.flows[layer] is None:
                 self.connected_port.flows[layer] = -self.flows[layer]
-            if isinstance(self, FluidPort) or isinstance(self, HeatPort):
-                if self.T is not None and self.connected_port.T is None:
-                    self.connected_port.T = self.T
+        for attribute_name in self.attribute_names:
+            setattr(self.connected_port, attribute_name, getattr(self, attribute_name))
 
     @staticmethod
     def create_port_of_type(port_name: str, port_type: str):
@@ -70,6 +70,7 @@ class FluidPort(Port):
     def __init__(self, name):
         super().__init__(name, ['mass', 'heat'])
         self.T = None
+        self.attribute_names.append('T')
         
     def reset_state_value(self):
         self.T = None
@@ -77,24 +78,23 @@ class FluidPort(Port):
     def initialize(self, ctx: InitContext):
         self.T = None
 
-    def propagate_port_values(self):
-        super().propagate_port_values()
-        self.connected_port = self.T
 
 class ElectricPort(Port):
     def __init__(self, name):
         super().__init__(name, ['electricity'])
 
+
 class FuelPort(Port):
     def __init__(self,name, other_properties: list = []):
         super().__init__(name, ['mass', 'chemical_energy']+other_properties)
-        self.LHV=None 
-        
-    def propagate_port_values(self):
-        super().propagate_port_values()
-        self.connected_port = self.T
+        self.LHV=None
+        self.attribute_names.append('LHV')
+
 
 class BiogasPort(FuelPort):
     def __init__(self,name):
         super().__init__(name, ['volume'])
         self.methane_fraction=None 
+        self.density=None
+        self.attribute_names.append('methane_fraction')
+        self.attribute_names.append('density')

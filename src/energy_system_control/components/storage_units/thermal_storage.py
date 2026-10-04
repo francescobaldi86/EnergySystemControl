@@ -91,18 +91,18 @@ class HotWaterStorage(StorageUnit):
         losses = -self.convection_coefficient_losses * self.surface * (self.temperature - ambient_temperature) * 1e-3
         return losses
     
-    def set_inherited_fluid_port_values(self, state: SimulationState):
+    def set_inherited_port_values(self, state: SimulationState):
         # Allows for the temperature of the fluid leaving the tank to be set by the storage unit
+        # This is necessary to be done separately from the "step" function to avoid having connected ports with different temperatures
+        output = []
         if self.hot_water_output_port_name in self.ports.keys():
             self.ports[self.hot_water_output_port_name].T = self.temperature
-        return {self.hot_water_output_port_name: self.temperature}
-    
-    def set_inherited_heat_port_values(self, state: SimulationState):
-        output = {}
+        output.append(self.hot_water_output_port_name)
+        # Then update heat ports
         for port_name in self.heat_input_port_names:
             if port_name in self.ports.keys():
                 self.ports[port_name].T = self.temperature
-                output[port_name] = self.temperature
+                output.append(port_name)
         return output
     
     def temperature_to_SOC(self, state: SimulationState):
@@ -316,19 +316,20 @@ class MultiNodeHotWaterTank(HotWaterStorage):
             self.internal_heat_exchange_coefficient[self.relative_temperature_layers_state] = WATER.k * self.convection_effect_coefficient
         heat_exchange_between_layers = self.internal_heat_exchange_coefficient * self.surface_cross_section * (self.T_layer[1:] - self.T_layer[:-1]) * 1e-3  # [W/m2K] * [m2] * [K] * [kW/W] --> kW
         return heat_exchange_between_layers
-    
-    def set_inherited_fluid_port_values(self, state):
-        T_port = self.T_layer[np.nonzero(self.hot_water_output_location==1)][0]
-        self.ports[self.hot_water_output_port_name].T = T_port
-        return {self.hot_water_output_port_name: T_port}
-    
-    def set_inherited_heat_port_values(self, state):
-        output = {}
+
+    def set_inherited_port_values(self, state: SimulationState):
+        # Allows for the temperature of the fluid leaving the tank to be set by the storage unit
+        output = []
+        if self.hot_water_output_port_name in self.ports.keys():
+            T_port = self.T_layer[np.nonzero(self.hot_water_output_location==1)][0]
+            self.ports[self.hot_water_output_port_name].T = T_port
+        output.append(self.hot_water_output_port_name)
+        # Then update heat ports
         for port_name in self.heat_input_port_names:
             if port_name in self.ports.keys():
                 T_heating_port = self.T_layer[self.heating_source_locations[port_name]==1].max()
                 self.ports[port_name].T = T_heating_port
-                output[port_name] = T_heating_port
+                output.append(port_name)
         return output
         
     def initialize(self, ctx: InitContext):
@@ -385,26 +386,33 @@ class BiogasStorage(StorageUnit):
         """ LHV in [kJ/kg]. """
         return self.methane_mass_fraction * METHANE.LHV
 
+    def initialize(self, ctx: InitContext):
+        output_port = self.ports[self.output_port_name]
+        output_port.methane_fraction = self.methane_fraction
+        output_port.LHV = self.biogas_LHV
+        output_port.density = self.biogas_density
+        super().initialize(ctx)
+
     def step(self, state, action=None):
-        dt = getattr(state, "dt", 1.0)  
+        dt = state.time_step
         input_port = self.ports[self.input_port_name]
         output_port = self.ports[self.output_port_name]
 
         # 1. INGRESSO
-        mass_flow_in = min(0.0, input_port.flows.get("mass", 0.0))  
+        mass_flow_in = max(0.0, input_port.flows.get("mass", 0.0))  
         methane_fraction_in = getattr(input_port, "methane_fraction", 0.0)
 
-        if mass_flow_in > 0:
-            density_in = (methane_fraction_in * METHANE.rho+(1.0 - methane_fraction_in) * CARBON_DIOXIDE.rho)
-            methane_mass_frac_in = (methane_fraction_in * METHANE.rho) / density_in if density_in > 0 else 0.0 #da vol a massica
-            
-            # Massa entrante nell'intervallo dt [kg]
-            delta_mass_in = mass_flow_in * dt
-            ch4_in = delta_mass_in * methane_mass_frac_in
-            co2_in = delta_mass_in - ch4_in
+        # if mass_flow_in > 0:  # Perchè solo se il mass_flow_in non è zero?
+        density_in = (methane_fraction_in * METHANE.rho+(1.0 - methane_fraction_in) * CARBON_DIOXIDE.rho)
+        methane_mass_frac_in = (methane_fraction_in * METHANE.rho) / density_in if density_in > 0 else 0.0 #da vol a massica
+        
+        # Massa entrante nell'intervallo dt [kg]
+        delta_mass_in = mass_flow_in * dt
+        ch4_in = delta_mass_in * methane_mass_frac_in
+        co2_in = delta_mass_in - ch4_in
 
-            self.ch4_mass += ch4_in
-            self.co2_mass += co2_in
+        self.ch4_mass += ch4_in
+        self.co2_mass += co2_in
 
         # 2. USCITA (Gestita dalla richiesta del componente a valle o da azione)
         energy_flow_out = max(0.0, output_port.flows.get("chemical_energy", 0.0))
@@ -420,7 +428,10 @@ class BiogasStorage(StorageUnit):
             self.ch4_mass -= delta_mass_out * w_ch4
             self.co2_mass -= delta_mass_out * (1.0 - w_ch4)
 
-        # 3. AGGIORNAMENTO PORTE
+    def set_inherited_port_values(self, state: SimulationState):
+        # First update values of the output port
+        output_port = self.ports[self.output_port_name]
         output_port.methane_fraction = self.methane_fraction
         output_port.LHV = self.biogas_LHV
-        output_port.flows["mass"] = mass_flow_out  # Positivo in uscita dallo storage
+        output_port.density = self.biogas_density
+        return [self.output_port_name]
