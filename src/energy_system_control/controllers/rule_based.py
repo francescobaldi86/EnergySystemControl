@@ -145,3 +145,113 @@ class EngineRuleBasedController(Controller):
                 
         self.previous_action = action
         return {self.controlled_component: action}
+
+class ChargeControllerWithEngine(Controller):
+    """
+    Controllore unificato che gestisce sia il motore a combustione interna sia la batteria.
+    Calcola prima l'azione del motore e aggiorna il bilancio di potenza netto per la batteria.
+    """
+    def __init__(self, name: str, 
+                 battery_name: str, 
+                 engine_name: str, 
+                 battery_soc_sensor: str, 
+                 electricity_demand_sensor: str, 
+                 pv_power_sensor: str,
+                 net_power_activation: float,
+                 engine_p_el_design: float,
+                 min_soc_activation: float = 0.2,
+                 min_time_on_h: float = 1.0): 
+
+        self.battery_charger_name = f"{battery_name}_charger"
+        
+        super().__init__(name=name,
+                         controlled_components=[self.battery_charger_name, engine_name],
+                         sensors={'demand': electricity_demand_sensor,
+                                  'PV_power': pv_power_sensor,
+                                  'battery_SOC': battery_soc_sensor})
+        
+        self.battery_name = battery_name
+        self.engine_name = engine_name
+        
+        self.net_power_activation = net_power_activation
+        self.min_soc_activation = min_soc_activation
+        self.min_time_on_h = min_time_on_h
+        self.engine_p_el_design = engine_p_el_design
+            
+        self.last_activation_time = -float('inf')
+        self.is_running = False
+
+    def _compute_action(self, state: SimulationState):
+        demand = abs(self.obs['demand'])      
+        pv_power = abs(self.obs['PV_power'])
+        soc = self.obs['battery_SOC']  
+        
+        net_deficit = demand - pv_power
+        
+        # 1. Logica di accensione del Motore
+        if net_deficit >= self.net_power_activation and soc <= self.min_soc_activation:
+            desired_engine_action = 1.0
+        else:
+            desired_engine_action = 0.0
+            
+        if self.is_running:
+            if (state.time - self.last_activation_time) < self.min_time_on_h:
+                engine_action = 1.0
+            else:
+                engine_action = desired_engine_action
+                if engine_action == 0.0:
+                    self.is_running = False
+        else:
+            engine_action = desired_engine_action
+            if engine_action == 1.0:
+                self.is_running = True
+                self.last_activation_time = state.time
+
+        # 2. Logica di carica/scarica della Batteria
+        # Calcoliamo la potenza effettivamente generata dal motore in questo time-step
+        engine_power = self.engine_p_el_design * engine_action
+        
+        # Il nuovo bilancio tiene conto della potenza aggiuntiva del motore.
+        # net_balance > 0 significa surplus (batteria si carica), < 0 significa deficit (batteria si scarica)
+        net_balance = pv_power + engine_power - demand
+        
+        return {
+            self.engine_name: engine_action,
+            self.battery_charger_name: net_balance
+        }
+
+class BatteryControllerAware(Controller):
+    """
+    Controllore della batteria che calcola l'azione leggendo la potenza dal fotovoltaico, 
+    la domanda elettrica e la potenza generata dal motore a combustione.
+    """
+    def __init__(self, name: str, 
+                 controlled_component: str, 
+                 soc_sensor: str, 
+                 demand_sensor: str, 
+                 pv_sensor: str, 
+                 engine_sensor: str):
+
+        self.controlled_charger = f"{controlled_component}_charger"
+        
+        super().__init__(name=name,
+                         controlled_components=[controlled_component, self.controlled_charger],
+                         sensors={'SOC': soc_sensor, 
+                                  'demand': demand_sensor, 
+                                  'PV_power': pv_sensor, 
+                                  'engine_power': engine_sensor})
+        
+        self.controlled_component = controlled_component
+
+    def _compute_action(self, state: SimulationState):
+        demand = abs(self.obs['demand'])
+        pv_power = abs(self.obs['PV_power'])
+        
+        # Usiamo abs() per assicurarci di trattarla come grandezza positiva aggiuntiva, 
+        # a prescindere dalla convenzione dei segni del sensore.
+        engine_power = abs(self.obs['engine_power']) 
+        
+        # Bilancio netto per la batteria
+        net_balance = pv_power + engine_power - demand
+        
+        return {self.controlled_charger: net_balance}

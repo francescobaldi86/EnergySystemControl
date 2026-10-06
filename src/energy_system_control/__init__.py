@@ -13,7 +13,7 @@ from .components.controlled_components.other_heat_sources import ResistanceHeate
 from .components.controlled_components.heat_pumps import HeatPumpConstantEfficiency, HeatPumpLorentzEfficiency, HeatPump
 from .components.controlled_components.combustion_engine import InternalCombustionEngine
 from .controllers.base import HeaterControllerWithBandwidth, ChargeController
-from .controllers.rule_based import HeatPumpRuleBasedController, EngineRuleBasedController
+from .controllers.rule_based import HeatPumpRuleBasedController, EngineRuleBasedController, ChargeControllerWithEngine, BatteryControllerAware
 from .sensors.sensors import Sensor, PowerSensor, ElectricPowerSensor, FlowTemperatureSensor, SOCSensor, TankTemperatureSensor, HotWaterDemandSensor, SensorWithMemory
 
 __all__ = [
@@ -27,5 +27,5 @@ __all__ = [
     "HeaterControllerWithBandwidth", "ChargeController",
     "HeatPumpRuleBasedController", 
     "Sensor", "FlowTemperatureSensor", "PowerSensor", "TankTemperatureSensor", "SOCSensor", "ElectricPowerSensor", "HotWaterDemandSensor", "SensorWithMemory",
-    "GasGrid", "InternalCombustionEngine", "EngineRuleBasedController",
+    "GasGrid", "InternalCombustionEngine", "EngineRuleBasedController", "ChargeControllerWithEngine", "BatteryControllerAware",
 ]
