@@ -80,3 +80,18 @@ class FluidPort(Port):
 class ElectricPort(Port):
     def __init__(self, name):
         super().__init__(name, ['electricity'])
+
+class FuelPort(Port):
+    def __init__(self,name, other_properties: list = []):
+        super().__init__(name, ['mass', 'chemical_energy']+other_properties)
+        self.LHV=None
+        self.attribute_names.append('LHV')
+
+
+class BiogasPort(FuelPort):
+    def __init__(self,name):
+        super().__init__(name, ['volume'])
+        self.methane_fraction=None 
+        self.density=None
+        self.attribute_names.append('methane_fraction')
+        self.attribute_names.append('density')
