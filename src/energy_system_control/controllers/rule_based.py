@@ -255,3 +255,26 @@ class BatteryControllerAware(Controller):
         net_balance = pv_power + engine_power - demand
         
         return {self.controlled_charger: net_balance}
+
+class EngineOnOffController(Controller):
+    def __init__(self, name: str, engine_name: str, demand_sensor: str, storage_sensor: str):
+        super().__init__(name=name,
+                         controlled_components=[engine_name],
+                         sensors={'demand': demand_sensor,
+                                  'biogas_SOC': storage_sensor})
+        self.engine_name = engine_name
+        self.is_running = False  # Memoria dello stato del motore
+
+    def _compute_action(self, state):
+        demand = abs(self.obs['demand'])
+        biogas_soc = self.obs['biogas_SOC']
+        
+        if not self.is_running:
+            if demand > 0 and biogas_soc >= 0.80:
+                self.is_running = True
+        else:
+            if biogas_soc <= 0.20:
+                self.is_running = False
+                
+        action = 1.0 if self.is_running else 0.0
+        return {self.engine_name: action}

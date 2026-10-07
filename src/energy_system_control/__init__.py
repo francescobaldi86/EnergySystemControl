@@ -2,9 +2,10 @@
 from .core.base_environment import Environment
 from .sim.config import SimulationConfig
 from .sim.simulator import Simulator
-from .components.explicit_components.producers import ConstantPowerProducer
+from .components.explicit_components.producers import ConstantPowerProducer, AnaerobicDigester
 from .components.explicit_components.pv_panels import PVpanel, PVpanelFromPVGISData, PVpanelFromData, PVpanelFromPVGIS
 from .components.storage_units.thermal_storage import HotWaterStorage, MultiNodeHotWaterTank
+from .components.storage_units.biogas_storage import BiogasStorage
 from .components.composite_components.batteries import LithiumIonBattery, Battery
 from .components.explicit_components.demands import ConstantPowerDemand, ElectricityDemand, HotWaterDemand
 from .components.grids.grids import ElectricityGrid, ColdWaterGrid, GasGrid
@@ -12,20 +13,21 @@ from .components.composite_components.inverters import Inverter
 from .components.controlled_components.other_heat_sources import ResistanceHeater
 from .components.controlled_components.heat_pumps import HeatPumpConstantEfficiency, HeatPumpLorentzEfficiency, HeatPump
 from .components.controlled_components.combustion_engine import InternalCombustionEngine
+from .components.base import Bus
 from .controllers.base import HeaterControllerWithBandwidth, ChargeController
-from .controllers.rule_based import HeatPumpRuleBasedController, EngineRuleBasedController, ChargeControllerWithEngine, BatteryControllerAware
+from .controllers.rule_based import HeatPumpRuleBasedController, EngineRuleBasedController, ChargeControllerWithEngine, BatteryControllerAware, EngineOnOffController
 from .sensors.sensors import Sensor, PowerSensor, ElectricPowerSensor, FlowTemperatureSensor, SOCSensor, TankTemperatureSensor, HotWaterDemandSensor, SensorWithMemory
 
 __all__ = [
     "Environment",
     "SimulationConfig", "Simulator",
-    "PVpanel", "PVpanelFromPVGISData", "PVpanelFromData", "PVpanelFromPVGIS", "ConstantPowerProducer",
-    "HotWaterStorage", "LithiumIonBattery", "MultiNodeHotWaterTank", "Battery",
+    "PVpanel", "PVpanelFromPVGISData", "PVpanelFromData", "PVpanelFromPVGIS", "ConstantPowerProducer", "AnaerobicDigester",
+    "HotWaterStorage", "LithiumIonBattery", "MultiNodeHotWaterTank", "BiogasStorage","Battery",
     "HotWaterDemand", "ThermalLoss", "ConstantPowerDemand", "ElectricityDemand",
     "ResistanceHeater", "BalancingUtility", "ColdWaterGrid", "GenericUtility", "Inverter", "ElectricityGrid",
-    "HeatPumpLorentzEfficiency", "HeatPumpConstantEfficiency", "HeatPump",
+    "HeatPumpLorentzEfficiency", "HeatPumpConstantEfficiency", "HeatPump", "Bus",
     "HeaterControllerWithBandwidth", "ChargeController",
     "HeatPumpRuleBasedController", 
     "Sensor", "FlowTemperatureSensor", "PowerSensor", "TankTemperatureSensor", "SOCSensor", "ElectricPowerSensor", "HotWaterDemandSensor", "SensorWithMemory",
-    "GasGrid", "InternalCombustionEngine", "EngineRuleBasedController", "ChargeControllerWithEngine", "BatteryControllerAware",
+    "GasGrid", "InternalCombustionEngine", "EngineRuleBasedController", "ChargeControllerWithEngine", "BatteryControllerAware", "EngineOnOffController"
 ]

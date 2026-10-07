@@ -11,9 +11,30 @@ class InternalCombustionEngine(ControlledComponent):
         self.electric_port_name = f'{name}_electricity_port'
         self.fuel_port_name = f'{name}_fuel_port'
         
-        # registrazione delle porte passando il dizionario ports_info per inizializzare la classe madre
+        # registrazione delle porte
         super().__init__(name=name,
                          ports_info={self.electric_port_name: 'electricity', self.fuel_port_name: 'fluid'})
+
+    def create_ports(self):
+        # 1. Creazione fisica delle porte tramite la classe genitore
+        ports = super().create_ports()
+        fuel_port = self.ports[self.fuel_port_name]
+        
+        # 2. Pre-registrazione dei layer che potrebbero arrivare da componenti connessi (es. BiogasStorage)
+        custom_layers = ["mass", "volume", "chemical_energy"]
+        
+        if hasattr(fuel_port, "layers"):
+            new_layers = list(fuel_port.layers)
+            for layer in custom_layers:
+                if layer not in new_layers:
+                    new_layers.append(layer)
+            fuel_port.layers = new_layers
+            
+        # 3. Inizializzazione sicura
+        for layer in custom_layers:
+            fuel_port.flows[layer] = 0.0
+            
+        return ports
         
     def step(self, state: SimulationState, action):
         """
@@ -32,8 +53,8 @@ class InternalCombustionEngine(ControlledComponent):
 
         generated_power = self.P_el_design * action
         fuel_consumed = generated_power / self.efficiency_el
+        
         # calcolo elettricità prodotta
         self.ports[self.electric_port_name].flows['electricity'] = -generated_power
-        # calcolo combustibile consumato
-        self.ports[self.fuel_port_name].flows['mass'] = fuel_consumed
-        # self.ports[self.fuel_port_name].flows['heat'] = fuel_consumed * 50000
+        # calcolo combustibile consumato (espresso come potenza chimica entrante)
+        self.ports[self.fuel_port_name].flows['chemical_energy'] = fuel_consumed
