@@ -64,11 +64,15 @@ def test_biogas_production_and_storage():
     print(f"CH4 mass  : {storage.ch4_mass:.4f} kg")
     print(f"CO2 mass  : {storage.co2_mass:.4f} kg")
     print(f"Total mass: {storage.total_mass:.4f} kg")
+    print(f"Density       : {storage.biogas_density:.4f} kg/m3")
+    print(f"Volume        : {storage.volume:.4f} m3")
+    print(f"Capacity      : {storage.capacity:.4f} m3")
+    print(f"Fill fraction : {storage.volume / storage.capacity:.4%}")
 
     assert storage.ch4_mass > 50.0
     assert storage.co2_mass > 30.0
     assert storage.total_mass > 80.0
 
-    assert storage.total_mass <= storage.capacity
+    assert storage.volume <= storage.capacity
 
 test_biogas_production_and_storage()

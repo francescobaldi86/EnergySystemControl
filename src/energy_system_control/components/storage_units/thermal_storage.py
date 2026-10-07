@@ -393,6 +393,13 @@ class BiogasStorage(StorageUnit):
         output_port.density = self.biogas_density
         super().initialize(ctx)
 
+    @property
+    def volume(self) -> float:
+         if self.biogas_density <= 0:
+          return 0.0
+         return self.total_mass / self.biogas_density
+
+
     def step(self, state, action=None):
         dt = state.time_step
         input_port = self.ports[self.input_port_name]
@@ -408,22 +415,29 @@ class BiogasStorage(StorageUnit):
         
         # Massa entrante nell'intervallo dt [kg]
         delta_mass_in = mass_flow_in * dt
-        ch4_in = delta_mass_in * methane_mass_frac_in
-        co2_in = delta_mass_in - ch4_in
+        #controllo troppo pieno
+       
+        current_volume=(self.total_mass/self.biogas_density if self.biogas_density>0 else 0.0)
+
+        available_volume = max(0.0, self.capacity - current_volume)  
+        max_mass_in = available_volume * density_in
+        accepted_mass_in = min(delta_mass_in, max_mass_in)
+        overflow_mass = delta_mass_in - accepted_mass_in
+        ch4_in = accepted_mass_in * methane_mass_frac_in
+        co2_in = accepted_mass_in - ch4_in
 
         self.ch4_mass += ch4_in
         self.co2_mass += co2_in
 
         # 2. USCITA (Gestita dalla richiesta del componente a valle o da azione)
-        energy_flow_out = max(0.0, output_port.flows.get("chemical_energy", 0.0))
-        mass_flow_out = energy_flow_out * self.biogas_LHV
-        delta_mass_out = mass_flow_out * dt
+        energy_flow_out = max(0.0, -output_port.flows.get("chemical_energy", 0.0))
+        mass_flow_out = (energy_flow_out / self.biogas_LHV  if self.biogas_LHV > 0 else 0.0)
+        delta_mass_out =( mass_flow_out * dt)
 
-        if delta_mass_in + delta_mass_out > self.total_mass:
-            delta_mass_out = -(self.total_mass + delta_mass_in)
-            mass_flow_out = delta_mass_out / dt if dt > 0 else 0.0
+        
+        delta_mass_out = min(delta_mass_out,self.total_mass)
 
-        if delta_mass_out < 0:
+        if delta_mass_out > 0:
             w_ch4 = self.methane_mass_fraction
             self.ch4_mass -= delta_mass_out * w_ch4
             self.co2_mass -= delta_mass_out * (1.0 - w_ch4)
