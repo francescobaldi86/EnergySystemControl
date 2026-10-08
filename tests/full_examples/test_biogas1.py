@@ -34,7 +34,7 @@ def test_biogas_storage_empty_with_boiler():
                             
     # CONTROLLER
     controllers = [BoilerController("boiler_controller",["boiler"],{})]
-    sensors = []
+    sensors = [esc.PowerSensor('boiler_heat_output_sensor', 'boiler_heat_output_port', 'heat')]
     
     # CONNECTIONS
     connections = [("anaerobic_digester_biogas_port","biogas_storage_input"),
@@ -56,6 +56,9 @@ def test_biogas_storage_empty_with_boiler():
     results = sim.run()
 
     df_ports, df_controllers, df_sensors = results.to_dataframe()
+
+    
+    (-df_sensors['boiler_heat_output_sensor']).plot()
 
     print("\nPORT RESULTS")
     print(df_ports)

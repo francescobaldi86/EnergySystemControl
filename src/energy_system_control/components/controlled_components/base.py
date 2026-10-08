@@ -56,9 +56,14 @@ class HeatSource(ControlledComponent):
     def step(self, state: SimulationState, action):
         self.ports[self.heat_output_port_name].flows['heat'] = -self.get_heat_output(state) * action
         if isinstance(self.ports[self.power_input_port_name], BiogasPort):
-            self.ports[self.power_input_port_name].flows['chemical_energy'] = self.get_power_input(state) * action
-            self.ports[self.power_input_port_name].flows['mass'] = self.ports[self.power_input_port_name].flows['chemical_energy'] / self.ports[self.power_input_port_name].LHV
-            self.ports[self.power_input_port_name].flows['volume'] = self.ports[self.power_input_port_name].flows['mass'] / self.ports[self.power_input_port_name].density
+            if self.ports[self.power_input_port_name].LHV > 0.0:
+                self.ports[self.power_input_port_name].flows['chemical_energy'] = self.get_power_input(state) * action
+                self.ports[self.power_input_port_name].flows['mass'] = self.ports[self.power_input_port_name].flows['chemical_energy'] / self.ports[self.power_input_port_name].LHV
+                self.ports[self.power_input_port_name].flows['volume'] = self.ports[self.power_input_port_name].flows['mass'] / self.ports[self.power_input_port_name].density
+            else: 
+                self.ports[self.power_input_port_name].flows['chemical_energy'] = 0.0
+                self.ports[self.power_input_port_name].flows['mass'] = 0.0
+                self.ports[self.power_input_port_name].flows['volume'] = 0.0
         elif isinstance(self.ports[self.power_input_port_name], FuelPort):
             self.ports[self.power_input_port_name].flows['chemical_energy'] = self.get_power_input(state) * action
         else:
