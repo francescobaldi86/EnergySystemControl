@@ -110,7 +110,7 @@ class EngineRuleBasedController(Controller):
         self.min_time_on_h = min_time_on_h
             
         self.last_activation_time = -float('inf')
-        self.is_running = False
+        self.engine_is_running = False
         self.previous_action = 0.0
 
     def _compute_action(self, state: SimulationState):
@@ -129,18 +129,18 @@ class EngineRuleBasedController(Controller):
             desired_action = 0.0
             
         # 2. Logica tempo minimo di accensione (override)
-        if self.is_running:
+        if self.engine_is_runningis_running:
             time_elapsed = state.time - self.last_activation_time
             if time_elapsed < self.min_time_on_h:
                 action = 1.0
             else:
                 action = desired_action
                 if action == 0.0:
-                    self.is_running = False
+                    self.engine_is_running = False
         else:
             action = desired_action
             if action == 1.0:
-                self.is_running = True
+                self.engine_is_running = True
                 self.last_activation_time = state.time
                 
         self.previous_action = action
@@ -179,7 +179,7 @@ class ChargeControllerWithEngine(Controller):
         self.engine_p_el_design = engine_p_el_design
             
         self.last_activation_time = -float('inf')
-        self.is_running = False
+        self.engine_is_running = False
 
     def _compute_action(self, state: SimulationState):
         demand = abs(self.obs['demand'])      
@@ -194,17 +194,17 @@ class ChargeControllerWithEngine(Controller):
         else:
             desired_engine_action = 0.0
             
-        if self.is_running:
+        if self.engine_is_running:
             if (state.time - self.last_activation_time) < self.min_time_on:
                 engine_action = 1.0
             else:
                 engine_action = desired_engine_action
                 if engine_action == 0.0:
-                    self.is_running = False
+                    self.engine_is_running = False
         else:
             engine_action = desired_engine_action
             if engine_action == 1.0:
-                self.is_running = True
+                self.engine_is_running = True
                 self.last_activation_time = state.time
 
         # 2. Logica di carica/scarica della Batteria
@@ -257,24 +257,27 @@ class BatteryControllerAware(Controller):
         return {self.controlled_charger: net_balance}
 
 class EngineOnOffController(Controller):
-    def __init__(self, name: str, engine_name: str, demand_sensor: str, storage_sensor: str):
+    def __init__(self, name: str, engine_name: str, demand_sensor: str, storage_sensor: str, 
+                 biogas_soc_on_threshold: float = 0.80, biogas_soc_off_threshold: float = 0.20):
         super().__init__(name=name,
                          controlled_components=[engine_name],
                          sensors={'demand': demand_sensor,
                                   'biogas_SOC': storage_sensor})
         self.engine_name = engine_name
-        self.is_running = False  # Memoria dello stato del motore
+        self.biogas_soc_on_threshold = biogas_soc_on_threshold
+        self.biogas_soc_off_threshold = biogas_soc_off_threshold
+        self.engine_is_running = False  # Memoria dello stato del motore
 
     def _compute_action(self, state):
         demand = abs(self.obs['demand'])
         biogas_soc = self.obs['biogas_SOC']
         
-        if not self.is_running:
-            if demand > 0 and biogas_soc >= 0.80:
-                self.is_running = True
+        if not self.engine_is_running:
+            if demand > 0 and biogas_soc >= self.biogas_soc_on_threshold:
+                self.engine_is_running = True
         else:
-            if biogas_soc <= 0.20:
-                self.is_running = False
+            if biogas_soc <= self.biogas_soc_off_threshold:
+                self.engine_is_running = False
                 
-        action = 1.0 if self.is_running else 0.0
+        action = 1.0 if self.engine_is_running else 0.0
         return {self.engine_name: action}

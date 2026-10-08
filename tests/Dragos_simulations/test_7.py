@@ -37,7 +37,9 @@ def test_7():
         esc.EngineOnOffController('engine_controller', 
                               engine_name='engine', 
                               demand_sensor='electricity_demand_sensor', 
-                              storage_sensor='biogas_SOC_sensor')
+                              storage_sensor='biogas_SOC_sensor',
+                              biogas_soc_on_threshold=0.8,
+                              biogas_soc_off_threshold=0.2)
     ]
     
     connections = [
@@ -58,7 +60,7 @@ def test_7():
     df_ports, df_controllers, df_sensors = results.to_dataframe()
 
     os.makedirs(os.path.join(__HERE__, 'Tabelle_dati'), exist_ok=True)
-    excel_path = os.path.join(__HERE__, 'Tabelle_dati', "test_7_results.xlsx")
+    excel_path = os.path.join(__HERE__, 'Tabelle_dati', "test_7_v2_results.xlsx")
     with pd.ExcelWriter(excel_path) as writer:
         df_ports.to_excel(writer, sheet_name='Ports')
         df_sensors.to_excel(writer, sheet_name='Sensors')
