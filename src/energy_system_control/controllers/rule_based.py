@@ -175,7 +175,7 @@ class ChargeControllerWithEngine(Controller):
         
         self.net_power_activation = net_power_activation
         self.min_soc_activation = min_soc_activation
-        self.min_time_on_h = min_time_on_h
+        self.min_time_on = min_time_on_h*3600
         self.engine_p_el_design = engine_p_el_design
             
         self.last_activation_time = -float('inf')
@@ -195,7 +195,7 @@ class ChargeControllerWithEngine(Controller):
             desired_engine_action = 0.0
             
         if self.is_running:
-            if (state.time - self.last_activation_time) < self.min_time_on_h:
+            if (state.time - self.last_activation_time) < self.min_time_on:
                 engine_action = 1.0
             else:
                 engine_action = desired_engine_action
