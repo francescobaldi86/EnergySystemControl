@@ -129,7 +129,7 @@ class EngineRuleBasedController(Controller):
             desired_action = 0.0
             
         # 2. Logica tempo minimo di accensione (override)
-        if self.engine_is_runningis_running:
+        if self.engine_is_running:
             time_elapsed = state.time - self.last_activation_time
             if time_elapsed < self.min_time_on_h:
                 action = 1.0
@@ -160,7 +160,8 @@ class ChargeControllerWithEngine(Controller):
                  net_power_activation: float,
                  engine_p_el_design: float,
                  min_soc_activation: float = 0.2,
-                 min_time_on_h: float = 1.0): 
+                 min_time_on_h: float = 1.0,
+                 min_time_off_h: float = 0.0): 
 
         self.battery_charger_name = f"{battery_name}_charger"
         
@@ -168,7 +169,9 @@ class ChargeControllerWithEngine(Controller):
                          controlled_components=[self.battery_charger_name, engine_name],
                          sensors={'demand': electricity_demand_sensor,
                                   'PV_power': pv_power_sensor,
-                                  'battery_SOC': battery_soc_sensor})
+                                  'battery_SOC': battery_soc_sensor},
+                                  minimum_time_off_between_activations_h={engine_name: min_time_on_h},
+                                  minimum_time_on_between_deactivations_h={engine_name: min_time_off_h})
         
         self.battery_name = battery_name
         self.engine_name = engine_name
@@ -176,12 +179,45 @@ class ChargeControllerWithEngine(Controller):
         self.net_power_activation = net_power_activation
         self.min_soc_activation = min_soc_activation
         self.min_time_on = min_time_on_h*3600
+        self.min_time_off = min_time_off_h*3600
         self.engine_p_el_design = engine_p_el_design
             
         self.last_activation_time = -float('inf')
         self.engine_is_running = False
 
+    def get_action(self, state: SimulationState, **kwargs):
+        demand = abs(self.obs['demand'])      
+        pv_power = abs(self.obs['PV_power'])
+        soc = self.obs['battery_SOC']  
+        
+        net_deficit = demand - pv_power
+        
+        # 1. Logica teorica del motore
+        if net_deficit >= self.net_power_activation and soc <= self.min_soc_activation:
+            engine_action = 1.0
+        else:
+            engine_action = 0.0
+            
+        # 2. Creazione dell'azione temporanea e applicazione del filtro ereditato
+        action = {
+            self.engine_name: engine_action,
+            self.battery_charger_name: self.previous_action.get(self.battery_charger_name, 0.0)
+        }
+        
+        action = self.check_dynamic_limitations(state, action)
+        final_engine_action = action[self.engine_name]
+
+        # 3. Aggiornamento bilancio della batteria con l'azione reale del motore appena validata
+        engine_power = self.engine_p_el_design * final_engine_action
+        net_balance = pv_power + engine_power - demand
+        
+        action[self.battery_charger_name] = net_balance
+        self.previous_action = action
+        return action
+
     def _compute_action(self, state: SimulationState):
+        pass
+        '''
         demand = abs(self.obs['demand'])      
         pv_power = abs(self.obs['PV_power'])
         soc = self.obs['battery_SOC']  
@@ -219,18 +255,22 @@ class ChargeControllerWithEngine(Controller):
             self.engine_name: engine_action,
             self.battery_charger_name: net_balance
         }
+    '''
 
 class BatteryControllerAware(Controller):
     """
     Controllore della batteria che calcola l'azione leggendo la potenza dal fotovoltaico, 
     la domanda elettrica e la potenza generata dal motore a combustione.
+    Include un limitatore dinamico custom per evitare inversioni repentine tra carica e scarica.
     """
     def __init__(self, name: str, 
                  controlled_component: str, 
                  soc_sensor: str, 
                  demand_sensor: str, 
                  pv_sensor: str, 
-                 engine_sensor: str):
+                 engine_sensor: str,
+                 min_time_charge_h: float = 0.0,      # Nuovo parametro
+                 min_time_discharge_h: float = 0.0):  # Nuovo parametro
 
         self.controlled_charger = f"{controlled_component}_charger"
         
@@ -242,19 +282,60 @@ class BatteryControllerAware(Controller):
                                   'engine_power': engine_sensor})
         
         self.controlled_component = controlled_component
+        
+        # Conversione dei tempi in secondi
+        self.min_time_charge = min_time_charge_h * 3600
+        self.min_time_discharge = min_time_discharge_h * 3600
+        
+        # Variabili di memoria per lo stato continuo
+        self.current_mode = 0  # 1 = Carica, -1 = Scarica, 0 = Iniziale
+        self.time_in_current_mode = 0.0
 
     def _compute_action(self, state: SimulationState):
         demand = abs(self.obs['demand'])
         pv_power = abs(self.obs['PV_power'])
-        
-        # Usiamo abs() per assicurarci di trattarla come grandezza positiva aggiuntiva, 
-        # a prescindere dalla convenzione dei segni del sensore.
         engine_power = abs(self.obs['engine_power']) 
         
         # Bilancio netto per la batteria
         net_balance = pv_power + engine_power - demand
         
         return {self.controlled_charger: net_balance}
+
+    # Di seguito si implementa un metodo check_dynamic_limitations custom della classe BatteryControllerAware
+    def check_dynamic_limitations(self, state: SimulationState, action: dict):
+        proposed_power = action[self.controlled_charger]
+        
+        # 1. Analisi della volontà teorica (in che modalità vorrebbe entrare il sistema)
+        proposed_mode = 0
+        if proposed_power > 0:
+            proposed_mode = 1
+        elif proposed_power < 0:
+            proposed_mode = -1
+
+        # 2. Controllo dei vincoli temporali di inversione
+        if proposed_mode == 1 and self.current_mode == -1:
+            # Vuole invertire da scarica a carica
+            if self.time_in_current_mode < self.min_time_discharge:
+                proposed_power = 0.0  # Azione non permessa: mettiamo la batteria in pausa
+                proposed_mode = -1    # Manteniamo la memoria del ciclo di scarica in corso
+                
+        elif proposed_mode == -1 and self.current_mode == 1:
+            # Vuole invertire da carica a scarica
+            if self.time_in_current_mode < self.min_time_charge:
+                proposed_power = 0.0  
+                proposed_mode = 1     
+        
+        # 3. Aggiornamento timer (sfruttando state.time_step come in base.py) e modalità
+        if proposed_mode != self.current_mode and proposed_mode != 0:
+            # Se è un'inversione permessa o la primissima attivazione, salviamo il nuovo stato
+            self.current_mode = proposed_mode
+            self.time_in_current_mode = state.time_step 
+        else:
+            # Se siamo nella stessa modalità (o in pausa forzata che eredita il segno precedente), il tempo avanza
+            self.time_in_current_mode += state.time_step
+            
+        action[self.controlled_charger] = proposed_power
+        return action
 
 class EngineOnOffController(Controller):
     def __init__(self, name: str, engine_name: str, demand_sensor: str, storage_sensor: str, 

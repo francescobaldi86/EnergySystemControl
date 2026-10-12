@@ -21,8 +21,12 @@ class InternalCombustionEngine(ControlledComponent):
         fuel_port = self.ports[self.fuel_port_name]
         
         # 2. Pre-registrazione dei layer che potrebbero arrivare da componenti connessi (es. BiogasStorage)
-        custom_layers = ["mass", "volume", "chemical_energy"]
-        
+        #custom_layers = ["mass", "volume", "chemical_energy"]
+
+        if hasattr(fuel_port, "layers"):
+            fuel_port.layers = list(set(fuel_port.layers) | {"mass", "volume", "chemical_energy"})
+
+        '''
         if hasattr(fuel_port, "layers"):
             new_layers = list(fuel_port.layers)
             for layer in custom_layers:
@@ -33,18 +37,18 @@ class InternalCombustionEngine(ControlledComponent):
         # 3. Inizializzazione sicura
         for layer in custom_layers:
             fuel_port.flows[layer] = 0.0
-            
+        '''    
         return ports
         
     def step(self, state: SimulationState, action):
-        """
+        '''
         Calcola i flussi per il time-step corrente.
         Convenzione segni: Flusso entrante (assorbito) = Positivo. Flusso uscente (erogato) = Negativo.
-        """
+        
         for port in self.ports.values():
             for layer in port.flows.keys():
                 port.flows[layer] = 0.0
-
+        '''
         if action is None:
             return
 

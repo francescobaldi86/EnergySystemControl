@@ -2,6 +2,7 @@ from energy_system_control.components.base import ExplicitComponent
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.constants.fluids import Methane, CarbonDioxide
 
+
 class Producer(ExplicitComponent):
     port_name: str
     production_type: str
@@ -37,7 +38,10 @@ class AnaerobicDigester(Producer):
         # 1. Chiama il metodo originale per creare materialmente la porta
         ports = super().create_ports()
         port = self.ports[self.port_name]
-        
+
+        if hasattr(port, "layers"):
+            port.layers = list(set(port.layers) | {"mass", "volume", "chemical_energy"})
+        '''
         # 2. Registra esplicitamente i nuovi layer per il file di output
         custom_layers = ["mass", "volume", "chemical_energy"]
         if hasattr(port, "layers"):
@@ -50,7 +54,7 @@ class AnaerobicDigester(Producer):
         # 3. Inizializza i flussi a 0.0 per evitare il TypeError (NoneType)
         for layer in custom_layers:
             port.flows[layer] = 0.0
-            
+        '''    
         return ports
 
     @property
@@ -77,11 +81,11 @@ class AnaerobicDigester(Producer):
         return self.mass_flow * self.biogas_LHV
 
     def step(self, state, action=None):
-        # Manteniamo l'azzeramento per sicurezza
-        for port_obj in self.ports.values():
-            for layer in port_obj.flows.keys():
-                port_obj.flows[layer] = 0.0
-
+        '''
+        for port in self.ports.values():
+            for layer in port.flows.keys():
+                port.flows[layer] = 0.0
+        '''
         mass_flow = self.mass_flow
         volume_flow = self.biogas_rate / 3600.0
         chemical_power = self.chemical_power

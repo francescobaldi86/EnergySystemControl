@@ -161,7 +161,7 @@ def test_6(mode='unified'):
     df_ports, df_controllers, df_sensors = results.to_dataframe()
 
     os.makedirs(os.path.join(__HERE__, 'Tabelle_dati'), exist_ok=True)
-    excel_path = os.path.join(__HERE__, 'Tabelle_dati', f"test_6_results_v2_{mode}.xlsx")
+    excel_path = os.path.join(__HERE__, 'Tabelle_dati', f"test_6_results_{mode}.xlsx")
     with pd.ExcelWriter(excel_path) as writer:
         df_ports.to_excel(writer, sheet_name='Ports')
         df_sensors.to_excel(writer, sheet_name='Sensors')

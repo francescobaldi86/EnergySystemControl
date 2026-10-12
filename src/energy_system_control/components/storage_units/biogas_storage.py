@@ -27,6 +27,8 @@ class BiogasStorage(StorageUnit):
             port = self.ports[p_name]
             
             if hasattr(port, "layers"):
+                port.layers = list(set(port.layers) | {"mass", "volume", "chemical_energy"})
+                '''
                 new_layers = list(port.layers)
                 for layer in custom_layers:
                     if layer not in new_layers:
@@ -35,7 +37,7 @@ class BiogasStorage(StorageUnit):
                 
             for layer in custom_layers:
                 port.flows[layer] = 0.0
-                
+                '''
         return ports
 
     @property
@@ -76,17 +78,18 @@ class BiogasStorage(StorageUnit):
         super().initialize(ctx)
 
     def step(self, state, action=None):
+
         dt = state.time_step
         input_port = self.ports[self.input_port_name]
         output_port = self.ports[self.output_port_name]
-
+        '''
         # Helper per estrarre in modo sicuro i flussi, sostituendo i NoneType con 0.0
         def get_flow(port, layer):
             val = port.flows.get(layer)
             return val if val is not None else 0.0
-
-        # 1. INGRESSO (Consideriamo solo la componente entrante, quindi positiva)
-        mass_flow_in = max(0.0, get_flow(input_port, "mass"))  
+        '''
+        # 1. INGRESSO
+        mass_flow_in = max(0.0, input_port.flows["mass"])  
         methane_fraction_in = getattr(input_port, "methane_fraction", 0.0)
 
         density_in = (methane_fraction_in * METHANE.rho + (1.0 - methane_fraction_in) * CARBON_DIOXIDE.rho)
@@ -99,12 +102,12 @@ class BiogasStorage(StorageUnit):
         self.ch4_mass += ch4_in
         self.co2_mass += co2_in
 
-        # 2. USCITA (I flussi propagati in uscita sono negativi per convenzione)
-        val_mass_out = get_flow(output_port, "mass")
+        # 2. USCITA
+        val_mass_out = output_port.flows["mass"]
         mass_flow_out = abs(min(0.0, val_mass_out))
         
         if mass_flow_out == 0.0:
-            val_energy_out = get_flow(output_port, "chemical_energy")
+            val_energy_out = output_port.flows["chemical_energy"]
             energy_flow_out = abs(min(0.0, val_energy_out))
             mass_flow_out = energy_flow_out / self.biogas_LHV if self.biogas_LHV > 0 else 0.0
 
@@ -120,12 +123,12 @@ class BiogasStorage(StorageUnit):
 
         self.SOC = self.total_mass / self.biogas_density / self.capacity
 
-        # 3. SANITIZZAZIONE ANTI-NONE (Essenziale per il simulator.py originale)
-        # Trasforma tutti i layer vuoti in 0.0 prima di restituire il controllo al simulatore
+        '''
         for port in self.ports.values():
             for layer, val in port.flows.items():
                 if val is None:
                     port.flows[layer] = 0.0
+        '''
 
     def set_inherited_port_values(self, state: SimulationState):
         output_port = self.ports[self.output_port_name]

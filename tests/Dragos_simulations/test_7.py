@@ -60,12 +60,12 @@ def test_7():
     df_ports, df_controllers, df_sensors = results.to_dataframe()
 
     os.makedirs(os.path.join(__HERE__, 'Tabelle_dati'), exist_ok=True)
-    excel_path = os.path.join(__HERE__, 'Tabelle_dati', "test_7_v2_results.xlsx")
+    excel_path = os.path.join(__HERE__, 'Tabelle_dati', "test_7_results.xlsx")
     with pd.ExcelWriter(excel_path) as writer:
         df_ports.to_excel(writer, sheet_name='Ports')
         df_sensors.to_excel(writer, sheet_name='Sensors')
         df_controllers.to_excel(writer, sheet_name='Controllers')
-
+    '''
     start_step = 6 * 1440
     end_step = 7 * 1440
     
@@ -109,6 +109,6 @@ def test_7():
     plt.tight_layout()
     plt.savefig(plot_path)
     plt.close()
-
+    '''
 if __name__ == "__main__":
     test_7()

@@ -229,6 +229,12 @@ class Simulator:
         # Update values of connected ports
         for _, port in component.ports.items():
             for layer, value in port.flows.items():
+
+                # Se il componente non ha toccato questo layer, assumiamo che il flusso sia nullo
+                if value is None:
+                    value = 0.0
+                    port.flows[layer] = 0.0
+
                 if port.connected_port:
                     port.connected_port.flows[layer] = -value
                     if isinstance(port.connected_port, FluidPort | HeatPort):
@@ -239,14 +245,23 @@ class Simulator:
         env = self.env
         for connection in env.connections:
             for layer, value in env.ports[connection[0]].flows.items():
-                if abs(value + env.ports[connection[1]].flows[layer]) > 1e-5:
+
+                # Verifichiamo che entrambi i valori siano numerici prima della somma
+                val0 = value if value is not None else 0.0
+                val1 = env.ports[connection[1]].flows.get(layer)
+                val1 = val1 if val1 is not None else 0.0
+
+                if abs(val0 + val1) > 1e-5:
                     raise ValueError(f"Connection {connection} has unbalanced flows: {env.ports[connection[0]].flows[layer]:.2f} != {env.ports[connection[1]].flows[layer]:.2f}")
 
     def _save_simulation_data(self, sim_data):
         # Ports
         time_id = self.state.time_id
         for port_name, port in self.env.ports.items():
-            for layer, flow in port.flows.items():
+            # Iteriamo esclusivamente sui layer ufficiali, non sulle chiavi iniettate dinamicamente
+            for layer in getattr(port, 'layers', []):
+                # Il .get() restituisce None se la chiave è assente, attivando il default np.nan nella riga sotto
+                flow = port.flows.get(layer) 
                 col = self.env.signal_registry_ports.col_index(port_name, layer)
                 try:
                     sim_data.ports[time_id, col] = flow if flow is not None else np.nan
