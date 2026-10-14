@@ -17,6 +17,7 @@ from energy_system_control.controllers.predictors import *
 from energy_system_control.controllers.RL.RLcontrollers import *
 from energy_system_control.helpers import *
 from energy_system_control.io.data_provider import EnvironmentalDataProvider
+from energy_system_control.io.core import IOClient
 from energy_system_control.sim.config import SimulationConfig
 
 
@@ -30,6 +31,7 @@ class Environment:
                  connections = [], 
                  predictors: List[Predictor] = [],
                  environmental_data_provider: EnvironmentalDataProvider | None = None,
+                 io_clients: Dict[str, IOClient] | None = None,
                  latitude: float | None = None,
                  longitude: float | None = None
                  ):
@@ -43,6 +45,7 @@ class Environment:
         self.sensors: Dict[str, Sensor] = {sensor.name: sensor for sensor in sensors}
         self.predictors: Dict[str, Predictor] = {predictor.name: predictor for predictor in predictors}
         self.environmental_data_provider = environmental_data_provider
+        self.clients = io_clients
         self.latitude = latitude
         self.longitude = longitude
         self.signal_registry_ports = SignalRegistry()
