@@ -3,6 +3,7 @@ from energy_system_control.io.core import IOClient
 
 class HomeAssistantClient(IOClient):
     def __init__(self, url: str, token: str):
+        super().__init__("home_assistant")
         self.url = url.rstrip("/")
         self.session = requests.Session()
         self.session.headers.update({

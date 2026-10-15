@@ -39,6 +39,19 @@ class HomeAssistantActuator(Actuator):
             raise ValueError("Home Assistant client not found in the environment")
 
 class HomeAssistantOnOffActuator(HomeAssistantActuator):
+    """Actuator that toggles a Home Assistant binary entity on or off.
+
+    This actuator wraps a Home Assistant entity such as a switch or light and
+    maps a boolean control action to the corresponding HA service call.
+    ``True`` sends ``turn_on`` and ``False`` sends ``turn_off``.
+
+    Parameters
+    ----------
+    name : str
+        Name of the actuator.
+    entity_id : str
+        Home Assistant entity identifier, for example ``switch.kitchen_light``.
+    """
 
     def send_control_signal(self, state, action):
         if action == True:
@@ -53,6 +66,25 @@ class HomeAssistantOnOffActuator(HomeAssistantActuator):
             entity_id = self.entity_id)
 
 class HomeAssistantSmoothActuator(HomeAssistantActuator):
+    """Actuator that controls a Home Assistant device with a continuous setpoint.
+
+    This actuator is intended for entities that support a variable parameter,
+    such as a dimmable light or a thermostat-like device. The provided action is
+    converted to a float and sent to Home Assistant using the configured
+    ``setpoint_varname`` field. When the action is effectively zero or below the
+    configured epsilon, the actuator turns the entity off; otherwise it turns it
+    on and passes the target value as a service parameter.
+
+    Parameters
+    ----------
+    name : str
+        Name of the actuator.
+    entity_id : str
+        Home Assistant entity identifier that will receive the command.
+    setpoint_varname : str
+        Name of the service parameter used to pass the numeric setpoint value to
+        Home Assistant.
+    """
     setpoint_varname: str
     def __init__(self, 
                  name: str, 

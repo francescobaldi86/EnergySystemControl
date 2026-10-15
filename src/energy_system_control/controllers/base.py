@@ -54,7 +54,7 @@ class Controller(ABC):
         self.on_off_time_limitations = bool(len(self.minimum_time_off_between_deactivations) + len(self.minimum_time_on_between_activations))
 
     def initialize(self, ctx: InitContext):
-        self.load_controlled_components(ctx.environment.components)
+        self.load_controlled_components(dict(ctx.environment.components, **ctx.environment.actuators))
         self.load_sensors(ctx.environment.sensors)
         self.load_predictors(ctx.environment.predictors)
         self.previous_action = {comp: 0 for comp in self.controlled_components}

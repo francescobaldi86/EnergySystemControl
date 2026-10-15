@@ -18,34 +18,35 @@ from energy_system_control.controllers.RL.RLcontrollers import *
 from energy_system_control.helpers import *
 from energy_system_control.io.data_provider import EnvironmentalDataProvider
 from energy_system_control.io.core import IOClient
+from energy_system_control.io.actuators import Actuator
 from energy_system_control.sim.config import SimulationConfig
 
 
-
-
-class Environment:
+class BaseEnvironment:
     def __init__(self, 
-                 components: List[Component] = [], 
-                 controllers: List[Controller] = [], 
-                 sensors: List[Sensor] = [], 
-                 connections = [], 
-                 predictors: List[Predictor] = [],
-                 environmental_data_provider: EnvironmentalDataProvider | None = None,
-                 io_clients: Dict[str, IOClient] | None = None,
-                 latitude: float | None = None,
-                 longitude: float | None = None
-                 ):
+                    components: List[Component],
+                    controllers: List[Controller],
+                    actuators: List[Actuator], 
+                    sensors: List[Sensor], 
+                    connections: list, 
+                    predictors: List[Predictor],
+                    environmental_data_provider: EnvironmentalDataProvider | None,
+                    io_clients: List[IOClient] | None,
+                    latitude: float | None,
+                    longitude: float | None
+                    ):
         self.nodes: Dict[str, Node] = {}
         self.ports: Dict[str, Port] = {}
         self.connections: List[tuple] = connections
         self.components: Dict[str, Component] = {component.name: component for component in components}
+        self.actuators: Dict[str, Component] = {actuator.name: actuator for actuator in actuators}
         self.components_classified = defaultdict(list)
         self.controllers: Dict[str, Controller] = {controller.name: controller for controller in controllers}
         self.ordered_controllers: List[str] = [controller.name for controller in controllers]
         self.sensors: Dict[str, Sensor] = {sensor.name: sensor for sensor in sensors}
         self.predictors: Dict[str, Predictor] = {predictor.name: predictor for predictor in predictors}
         self.environmental_data_provider = environmental_data_provider
-        self.clients = io_clients
+        self.clients: Dict[str, IOClient] = {client.name: client for client in io_clients}
         self.latitude = latitude
         self.longitude = longitude
         self.signal_registry_ports = SignalRegistry()
@@ -53,10 +54,9 @@ class Environment:
         self.signal_registry_sensors = SignalRegistry()
         # Ordering data
         self.load_internal_components()
-        self.classify_components()
-        self.create_ports()
-        self.connect_ports()
-        self.check_unconnected_ports()
+
+    def initialize(self, state: SimulationState, cfg: SimulationConfig):
+        raise NotImplementedError
 
     def load_internal_components(self):
         new_components = {}
@@ -68,17 +68,67 @@ class Environment:
         self.components.update(new_components)
         self.connections += new_connections
 
-    def initialize(self, state: SimulationState, cfg: SimulationConfig):
-        if self.environmental_data_provider:
-            if hasattr(self.environmental_data_provider, "initialize"):
-                self.environmental_data_provider.initialize(state, cfg)
-        self.create_data_registry()
-
     def add_component(self, component_name, component_type, **kwargs):
         if component_type not in Component.registry:
             raise ValueError(f"Unknown component type: {component_type}")
         cls = Component.registry[component_type]
         self.components[component_name] = cls(**kwargs)
+
+    def create_data_registry(self):
+        # We create a registry for each pair port-layer
+        for port_name, port in self.ports.items():
+            for layer in port.layers:
+                self.signal_registry_ports.register(port_name, layer)
+                if isinstance(port, FluidPort):
+                    self.signal_registry_ports.register(port_name, 'temperature')
+        # We create a registry for each pair controller-component that will store the action
+        for controller_name, controller in self.controllers.items():
+            for component_name in controller.controlled_component_names:
+                self.signal_registry_controllers.register(controller_name, component_name)
+                if isinstance(controller, RLController):
+                    self.signal_registry_controllers.register(controller_name, "reward")
+                    self.signal_registry_controllers.register(controller_name, "td_error")
+        # We also create a registry for each sensor
+        for sensor_name in self.sensors.keys():
+            self.signal_registry_sensors.register(sensor_name, "")
+
+
+
+class SimulationEnvironment(BaseEnvironment):
+    def __init__(self, 
+                 components: List[Component] = [], 
+                 controllers: List[Controller] = [], 
+                 sensors: List[Sensor] = [], 
+                 connections = [], 
+                 predictors: List[Predictor] = [],
+                 environmental_data_provider: EnvironmentalDataProvider | None = None,
+                 io_clients: List[IOClient] | None = None,
+                 latitude: float | None = None,
+                 longitude: float | None = None
+                 ):
+        super().__init__(
+            components = components, 
+            controllers = controllers, 
+            sensors = sensors, 
+            connections = connections,
+            predictors = predictors,
+            environmental_data_provider = environmental_data_provider,
+            io_clients = io_clients,
+            latitude = latitude,
+            longitude = longitude
+        )
+        # Ordering data
+        self.load_internal_components()
+        self.classify_components()
+        self.create_ports()
+        self.connect_ports()
+        self.check_unconnected_ports()
+
+    def initialize(self, state: SimulationState, cfg: SimulationConfig):
+        if self.environmental_data_provider:
+            if hasattr(self.environmental_data_provider, "initialize"):
+                self.environmental_data_provider.initialize(state, cfg)
+        self.create_data_registry()
 
     def classify_components(self, components: Dict[str, Component] | None = None):
         # Classify components based on their type
@@ -119,25 +169,6 @@ class Environment:
                 component.ports.pop(port_to_remove)
                 print(f'WARNING: Port {port_to_remove} was removed since it was not connected to any other port. The simulation will attempt to continue')
 
-    
-    def create_data_registry(self):
-        # We create a registry for each pair port-layer
-        for port_name, port in self.ports.items():
-            for layer in port.layers:
-                self.signal_registry_ports.register(port_name, layer)
-                if isinstance(port, FluidPort):
-                    self.signal_registry_ports.register(port_name, 'temperature')
-        # We create a registry for each pair controller-component that will store the action
-        for controller_name, controller in self.controllers.items():
-            for component_name in controller.controlled_component_names:
-                self.signal_registry_controllers.register(controller_name, component_name)
-                if isinstance(controller, RLController):
-                    self.signal_registry_controllers.register(controller_name, "reward")
-                    self.signal_registry_controllers.register(controller_name, "td_error")
-        # We also create a registry for each sensor
-        for sensor_name in self.sensors.keys():
-            self.signal_registry_sensors.register(sensor_name, "")
-
     def connect_ports(self):
         for connection in self.connections:
             self.ports[connection[0]].connect_port(self.ports[connection[1]])
@@ -148,3 +179,38 @@ class Environment:
             if callable(getattr(component, 'resample_data', None)):
                 component.resample_data(self.time_step, self.time_end)
 
+class Environment(SimulationEnvironment):
+    # Legacy, to make sure that everything that uses "Environment" still works
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+class RealTimeControlEnvironment(BaseEnvironment):
+
+    def __init__(self, 
+                components: List[Component] = [],
+                actuators: List[Actuator] = [],
+                controllers: List[Controller] = [], 
+                sensors: List[Sensor] = [], 
+                connections = [], 
+                predictors: List[Predictor] = [],
+                environmental_data_provider: EnvironmentalDataProvider | None = None,
+                io_clients: List[IOClient] | None = None,
+                latitude: float | None = None,
+                longitude: float | None = None
+                ):
+        super().__init__(
+            components = components, 
+            actuators = actuators,
+            controllers = controllers, 
+            sensors = sensors, 
+            connections = connections,
+            predictors = predictors,
+            environmental_data_provider = environmental_data_provider,
+            io_clients = io_clients,
+            latitude = latitude,
+            longitude = longitude
+        )
+
+    def initialize(self, state: SimulationState, cfg: SimulationConfig):
+        self.create_data_registry()

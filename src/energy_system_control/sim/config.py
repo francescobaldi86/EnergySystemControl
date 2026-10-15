@@ -1,6 +1,7 @@
 # energy_system_control/sim/config.py
 from dataclasses import dataclass, field
 import pandas as pd
+from datetime import datetime, timedelta
 from energy_system_control.core.base_classes import EnvironmentalData
 
 
@@ -34,3 +35,20 @@ class SimulationConfig:
     
     def time_start_s(self) -> float:
         return self.time_start_h * 3600.0
+
+@dataclass(frozen=True)
+class RealTimeControlConfig:
+    simulation_end_h: float = 1.0   # hours
+    time_step_s: float = 10.0     # seconds
+    simulation_start_datetime: pd.Timestamp = datetime.now().astimezone()
+
+    @property
+    def simulation_end_s(self) -> float:
+        return self.simulation_end_h * 3600.0
+
+    @property
+    def simulation_end_datetime(self):
+        return self.simulation_start_datetime + timedelta(seconds = self.simulation_end_s)
+    
+    def time_start_s(self) -> float:
+        return 0.0

@@ -11,7 +11,23 @@ class PhysicalSensor(Sensor):
 
 
 class HomeAssistantSensor(PhysicalSensor):
-    """Sensor that uses Home Assistant to get data"""
+    """Sensor that reads a value from a Home Assistant entity.
+
+    The sensor is bound to a specific Home Assistant entity and retrieves its
+    state through the environment's Home Assistant client. It can either read a
+    numeric value as a float or keep the raw state representation, depending on
+    the ``is_float`` flag.
+
+    Parameters
+    ----------
+    name : str
+        Name of the sensor.
+    entity_id : str
+        Unique entity identifier exposed by Home Assistant.
+    is_float : bool, default=True
+        If ``True``, the sensor reads the state as a float; otherwise it keeps
+        the value in its safe string-based form.
+    """
     entity_id: str
     is_float: bool
     def __init__(self, name: str, entity_id: str, is_float: bool = True):

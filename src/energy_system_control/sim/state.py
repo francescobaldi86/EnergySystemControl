@@ -1,10 +1,11 @@
-from energy_system_control.sim.config import SimulationConfig
+from energy_system_control.sim.config import SimulationConfig, RealTimeControlConfig
 from energy_system_control.core.base_classes import EnvironmentalData
 from dataclasses import dataclass, field
 from typing import Dict, Any
 import numpy as np
 import pandas as pd
 from copy import deepcopy
+from datetime import datetime
 
 @dataclass
 class SimulationState:
@@ -42,3 +43,22 @@ class SimulationState:
             self.environmental_data = deepcopy(cfg.environmental_defaults)
         else:
             self.environmental_data = EnvironmentalData()
+
+@dataclass
+class RealTimeControlState:
+    scheduled_time: datetime = datetime.now().astimezone()
+    actual_start: datetime = datetime.now().astimezone()
+    scheduled_time_vector: np.ndarray | None = None
+    actual_time_vector: np.ndarray | None = None
+    simulation_start_datetime: datetime | None = None
+    scheduled_time_step_s: float | None = None
+
+    def initialize(self, cfg: RealTimeControlConfig):
+        temp = np.arange(
+                    0.0,
+                    cfg.simulation_end_s,
+                    cfg.time_step_s,
+                )
+        self.scheduled_time_vector = temp + self.scheduled_time.timestamp()
+        self.actual_time_vector = np.empty(len(temp))
+        self.scheduled_time_step_s = cfg.time_step_s

@@ -11,12 +11,13 @@ from .config import SimulationConfig
 from .state import SimulationState
 from energy_system_control.helpers import C2K, calculate_solar_angles
 from energy_system_control.core.port import FluidPort, HeatPort
+from energy_system_control.core.base_classes import Manager
 from energy_system_control.sim.simulation_data import SimulationData  # wherever it lives
 from energy_system_control.sim.results import SimulationResults
 from energy_system_control.controllers.RL.RLcontrollers import RLController
 
 @dataclass
-class Simulator:
+class Simulator(Manager):
     env: Environment
     cfg: SimulationConfig
 
@@ -61,19 +62,6 @@ class Simulator:
                                                self.env.signal_registry_controllers,
                                                self.env.signal_registry_sensors,)
         return simulation_results
-    
-    def _initialize_units(self):
-        ctx = InitContext(environment=self.env, state=self.state)
-        for _, component in self.env.components.items():
-            component.initialize(ctx)
-        for _, port in self.env.ports.items():
-            port.initialize(ctx)
-        for _, sensor in self.env.sensors.items():
-            sensor.initialize(ctx)
-        for _, predictor in self.env.predictors.items():
-            predictor.initialize(ctx)
-        for _, controller in self.env.controllers.items():
-            controller.initialize(ctx)
         
 
     def _read_timeseries_data(self):
@@ -212,18 +200,6 @@ class Simulator:
             if number_of_updated_ports == 0:
                 raise RuntimeError(f"Could not solve the network at time {self.state.time}. Remaining components: {[comp.name for comp in components_to_simulate]}")
 
-    def _get_controller_actions(self):
-        actions = {}
-        for controller_name in self.env.ordered_controllers:
-            controller = self.env.controllers[controller_name]
-            controller.get_obs(self.env, self.state)
-            ctrl_actions = controller.get_action(self.state)
-            for comp, action in ctrl_actions.items():
-                if comp in actions:
-                    raise ValueError(f"Component {comp} controlled by multiple controllers.")
-                actions[comp] = action
-        self.state.control_actions = actions
-
     def _take_component_step(self, component, action):
         component.step(self.state, action)
         # Update values of connected ports
@@ -241,32 +217,3 @@ class Simulator:
             for layer, value in env.ports[connection[0]].flows.items():
                 if abs(value + env.ports[connection[1]].flows[layer]) > 1e-5:
                     raise ValueError(f"Connection {connection} has unbalanced flows: {env.ports[connection[0]].flows[layer]:.2f} != {env.ports[connection[1]].flows[layer]:.2f}")
-
-    def _save_simulation_data(self, sim_data):
-        # Ports
-        time_id = self.state.time_id
-        for port_name, port in self.env.ports.items():
-            for layer, flow in port.flows.items():
-                col = self.env.signal_registry_ports.col_index(port_name, layer)
-                try:
-                    sim_data.ports[time_id, col] = flow if flow is not None else np.nan
-                except ValueError as e:
-                    print(f"Error saving flow for port {port_name} and layer {layer}: {e}")
-            if isinstance(port, FluidPort):
-                col = self.env.signal_registry_ports.col_index(port_name, 'temperature')
-                sim_data.ports[time_id, col] = port.T
-        # Controllers
-        for controller_name, controller in self.env.controllers.items():
-            for controlled_component_name, action_value in controller.previous_action.items():
-                col = self.env.signal_registry_controllers.col_index(controller_name, controlled_component_name)
-                sim_data.controllers[time_id, col] = action_value
-                if isinstance(controller, RLController):
-                    col_reward = self.env.signal_registry_controllers.col_index(controller_name, 'reward')
-                    col_td_error = self.env.signal_registry_controllers.col_index(controller_name, 'td_error')
-                    sim_data.controllers[time_id, col_reward] = controller.agent.last_reward
-                    sim_data.controllers[time_id, col_td_error] = controller.agent.last_td_error
-        # We also create a registry for each sensor
-        for sensor_name, sensor in self.env.sensors.items():
-            col = self.env.signal_registry_sensors.col_index(sensor_name, "")
-            sim_data.sensors[time_id, col] = self._normalize_measurement(sensor.current_measurement)
-        return sim_data
