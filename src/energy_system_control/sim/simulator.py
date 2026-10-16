@@ -170,12 +170,18 @@ class Simulator:
         return env_data
 
     def _propagate_port_values(self):
+        ### DA AGGIORNARE PER DRAGOS ###
         env = self.env
         for _, component in env.components.items():
-            inherited_fluid_ports_info = component.set_inherited_fluid_port_values(self.state)
+            inherited_ports_info = component.set_inherited_port_values(self.state)
             for port_name, update_info in inherited_ports_info(self.state):
                 if port_name and env.ports[port_name].connected_port is not None:
                     setattr(env.ports[port_name].connected_port, update_info['attribute_name'], update_info['attribute_value'])
+            # Example of inherited_ports_info:
+            # {'port_name': {'attribute_name_1': 10, 'attribute_name_2': 22}}
+            # inherited_ports_info = {'engine_biogas_port': {'LHV': 22000, 'density': 1.2, 'methane_faction': 0.58}}
+            """
+            inherited_fluid_ports_info = component.set_inherited_fluid_port_values(self.state)
             for port_name, temperature in inherited_fluid_ports_info.items():
                 if port_name and env.ports[port_name].connected_port is not None:
                     env.ports[port_name].connected_port.T = temperature
@@ -183,7 +189,7 @@ class Simulator:
             for port_name, temperature in inherited_heat_ports_info.items():
                 if port_name and env.ports[port_name].connected_port is not None:
                     env.ports[port_name].connected_port.T = temperature
-    
+            """
     def _simulate_all_components(self):
         self.components_to_simulate = list(self.env.components.keys())
         self._simulate_components_of_type("ExplicitComponent")
