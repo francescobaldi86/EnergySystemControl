@@ -52,12 +52,18 @@ class HomeAssistantOnOffActuator(HomeAssistantActuator):
     entity_id : str
         Home Assistant entity identifier, for example ``switch.kitchen_light``.
     """
+    service_on: str
+    service_off: str
+    def __init__(self, name, entity_id, on: str = "turn_on", off: str = "turn_off"):
+        super().__init__(name, entity_id)
+        self.service_on = on
+        self.service_off = off
 
     def send_control_signal(self, state, action):
         if action == True:
-            service = "turn_on"
+            service = self.service_on
         elif action == False:
-            service = "turn_off"
+            service = self.service_off
         else:
             raise ValueError(f'This is a binary actuator, the action must be either True or False')
         self.client.call_service(
@@ -86,12 +92,18 @@ class HomeAssistantSmoothActuator(HomeAssistantActuator):
         Home Assistant.
     """
     setpoint_varname: str
+    service_on: str
+    service_off: str
     def __init__(self, 
                  name: str, 
                  entity_id: str,
-                 setpoint_varname: str):
+                 setpoint_varname: str,
+                 on: str | None = "turn_on",
+                 off: str | None = "turn_off"):
         super().__init__(name, entity_id)
         self.setpoint_varname = setpoint_varname
+        self.service_on = on
+        self.service_off = off
     
     def send_control_signal(self, state, action):
         try:
@@ -99,11 +111,20 @@ class HomeAssistantSmoothActuator(HomeAssistantActuator):
         except ValueError:
             raise ValueError(f'The action should be a float or a value that can be converted to a float. {action} was given instead')
         if action <= EPSILON:
-            service = "turn_off"
-            other_info = {}
+            if self.service_on is not None:
+                service = self.service_off
+                other_info = {}
+            else:
+                service = self.setpoint_varname
+                other_info = {'value': action}
         else:
-            service = "turn_on"
-            other_info = {self.setpoint_varname: action}
+            if self.service_on is not None:
+                service = self.service_on
+                other_info = {self.setpoint_varname: action}
+            else:
+                service = self.setpoint_varname
+                other_info = {'value': action}
+        # Call IO Client
         self.client.call_service(
             domain = self.domain,
             service = service,

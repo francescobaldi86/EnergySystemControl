@@ -1,8 +1,5 @@
 # energy_system_control/sim/simulator.py
 from dataclasses import dataclass, fields
-from typing import Any
-from numbers import Number
-import numpy as np
 import pandas as pd
 
 from energy_system_control.core.base_environment import Environment  # or move Environment to core/model.py
@@ -79,31 +76,6 @@ class Simulator(Manager):
                     simulation_end_h = self.cfg.simulation_end_h + self.cfg.prediction_horizon_margin_h,
                     simulation_start_datetime = self.cfg.simulation_start_datetime)
 
-    def _normalize_measurement(self, value):
-        """
-        Normalize a measurement value to a single scalar.
-        - Numbers (int, float, np scalar types) → saved directly
-        - Iterables (list, np.array, etc.) → average is saved
-        - None → NaN is saved
-        """
-        # Handle None explicitly
-        if value is None:
-            return np.nan
-        
-        # Handle numeric types (built-in + numpy)
-        if isinstance(value, (Number, np.generic)):
-            return float(value)
-        
-        # Handle iterables (lists, arrays, etc.)
-        try:
-            # Try to convert to array and compute mean
-            arr = np.asarray(value)
-            if arr.size == 0:
-                return np.nan  # Empty array
-            return float(np.mean(arr))
-        except (TypeError, ValueError):
-            # If it's not iterable or can't be converted, return NaN
-            return np.nan
 
     def _step(self, sim_data: SimulationData) -> None:
         env = self.env  # just a shorthand

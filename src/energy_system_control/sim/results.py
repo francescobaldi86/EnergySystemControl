@@ -13,9 +13,9 @@ class SimulationResults:
     signal_registry_controllers: Any
     signal_registry_sensors: Any
 
-    def to_dataframe(self):
+    def to_dataframe(self, scheduled_time_vector = None):
         """Return the recorded ports, controllers, and sensors as data frames."""
-        return self.data.to_dataframe(self.time_vector, self.signal_registry_ports, self.signal_registry_controllers, self.signal_registry_sensors)
+        return self.data.to_dataframe(self.time_vector, self.signal_registry_ports, self.signal_registry_controllers, self.signal_registry_sensors, scheduled_time_vector)
 
     def _get_cumulated_result(self, port_name: str, layer_name: str, time_interval_h: Tuple[float, float] = None, scaling_factor: float = 1):
         """Calculate the time-integrated value of a port signal.

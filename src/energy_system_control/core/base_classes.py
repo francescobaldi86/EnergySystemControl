@@ -1,6 +1,7 @@
-from typing import Dict, List, Callable, Any, Optional
+from typing import  Any, Optional
 from dataclasses import dataclass, fields
-from numpy import nan
+from numbers import Number
+import numpy as np
 
 @dataclass(frozen=True, slots=True)
 class InitContext:
@@ -62,7 +63,7 @@ class Manager:
             for layer, flow in port.flows.items():
                 col = self.env.signal_registry_ports.col_index(port_name, layer)
                 try:
-                    sim_data.ports[time_id, col] = flow if flow is not None else nan
+                    sim_data.ports[time_id, col] = flow if flow is not None else np.nan
                 except ValueError as e:
                     print(f"Error saving flow for port {port_name} and layer {layer}: {e}")
             if getattr(port, "T") is not None:
@@ -83,3 +84,29 @@ class Manager:
             col = self.env.signal_registry_sensors.col_index(sensor_name, "")
             sim_data.sensors[time_id, col] = self._normalize_measurement(sensor.current_measurement)
         return sim_data
+
+    def _normalize_measurement(self, value):
+        """
+        Normalize a measurement value to a single scalar.
+        - Numbers (int, float, np scalar types) → saved directly
+        - Iterables (list, np.array, etc.) → average is saved
+        - None → NaN is saved
+        """
+        # Handle None explicitly
+        if value is None:
+            return np.nan
+        
+        # Handle numeric types (built-in + numpy)
+        if isinstance(value, (Number, np.generic)):
+            return float(value)
+        
+        # Handle iterables (lists, arrays, etc.)
+        try:
+            # Try to convert to array and compute mean
+            arr = np.asarray(value)
+            if arr.size == 0:
+                return np.nan  # Empty array
+            return float(np.mean(arr))
+        except (TypeError, ValueError):
+            # If it's not iterable or can't be converted, return NaN
+            return np.nan

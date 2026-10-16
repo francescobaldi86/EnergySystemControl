@@ -5,36 +5,51 @@ from typing import Dict, Any
 import numpy as np
 import pandas as pd
 from copy import deepcopy
-from datetime import datetime
+from datetime import datetime, timedelta
 
 @dataclass
-class SimulationState:
-    time: float = 0.0           # seconds
-    time_id: int = 0
+class State:
+    # Common temporal state
+    time: float = 0.0             # Elapsed seconds from start
+    time_id: int = 0              # Current step index
+    time_step: float = 0.0        # Nominal step duration [s]
+    start_datetime: datetime | None = None
+
+    def initialize(self, cfg: SimulationConfig | RealTimeControlConfig):
+        self.time = 0.0
+        self.time_id = 0
+        self.time_step = cfg.time_step_s
+
+    @property
+    def current_datetime(self) -> datetime | None:
+        if self.start_datetime is None:
+            return None
+
+        return self.start_datetime + timedelta(seconds=self.time)
+
+@dataclass
+class SimulationState(State):
     time_vector: np.ndarray | None = None
-    simulation_start_datetime: pd.Timestamp | None = None
+    time_vector_for_prediction: np.ndarray | None = None  
     environmental_data: EnvironmentalData = field(default_factory=EnvironmentalData)
-    control_actions: Dict[str, Any] = field(default_factory=dict)
-    time_step: float = 0.0
+    control_actions: Dict[str, Any] = field(default_factory=dict)  
     
     def initialize(self, cfg: SimulationConfig):
+        super().initialize(cfg)
         self._init_time_vector(cfg)
         self._init_environmental_data(cfg)
 
     def _init_time_vector(self, cfg: SimulationConfig) -> None:
-        self.time = 0.0
-        self.time_id = 0
         self.time_vector = np.arange(
-            cfg.time_start_h * 3600.0,
-            cfg.simulation_end_h * 3600.0,
-            cfg.time_step_s,
+            0.0,
+            cfg.simulation_end_s,
+            self.time_step,
         )
-        self.time_step = cfg.time_step_s
         self.simulation_start_datetime = cfg.simulation_start_datetime
         self.time_vector_for_prediction = np.arange(
-            cfg.time_start_h * 3600.0,
-            (cfg.simulation_end_h + cfg.prediction_horizon_margin_h) * 3600.0,
-            cfg.time_step_s,
+            0.0,
+            cfg.simulation_end_s + cfg.prediction_horizon_margin_h * 3600.0,
+            self.time_step,
         )
 
     def _init_environmental_data(self, cfg: SimulationConfig):
@@ -45,20 +60,18 @@ class SimulationState:
             self.environmental_data = EnvironmentalData()
 
 @dataclass
-class RealTimeControlState:
-    scheduled_time: datetime = datetime.now().astimezone()
-    actual_start: datetime = datetime.now().astimezone()
-    scheduled_time_vector: np.ndarray | None = None
-    actual_time_vector: np.ndarray | None = None
-    simulation_start_datetime: datetime | None = None
-    scheduled_time_step_s: float | None = None
+class RealTimeControlState(State):
+    actual_time: datetime = datetime.now().astimezone()
+    scheduled_time_vector: np.ndarray | None = None  # Scheduled offsets from start_datetime [s]
+    actual_time_vector: np.ndarray | None = None  # Actual execution times as Unix epoch seconds
+    start_datetime: datetime = datetime.now().replace(second=0, microsecond=0)
+    control_actions: Dict[str, Any] = field(default_factory=dict)
 
     def initialize(self, cfg: RealTimeControlConfig):
-        temp = np.arange(
+        super().initialize(cfg)
+        self.scheduled_time_vector = np.arange(
                     0.0,
                     cfg.simulation_end_s,
                     cfg.time_step_s,
                 )
-        self.scheduled_time_vector = temp + self.scheduled_time.timestamp()
-        self.actual_time_vector = np.empty(len(temp))
-        self.scheduled_time_step_s = cfg.time_step_s
+        self.actual_time_vector = np.full(len(self.scheduled_time_vector), datetime(1900,1,1))

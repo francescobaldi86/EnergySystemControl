@@ -17,9 +17,12 @@ class RealTimeControl(Manager):
     cfg: RealTimeControlConfig
 
 
-    def run(self) -> SimulationData:
+    def run(self, verbose: bool = False) -> SimulationData:
+        self.verbose = verbose
+        if self.verbose is True:
+            print(f'Starting control loop')
         self.state = RealTimeControlState(
-            simulation_start_datetime = self.cfg.simulation_start_datetime.replace(second=0, microsecond=0)
+            start_datetime = self.cfg.simulation_start_datetime.replace(second=0, microsecond=0)
         )
         self.state.initialize(self.cfg)
         self.env.initialize(self.state, self.cfg)  # This allows the environment to initialize the provider if needed
@@ -35,58 +38,60 @@ class RealTimeControl(Manager):
         # Read any time series data once
         # self._read_timeseries_data()
         # Initialize units / reset components, controllers, sensors
-        self._initialize_units()      
+        self._initialize_units()
 
         # Align the first execution to the next wall-clock boundary.
-        now = datetime.now().astimezone()
-        next_run = now.replace(second=0, microsecond=0)
-        control_cycle_end = self.cfg.simulation_end_datetime
-
-        step = timedelta(seconds=self.cfg.time_step_s)
+        next_run = self.state.current_datetime
+        current_time = datetime.now().astimezone()
+        start_time_mono = time.monotonic()
 
         # Convert the initial wall-clock delay to a monotonic deadline.
-        delay = (next_run - datetime.now().astimezone()).total_seconds()
+        delay = (next_run - current_time).total_seconds()
         deadline = time.monotonic() + max(0.0, delay)
 
-        while now < control_cycle_end:
+        while current_time < self.cfg.simulation_end_datetime:
             # Wait until the scheduled instant.
-            now = datetime.now().astimezone()
             time.sleep(max(0.0, deadline - time.monotonic()))
 
-            self.state.scheduled_time = next_run
-            self.state.actual_start = datetime.now().astimezone()
-
+            # Now calculate actual execution time and save it
+            self.state.actual_time = datetime.now().astimezone()
+            self.state.actual_time_vector[self.state.time_id] = self.state.actual_time
+            if self.verbose is True:
+                print(f'Running step at scheduled time {deadline} and actual time {self.state.actual_time}')
+            # Run the control cycle
             try:
-                self.run_control_cycle()
+                self.run_control_cycle(sim_data)
             except Exception:
-                # Replace with proper logging and fault handling.
-                # log_error()
                 pass 
 
-            # Advance according to the schedule, not execution duration.
-            next_run += step
             deadline += self.cfg.time_step_s
 
             # If execution overran, skip missed slots rather than
             # executing several control cycles back-to-back.
             now_mono = time.monotonic()
+            missed = 0
             if deadline <= now_mono:
                 missed = int((now_mono - deadline) // self.cfg.time_step_s) + 1
                 deadline += missed * self.cfg.time_step_s
-                next_run += timedelta(seconds=missed * self.cfg.time_step_s)
+                # next_run += timedelta(seconds=missed * self.cfg.time_step_s)
 
-        # Creating results object
-        results_index = self.state.actual_time_vector
+            # Updating scheduled times
+            self.state.time_id += missed + 1
+            self.state.time += self.cfg.time_step_s * (missed + 1)
+
+            
+            # Saving the new "now" time
+            current_time = datetime.now().astimezone()
 
         simulation_results = SimulationResults(sim_data, 
-                                                self.state.scheduled_time_step_s, 
-                                                results_index,
+                                                self.state.time_step, 
+                                                self.state.actual_time_vector,
                                                 self.env.signal_registry_ports,
                                                 self.env.signal_registry_controllers,
                                                 self.env.signal_registry_sensors,)
         return simulation_results
 
-    def run_control_cycle(self):
+    def run_control_cycle(self, sim_data: SimulationData):
 
         # 1 - Collect measurements from all sensors
         self._collect_measurements()
@@ -96,6 +101,10 @@ class RealTimeControl(Manager):
 
         # 3. Controllers compute actions
         self._get_controller_actions()
+        if self.verbose:
+            for controlled_component, action in self.state.control_actions.items():
+                print(f'Controller {controlled_component} is sent action {action}')
+
 
         # 4. Actuators send control actions to the system
         self._operate_actuators()
