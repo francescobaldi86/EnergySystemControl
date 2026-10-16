@@ -15,20 +15,20 @@ class BiogasStorage(StorageUnit):
         self.input_port_name = f"{name}_input"
         self.output_port_name = f"{name}_output"
 
-        super().__init__(name, {self.input_port_name: "fluid", self.output_port_name: "fluid"})
+        super().__init__(name, {self.input_port_name: "biogas", self.output_port_name: "biogas"})
 
     def create_ports(self):
         ports = super().create_ports()
         
         # AGGIUNTO "volume" per intercettare la propagazione dal digestore
-        custom_layers = ["mass", "volume", "chemical_energy"]
-        
+        # custom_layers = ["mass", "volume", "chemical_energy"]
+        '''
         for p_name in [self.input_port_name, self.output_port_name]:
             port = self.ports[p_name]
             
             if hasattr(port, "layers"):
                 port.layers = list(set(port.layers) | {"mass", "volume", "chemical_energy"})
-                '''
+                
                 new_layers = list(port.layers)
                 for layer in custom_layers:
                     if layer not in new_layers:
@@ -37,7 +37,7 @@ class BiogasStorage(StorageUnit):
                 
             for layer in custom_layers:
                 port.flows[layer] = 0.0
-                '''
+        '''
         return ports
 
     @property

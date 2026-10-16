@@ -9,6 +9,7 @@ TimeMatch = Literal["nearest", "forward", "exact"]
 DemandType = Literal['electricity', 'fluid']
 VariableType = Literal['energy', 'power', 'volume', 'mass', 'temperature']
 VariableUnit = Literal['Wh', 'kWh', 'MWh', 'W', 'kW', 'MW', 'l', 'm3', 'kg', 'C', 'K']
+FuelType = Literal['generic_fuel', 'biogas']
 
 def resample_with_interpolation(
     df: pd.DataFrame,

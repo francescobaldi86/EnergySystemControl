@@ -12,7 +12,7 @@ def test_7():
         esc.ElectricityGrid(name='electric_grid'),
         esc.AnaerobicDigester(name='biogas_producer', biogas_rate=15, methane_fraction=0.65),
         esc.BiogasStorage(name='biogas_storage', capacity=500.0, initial_ch4_mass=50.0, initial_co2_mass=60.0),
-        esc.InternalCombustionEngine(name='engine', P_el_design=50.0, efficiency_el=0.38),
+        esc.InternalCombustionEngine(name='engine', P_el_design=50.0, efficiency_el=0.38, fuel='biogas'),
         esc.ElectricityDemand.from_csv(name='demand', 
                                        path=os.path.join(__TEST__, 'DATA', 'yearly_data_electricity_demand_15min.csv'), 
                                        var_unit='kWh',
@@ -44,8 +44,8 @@ def test_7():
     
     connections = [
         # Circuito Fluido (Biogas)
-        ('biogas_storage_input', 'biogas_producer_fluid_port'), 
-        ('engine_fuel_port', 'biogas_storage_output'),
+        ('biogas_storage_input', 'biogas_producer_biogas_port'), 
+        ('engine_biogas_port', 'biogas_storage_output'),
         # Circuito Elettrico: Motore, Rete e Domanda convergono tutti sulle porte del Bus
         ('engine_electricity_port', 'ac_bus_engine_port'),
         ('electric_grid_electricity_port', 'ac_bus_grid_port'),

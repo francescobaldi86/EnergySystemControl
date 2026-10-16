@@ -23,7 +23,7 @@ class ConstantPowerProducer(Producer):
 class AnaerobicDigester(Producer):
 
     def __init__(self, name: str, biogas_rate: float, methane_fraction: float):
-        super().__init__(name, "fluid")
+        super().__init__(name, "biogas")
 
         if not 0.0 <= methane_fraction <= 1.0:
             raise ValueError("methane_fraction must be between 0 and 1")
@@ -37,11 +37,11 @@ class AnaerobicDigester(Producer):
     def create_ports(self):
         # 1. Chiama il metodo originale per creare materialmente la porta
         ports = super().create_ports()
+        '''
         port = self.ports[self.port_name]
 
         if hasattr(port, "layers"):
             port.layers = list(set(port.layers) | {"mass", "volume", "chemical_energy"})
-        '''
         # 2. Registra esplicitamente i nuovi layer per il file di output
         custom_layers = ["mass", "volume", "chemical_energy"]
         if hasattr(port, "layers"):

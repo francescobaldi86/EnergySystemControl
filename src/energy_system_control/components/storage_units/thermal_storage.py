@@ -104,6 +104,21 @@ class HotWaterStorage(StorageUnit):
                 self.ports[port_name].T = self.temperature
                 output[port_name] = self.temperature
         return output
+
+    def set_inherited_port_values(self, state: SimulationState):
+        output = {}
+
+        # Updating port values of hot water output port
+        if self.hot_water_output_port_name in self.ports.keys():
+            self.ports[self.hot_water_output_port_name].T = self.temperature
+            output[self.hot_water_output_port_name] = {'attribute_name': 'T', 'attribute_value': self.temperature}
+
+        # Updating port values of heat input ports
+        for port_name in self.heat_input_port_names:
+            if port_name in self.ports.keys():
+                self.ports[port_name].T = self.temperature
+                output[port_name] = {'attribute_name': 'T', 'attribute_value': self.temperature}
+        return output
     
     def temperature_to_SOC(self, state: SimulationState):
         try:

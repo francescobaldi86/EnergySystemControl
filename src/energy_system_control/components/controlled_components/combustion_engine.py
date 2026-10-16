@@ -1,30 +1,35 @@
 from energy_system_control.components.base import ControlledComponent
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.helpers import OnOffComponentError
+from energy_system_control.helpers import FuelType
 
 class InternalCombustionEngine(ControlledComponent):
-    def __init__(self, name: str, P_el_design: float, efficiency_el: float):
+    def __init__(self, name: str, P_el_design: float, efficiency_el: float, fuel: FuelType | None = None):
         self.P_el_design = P_el_design
         self.efficiency_el = efficiency_el
+
+        # Riconoscimento del fuel
+        if fuel is 'generic_fuel':
+            fuel = 'fuel'
         
         # definizione delle porte
         self.electric_port_name = f'{name}_electricity_port'
-        self.fuel_port_name = f'{name}_fuel_port'
+        self.fuel_port_name = f'{name}_{fuel}_port'
         
         # registrazione delle porte
         super().__init__(name=name,
-                         ports_info={self.electric_port_name: 'electricity', self.fuel_port_name: 'fluid'})
+                         ports_info={self.electric_port_name: 'electricity', self.fuel_port_name: fuel})
 
     def create_ports(self):
         # 1. Creazione fisica delle porte tramite la classe genitore
         ports = super().create_ports()
-        fuel_port = self.ports[self.fuel_port_name]
+        # fuel_port = self.ports[self.fuel_port_name]
         
         # 2. Pre-registrazione dei layer che potrebbero arrivare da componenti connessi (es. BiogasStorage)
         #custom_layers = ["mass", "volume", "chemical_energy"]
 
-        if hasattr(fuel_port, "layers"):
-            fuel_port.layers = list(set(fuel_port.layers) | {"mass", "volume", "chemical_energy"})
+        # if hasattr(fuel_port, "layers"):
+        #     fuel_port.layers = list(set(fuel_port.layers) | {"mass", "volume", "chemical_energy"})
 
         '''
         if hasattr(fuel_port, "layers"):
@@ -62,3 +67,5 @@ class InternalCombustionEngine(ControlledComponent):
         self.ports[self.electric_port_name].flows['electricity'] = -generated_power
         # calcolo combustibile consumato (espresso come potenza chimica entrante)
         self.ports[self.fuel_port_name].flows['chemical_energy'] = fuel_consumed
+        self.ports[self.fuel_port_name].flows['mass'] = fuel_consumed / self.ports[self.fuel_port_name].LHV
+        self.ports[self.fuel_port_name].flows['volume'] = self.ports[self.fuel_port_name].flows['mass'] * self.ports[self.fuel_port_name].density

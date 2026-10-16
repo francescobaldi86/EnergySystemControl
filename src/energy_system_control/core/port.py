@@ -9,6 +9,7 @@ class Port():
         self.name = name
         self.layers = layers
         self.connected_port = None
+        self.attribute_names = []
         self.reset_flow_data()  # Sets each 
 
     def reset_flow_data(self):
@@ -48,6 +49,12 @@ class Port():
                 return FluidPort(port_name)
             case 'electricity':
                 return ElectricPort(port_name)
+            case 'fuel':
+                return FuelPort(port_name)
+            case 'biogas':
+                return BiogasPort(port_name)
+            case _:
+                raise ValueError(f'Port type {port_type} not recognized')
 
 class HeatPort(Port):
     T: float
@@ -82,6 +89,8 @@ class ElectricPort(Port):
         super().__init__(name, ['electricity'])
 
 class FuelPort(Port):
+    attribute_names: list
+    LHV: float
     def __init__(self,name, other_properties: list = []):
         super().__init__(name, ['mass', 'chemical_energy']+other_properties)
         self.LHV=None
@@ -89,6 +98,8 @@ class FuelPort(Port):
 
 
 class BiogasPort(FuelPort):
+    methane_fraction: float
+    density: float
     def __init__(self,name):
         super().__init__(name, ['volume'])
         self.methane_fraction=None 

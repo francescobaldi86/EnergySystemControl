@@ -143,12 +143,14 @@ class Environment:
             port_1.connect_port(port_0)
             
             # Sincronizzazione strutturale dei layer tra le porte connesse
+            """
             if hasattr(port_0, 'layers') and hasattr(port_1, 'layers'):
                 combined_layers = list(set(port_0.layers) | set(port_1.layers))
                 port_0.layers = combined_layers
                 port_1.layers = combined_layers
                 port_0.flows.update({layer: None for layer in combined_layers if layer not in port_0.flows})
                 port_1.flows.update({layer: None for layer in combined_layers if layer not in port_1.flows})
+            """
                         
     def read_timeseries_data(self):
         for _, component in self.components.items():
