@@ -97,3 +97,24 @@ class AnaerobicDigester(Producer):
         port.flows["mass"] = -mass_flow
         port.flows["volume"] = -volume_flow
         port.flows["chemical_energy"] = -chemical_power
+
+    def set_inherited_port_values(self, state: SimulationState):
+        """
+        Propaga le caratteristiche termodinamiche del biogas generato (frazione di metano, 
+        potere calorifico inferiore e densità) alla porta connessa a valle (es. BiogasStorage).
+        """
+        port = self.ports[self.port_name]
+        
+        # Aggiornamento locale (opzionale ma consigliato per consistenza)
+        port.methane_fraction = self.methane_fraction
+        port.LHV = self.biogas_LHV
+        port.density = self.biogas_density
+        
+        # Restituzione nel nuovo formato dizionario annidato
+        return {
+            self.port_name: {
+                'methane_fraction': self.methane_fraction,
+                'LHV': self.biogas_LHV,
+                'density': self.biogas_density
+            }
+        }

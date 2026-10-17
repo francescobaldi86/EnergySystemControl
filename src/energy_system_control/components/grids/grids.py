@@ -14,14 +14,31 @@ class ElectricityGrid(Grid):
 
 class ColdWaterGrid(Grid):
     # Specific balancing utility for the cold water grid. Useful because it reads the temperature of the water
-    def set_inherited_fluid_port_values(self, state: SimulationState):
-        self.ports[self.port_name].T = state.environmental_data.temperature_cold_water
-        return {self.port_name: state.environmental_data.temperature_cold_water}
+    def set_inherited_port_values(self, state: SimulationState):
+        T_cold_water = state.environmental_data.temperature_cold_water
+        self.ports[self.port_name].T = T_cold_water
+        
+        return {
+            self.port_name: {
+                'T': T_cold_water
+            }
+        }
 
 class GasGrid(Grid):
-    def __init__(name):
-        super().__init__(name, 'fuel')
+    def __init__(self, name: str, utility_type: str = 'fuel'): 
+        super().__init__(name, utility_type)
 
-    def set_inherited_fluid_port_values(self, state: SimulationState):
-        self.ports[self.port_name].T = state.environmental_data.temperature_cold_water
-        return {self.port_name: state.environmental_data.temperature_cold_water}
+    def set_inherited_port_values(self, state: SimulationState):
+        T_gas = state.environmental_data.temperature_cold_water
+        self.ports[self.port_name].T = T_gas
+        
+        self.ports[self.port_name].LHV = 47000  # Esempio kJ/kg
+        self.ports[self.port_name].density = 0.7  # Esempio kg/m3
+        
+        return {
+            self.port_name: {
+                'T': T_gas,
+                'LHV': 47000,
+                'density': 0.7
+            }
+        }

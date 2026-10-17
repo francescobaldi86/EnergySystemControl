@@ -123,16 +123,19 @@ class BiogasStorage(StorageUnit):
 
         self.SOC = self.total_mass / self.biogas_density / self.capacity
 
-        '''
-        for port in self.ports.values():
-            for layer, val in port.flows.items():
-                if val is None:
-                    port.flows[layer] = 0.0
-        '''
-
     def set_inherited_port_values(self, state: SimulationState):
         output_port = self.ports[self.output_port_name]
+        
+        # Aggiornamento dei valori interni della porta
         output_port.methane_fraction = self.methane_fraction
         output_port.LHV = self.biogas_LHV
         output_port.density = self.biogas_density
-        return [self.output_port_name]
+        
+        # Restituzione nel nuovo formato dizionario
+        return {
+            self.output_port_name: {
+                'methane_fraction': self.methane_fraction,
+                'LHV': self.biogas_LHV,
+                'density': self.biogas_density
+            }
+        }

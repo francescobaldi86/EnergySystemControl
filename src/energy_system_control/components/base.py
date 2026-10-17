@@ -16,6 +16,7 @@ class Component:
     ports_info: Dict[str, str]
     ports: Dict[str, Port]
     """Base class for components. Subclasses implement step(dt_s, nodes)."""
+    
     def __init__(self, name: str, ports_info: Dict[str, str]):
         self.name = name
         self.ports_info = ports_info
@@ -35,10 +36,14 @@ class Component:
             ports[port_name] = self.ports[port_name]
         return ports
 
-    def set_inherited_fluid_port_values(self, state: SimulationState):
-        return {}
-    
-    def set_inherited_heat_port_values(self, state: SimulationState):
+    def set_inherited_port_values(self, state: SimulationState):
+        """
+        Metodo unificato per la propagazione degli attributi fisici alle porte connesse.
+        Sovrascrivere nelle sottoclassi per propagare valori.
+        
+        Returns:
+            Dict: Dizionario annidato nel formato {'port_name': {'attribute_1': val1, ...}}
+        """
         return {}
     
     def step(self):
@@ -46,7 +51,6 @@ class Component:
     
     def initialize(self, ctx: InitContext):
         pass
-
 
 class ExplicitComponent(Component):
     # Definition of a component that does not depend on anything else to be simulated

@@ -173,11 +173,15 @@ class Simulator:
         ### DA AGGIORNARE PER DRAGOS ###
         env = self.env
         for _, component in env.components.items():
+            # Ottenere il dizionario delle porte e degli attributi dal componente
             inherited_ports_info = component.set_inherited_port_values(self.state)
-            for port_name, update_info in inherited_ports_info(self.state):
+            # Iterazione in modo sicuro sulle coppie porta-attributi usando .items()
+            for port_name, attributes in inherited_ports_info.items():
                 if port_name and env.ports[port_name].connected_port is not None:
-                    setattr(env.ports[port_name].connected_port, update_info['attribute_name'], update_info['attribute_value'])
-            # Example of inherited_ports_info:
+                    # Iterazione sulle singole grandezze (es. 'LHV': 22000, 'density': 1.2)
+                    for attr_name, attr_value in attributes.items():
+                        setattr(env.ports[port_name].connected_port, attr_name, attr_value)
+                # Example of inherited_ports_info:
             # {'port_name': {'attribute_name_1': 10, 'attribute_name_2': 22}}
             # inherited_ports_info = {'engine_biogas_port': {'LHV': 22000, 'density': 1.2, 'methane_faction': 0.58}}
             """
