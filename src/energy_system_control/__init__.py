@@ -15,7 +15,7 @@ from .components.controlled_components.heat_pumps import HeatPumpConstantEfficie
 from .components.controlled_components.combustion_engine import InternalCombustionEngine
 from .components.base import Bus
 from .controllers.base import HeaterControllerWithBandwidth, ChargeController
-from .controllers.rule_based import HeatPumpRuleBasedController, EngineRuleBasedController, ChargeControllerWithEngine, BatteryControllerAware, EngineOnOffController
+from .controllers.rule_based import HeatPumpRuleBasedController, EngineRuleBasedController, ChargeControllerWithEngine, BatteryControllerAware, EngineOnOffController, BiogasEngineRuleBasedController
 from .sensors.sensors import Sensor, PowerSensor, ElectricPowerSensor, FlowTemperatureSensor, SOCSensor, TankTemperatureSensor, HotWaterDemandSensor, SensorWithMemory
 
 __all__ = [
@@ -26,7 +26,7 @@ __all__ = [
     "HotWaterDemand", "ThermalLoss", "ConstantPowerDemand", "ElectricityDemand",
     "ResistanceHeater", "BalancingUtility", "ColdWaterGrid", "GenericUtility", "Inverter", "ElectricityGrid",
     "HeatPumpLorentzEfficiency", "HeatPumpConstantEfficiency", "HeatPump", "Bus",
-    "HeaterControllerWithBandwidth", "ChargeController",
+    "HeaterControllerWithBandwidth", "ChargeController", "BiogasEngineRuleBasedController",
     "HeatPumpRuleBasedController", 
     "Sensor", "FlowTemperatureSensor", "PowerSensor", "TankTemperatureSensor", "SOCSensor", "ElectricPowerSensor", "HotWaterDemandSensor", "SensorWithMemory",
     "GasGrid", "InternalCombustionEngine", "EngineRuleBasedController", "ChargeControllerWithEngine", "BatteryControllerAware", "EngineOnOffController"
