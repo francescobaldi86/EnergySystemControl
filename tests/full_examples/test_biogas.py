@@ -1,6 +1,5 @@
 import energy_system_control as esc
-from energy_system_control.components.explicit_components.producers import AnaerobicDigester
-from energy_system_control.components.storage_units.thermal_storage import BiogasStorageFromData
+from energy_system_control.components.explicit_components.producers import AnaerobicDigester, AnaerobicDigesterFromData
 from energy_system_control.components.storage_units.thermal_storage import BiogasStorage
 from energy_system_control.components.controlled_components.other_heat_sources import GasBoiler
 from energy_system_control.controllers.base import Controller
@@ -195,9 +194,9 @@ def test_uno():
         # Domanda di acqua calda sanitaria
         esc.IEAHotWaterDemand(name="demand_DHW",reference_temperature=40,profile_name="M",),
         # Produzione di biogas
-        AnaerobicDigester(name="anaerobic_digester",biogas_rate=1.5,methane_fraction=0.60,),
+        AnaerobicDigesterFromData(name="anaerobic_digester", data_path=__HERE__, filename="biogas_data.csv"),
         # Accumulo di biogas con dati temporali
-        BiogasStorageFromData(name="biogas_storage",capacity=100.0,data_path=__HERE__,filename="biogas_data.csv",initial_ch4_mass=0.0,initial_co2_mass=0.0,),
+        BiogasStorage(name="biogas_storage",capacity=100.0,initial_ch4_mass=0.0,initial_co2_mass=0.0),
         # Caldaia alimentata a biogas
         GasBoiler(name="gas_boiler",efficiency=0.90,max_power=10.0,),
         # Accumulo di acqua calda
@@ -207,7 +206,8 @@ def test_uno():
 
     controllers = [esc.HeaterControllerWithBandwidth("gas_boiler_controller","gas_boiler","storage_tank_temperature_sensor",40,10,)]
 
-    sensors = [esc.TankTemperatureSensor("storage_tank_temperature_sensor","hot_water_storage",)]
+    sensors = [esc.TankTemperatureSensor("storage_tank_temperature_sensor","hot_water_storage",),
+               esc.SOCSensor('biogas_storage_SOC_sensor','biogas_storage')]
 
     connections = [
         # Domanda e accumulo di acqua calda
@@ -223,7 +223,7 @@ def test_uno():
 
     env = esc.Environment(components=components,controllers=controllers,sensors=sensors,connections=connections,)
 
-    sim_config = esc.SimulationConfig(time_start_h=0.0,time_end_h=24.0 * 7,time_step_h=0.5,)
+    sim_config = esc.SimulationConfig(time_start_h=0.0,time_end_h=24.0 * 7,time_step_h=5/60,)
 
     sim = esc.Simulator(env, sim_config)
 

@@ -80,8 +80,7 @@ class HotWaterStorage(StorageUnit):
 
         print("Temperatura acqua fredda:", cold_port.T)
         print("Portata massica acqua fredda:", cold_port.flows.get("mass"))
-        print("Temperatura ambientale acqua fredda:",
-      getattr(state.environmental_data, "temperature_cold_water", None))
+        print("Temperatura ambientale acqua fredda:", getattr(state.environmental_data, "temperature_cold_water", None))
         #self.ports[self.cold_water_input_port_name].flows['heat'] = abs(self.ports[self.cold_water_input_port_name].flows['mass']) * WATER.cp * self.ports[self.cold_water_input_port_name].T
         cold_port = self.ports[self.cold_water_input_port_name]
 
@@ -125,7 +124,8 @@ class HotWaterStorage(StorageUnit):
             T_cold_water = C2K(20)
         return (self.temperature - T_cold_water) / (self.max_temperature - T_cold_water)
 
-    def initialize(self, state: SimulationState):
+    def initialize(self, ctx: InitContext):
+        state = ctx.state
         self.temperature = self.T_0
         self.SOC_0 = self.temperature_to_SOC(state)
         for port_name in self.heat_input_port_names:
@@ -461,6 +461,8 @@ class BiogasStorage(StorageUnit):
             self.ch4_mass -= delta_mass_out * w_ch4
             self.co2_mass -= delta_mass_out * (1.0 - w_ch4)
 
+        self.SOC = current_volume / self.capacity
+
     def set_inherited_port_values(self, state: SimulationState):
         # First update values of the output port
         output_port = self.ports[self.output_port_name]
@@ -468,49 +470,3 @@ class BiogasStorage(StorageUnit):
         output_port.LHV = self.biogas_LHV
         output_port.density = self.biogas_density
         return [self.output_port_name]
-
-
-class BiogasStorageFromData(BiogasStorage):
-    """
-    Biogas storage with time-dependent biogas composition
-    and production data read from a CSV file.
-    """
-
-    def __init__(self,name: str,capacity: float,data_path: str,filename: str,date_format: str = "%Y%m%d:%H%M",initial_ch4_mass: float = 0.0,initial_co2_mass: float = 0.0,):
-        # Inizializza il componente di accumulo
-        super().__init__(name=name,capacity=capacity,initial_ch4_mass=initial_ch4_mass,initial_co2_mass=initial_co2_mass,)
-
-        # Legge il file CSV
-        data = pd.read_csv(os.path.join(data_path, filename),sep=";",decimal=".",index_col=0,)
-
-        # Converte l'indice in date
-        data["time"] = pd.to_datetime(data.index,format=date_format,utc=True,)
-
-        data = data.set_index("time").sort_index()
-
-        # Conserva le serie temporali
-        self.methane_fraction_data = data["methane_fraction"]
-        self.mass_flow_data = data["mass_flow"]
-
-    def get_data_at_time(self, time):
-        """
-        Returns methane fraction and mass flow at the
-        requested timestamp, using linear interpolation.
-        """
-        time = pd.Timestamp(time)
-
-        if time.tzinfo is None:
-            time = time.tz_localize("UTC")
-        else:
-            time = time.tz_convert("UTC")
-
-        methane_fraction = self.methane_fraction_data.reindex(
-            self.methane_fraction_data.index.union([time])
-        ).sort_index().interpolate(method="time").loc[time]
-
-        mass_flow = self.mass_flow_data.reindex(
-            self.mass_flow_data.index.union([time])
-        ).sort_index().interpolate(method="time").loc[time]
-
-        return float(methane_fraction), float(mass_flow)
-    
