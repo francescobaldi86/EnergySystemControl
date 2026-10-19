@@ -5,20 +5,23 @@ class Port():
     name: str
     connected_port: str
     flows: Dict[str, float]
+    attribute_names: List[str]
     def __init__(self, name, layers):
         self.name = name
         self.layers = layers
         self.connected_port = None
+        self.attribute_names = []
         self.reset_flow_data()  # Sets each 
 
     def reset_flow_data(self):
         self.flows = {name: None for name in self.layers}
 
     def reset_state_value(self):
-        pass # Only implemented for selected port types
+        for attribute in self.attribute_names:
+            setattr(self, attribute, None)
     
     def initialize(self, ctx: InitContext):
-        pass
+        self.reset_state_value()
 
     def connect_port(self, port):
         # Connects the port to its connected port
@@ -35,9 +38,8 @@ class Port():
         for layer in self.layers:
             if self.flows[layer] is not None and self.connected_port.flows[layer] is None:
                 self.connected_port.flows[layer] = -self.flows[layer]
-            if isinstance(self, FluidPort) or isinstance(self, HeatPort):
-                if self.T is not None and self.connected_port.T is None:
-                    self.connected_port.T = self.T
+        for attribute in self.attribute_names:
+            setattr(self.connected_port, attribute, getattr(self, attribute))
 
     @staticmethod
     def create_port_of_type(port_name: str, port_type: str):
@@ -48,34 +50,20 @@ class Port():
                 return FluidPort(port_name)
             case 'electricity':
                 return ElectricPort(port_name)
+            case _:
+                raise ValueError(f"Unknown port type: {port_type}")
 
 class HeatPort(Port):
     T: float
     def __init__(self, name):
         super().__init__(name, ['heat'])
-
-    def reset_state_value(self):
-        self.T = None 
-
-    def initialize(self, ctx: InitContext):
-        self.T = None
-
+        self.attribute_names.append('T')
 
 class FluidPort(Port):
     T: float
     def __init__(self, name):
         super().__init__(name, ['mass', 'heat'])
-        self.T = None
-        
-    def reset_state_value(self):
-        self.T = None
-
-    def initialize(self, ctx: InitContext):
-        self.T = None
-
-    def propagate_port_values(self):
-        super().propagate_port_values()
-        self.connected_port = self.T
+        self.attribute_names.append('T')
 
 class ElectricPort(Port):
     def __init__(self, name):

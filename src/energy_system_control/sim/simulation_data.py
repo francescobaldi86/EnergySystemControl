@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import numpy as np
 import pandas as pd
+from datetime import datetime
 
 @dataclass
 class SimulationData:
@@ -17,7 +18,10 @@ class SimulationData:
             self.rl = np.empty((len(time_vector), len(signal_registry_rl._col_to_key)), dtype=np.float32)
 
     def to_dataframe(self, time_vector, signal_registry_ports, signal_registry_controllers, signal_registry_sensors, scheduled_time_vector = None):
-        index = pd.Index(pd.DatetimeIndex(time_vector).strftime("%Y-%m-%d %H:%M:%S"), name = 'time')
+        if isinstance(time_vector[0], datetime | pd.Timestamp):
+            index = pd.Index(pd.DatetimeIndex(time_vector).strftime("%Y-%m-%d %H:%M:%S"), name = 'time')
+        else:
+            index = pd.Index>(time_vector)
         columns = [f'{key.main_key}:{key.secondary_key}' for key in signal_registry_ports._col_to_key]
         df_ports = pd.DataFrame(self.ports, columns = columns, index=index)
         columns = [f'{key.main_key}:{key.secondary_key}' for key in signal_registry_controllers._col_to_key]

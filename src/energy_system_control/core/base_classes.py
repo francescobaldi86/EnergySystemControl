@@ -66,9 +66,10 @@ class Manager:
                     sim_data.ports[time_id, col] = flow if flow is not None else np.nan
                 except ValueError as e:
                     print(f"Error saving flow for port {port_name} and layer {layer}: {e}")
-            if getattr(port, "T") is not None:
-                col = self.env.signal_registry_ports.col_index(port_name, 'temperature')
-                sim_data.ports[time_id, col] = port.T
+            for attribute in port.attribute_names:
+                if getattr(port, attribute) is not None:
+                    col = self.env.signal_registry_ports.col_index(port_name, attribute)
+                    sim_data.ports[time_id, col] = getattr(port, attribute)
         # Controllers
         for controller_name, controller in self.env.controllers.items():
             for controlled_component_name, action_value in controller.previous_action.items():

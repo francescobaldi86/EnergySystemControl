@@ -79,8 +79,9 @@ class BaseEnvironment:
         for port_name, port in self.ports.items():
             for layer in port.layers:
                 self.signal_registry_ports.register(port_name, layer)
-                if isinstance(port, FluidPort):
-                    self.signal_registry_ports.register(port_name, 'temperature')
+            for attribute in port.attribute_names:
+                self.signal_registry_ports.register(port_name, attribute)
+                    
         # We create a registry for each pair controller-component that will store the action
         for controller_name, controller in self.controllers.items():
             for component_name in controller.controlled_component_names:
@@ -102,14 +103,15 @@ class SimulationEnvironment(BaseEnvironment):
                  connections = [], 
                  predictors: List[Predictor] = [],
                  environmental_data_provider: EnvironmentalDataProvider | None = None,
-                 io_clients: List[IOClient] | None = None,
+                 io_clients: List[IOClient] = [],
                  latitude: float | None = None,
                  longitude: float | None = None
                  ):
         super().__init__(
             components = components, 
             controllers = controllers, 
-            sensors = sensors, 
+            sensors = sensors,
+            actuators = [],
             connections = connections,
             predictors = predictors,
             environmental_data_provider = environmental_data_provider,
@@ -195,7 +197,7 @@ class RealTimeControlEnvironment(BaseEnvironment):
                 connections = [], 
                 predictors: List[Predictor] = [],
                 environmental_data_provider: EnvironmentalDataProvider | None = None,
-                io_clients: List[IOClient] | None = None,
+                io_clients: List[IOClient] = [],
                 latitude: float | None = None,
                 longitude: float | None = None
                 ):
