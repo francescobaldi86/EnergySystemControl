@@ -206,14 +206,48 @@ class Simulator:
         for _, port in component.ports.items():
             if port.connected_port:
                 port.propagate_port_values()
-    
-    def _check_connection_balance(self):
+  
+    #def _check_connection_balance(self):
         # Checks that all connections have the same flow on both sides
+     #   env = self.env
+      #  for connection in env.connections:
+       #     for layer, value in env.ports[connection[0]].flows.items():
+        #        print("Connessione:", connection)
+         #       print("Layer:", layer)
+          #      print("Valore prima della somma:", value)
+           #     print("Valore seconda porta:", env.ports[connection[1]].flows[layer])
+            #    if abs(value + env.ports[connection[1]].flows[layer]) > 1e-5:
+             #       raise ValueError(f"Connection {connection} has unbalanced flows: {env.ports[connection[0]].flows[layer]:.2f} != {env.ports[connection[1]].flows[layer]:.2f}")
+
+    def _check_connection_balance(self):
+    # Checks that all connections have the same flow on both sides
         env = self.env
+
         for connection in env.connections:
-            for layer, value in env.ports[connection[0]].flows.items():
-                if abs(value + env.ports[connection[1]].flows[layer]) > 1e-5:
-                    raise ValueError(f"Connection {connection} has unbalanced flows: {env.ports[connection[0]].flows[layer]:.2f} != {env.ports[connection[1]].flows[layer]:.2f}")
+         port_1 = env.ports[connection[0]]
+         port_2 = env.ports[connection[1]]
+
+         for layer, value in port_1.flows.items():
+            value_2 = port_2.flows.get(layer)
+
+            print(f"\nConnessione: {connection}")
+            print(f"Layer: {layer}")
+            print(f"Porta 1 ({connection[0]}): {value}")
+            print(f"Porta 2 ({connection[1]}): {value_2}")
+
+            if value is None or value_2 is None:
+                raise ValueError(
+                    f"Flusso non inizializzato nella connessione "
+                    f"{connection}, layer '{layer}': "
+                    f"{connection[0]}={value}, "
+                    f"{connection[1]}={value_2}"
+                )
+
+            if abs(value + value_2) > 1e-5:
+                raise ValueError(
+                    f"Connection {connection} has unbalanced flows: "
+                    f"{value:.2f} != {value_2:.2f}"
+                )
 
     def _save_simulation_data(self, sim_data):
         # Ports

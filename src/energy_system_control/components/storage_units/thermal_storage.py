@@ -6,7 +6,7 @@ from energy_system_control.sim.state import SimulationState
 from typing import Dict, List
 from scipy.linalg import solve_banded
 import warnings, math
-
+import os, requests
         
 
 class HotWaterStorage(StorageUnit):
@@ -76,7 +76,20 @@ class HotWaterStorage(StorageUnit):
     def step(self, state: SimulationState, action):
         # Heat port inputs are provided from external sources. Hot water output also. Hence, only the cold water input is updated
         self.ports[self.cold_water_input_port_name].flows['mass'] = -self.ports[self.hot_water_output_port_name].flows['mass']
-        self.ports[self.cold_water_input_port_name].flows['heat'] = abs(self.ports[self.cold_water_input_port_name].flows['mass']) * WATER.cp * self.ports[self.cold_water_input_port_name].T
+        cold_port = self.ports[self.cold_water_input_port_name]
+
+        print("Temperatura acqua fredda:", cold_port.T)
+        print("Portata massica acqua fredda:", cold_port.flows.get("mass"))
+        print("Temperatura ambientale acqua fredda:",
+      getattr(state.environmental_data, "temperature_cold_water", None))
+        #self.ports[self.cold_water_input_port_name].flows['heat'] = abs(self.ports[self.cold_water_input_port_name].flows['mass']) * WATER.cp * self.ports[self.cold_water_input_port_name].T
+        cold_port = self.ports[self.cold_water_input_port_name]
+
+        if cold_port.T is None:
+         cold_port.T = state.environmental_data.temperature_cold_water
+         print("Temperatura acqua fredda:", cold_port.T)
+        cold_port.flows['heat'] = (abs(cold_port.flows['mass'])* WATER.cp*cold_port.T)
+        
         heat_losses = self.calculate_losses(state)
         heat_input = 0.0
         for input_port in self.heat_input_port_names:
@@ -430,7 +443,13 @@ class BiogasStorage(StorageUnit):
         self.co2_mass += co2_in
 
         # 2. USCITA (Gestita dalla richiesta del componente a valle o da azione)
-        energy_flow_out = max(0.0, -output_port.flows.get("chemical_energy", 0.0))
+        #energy_flow_out = max(0.0, -output_port.flows.get("chemical_energy", 0.0))
+        chemical_energy_out = output_port.flows.get("chemical_energy")
+
+        if chemical_energy_out is None:
+         chemical_energy_out = 0.0
+
+        energy_flow_out = max(0.0, -chemical_energy_out)
         mass_flow_out = (energy_flow_out / self.biogas_LHV  if self.biogas_LHV > 0 else 0.0)
         delta_mass_out =( mass_flow_out * dt)
 
@@ -449,3 +468,49 @@ class BiogasStorage(StorageUnit):
         output_port.LHV = self.biogas_LHV
         output_port.density = self.biogas_density
         return [self.output_port_name]
+
+
+class BiogasStorageFromData(BiogasStorage):
+    """
+    Biogas storage with time-dependent biogas composition
+    and production data read from a CSV file.
+    """
+
+    def __init__(self,name: str,capacity: float,data_path: str,filename: str,date_format: str = "%Y%m%d:%H%M",initial_ch4_mass: float = 0.0,initial_co2_mass: float = 0.0,):
+        # Inizializza il componente di accumulo
+        super().__init__(name=name,capacity=capacity,initial_ch4_mass=initial_ch4_mass,initial_co2_mass=initial_co2_mass,)
+
+        # Legge il file CSV
+        data = pd.read_csv(os.path.join(data_path, filename),sep=";",decimal=".",index_col=0,)
+
+        # Converte l'indice in date
+        data["time"] = pd.to_datetime(data.index,format=date_format,utc=True,)
+
+        data = data.set_index("time").sort_index()
+
+        # Conserva le serie temporali
+        self.methane_fraction_data = data["methane_fraction"]
+        self.mass_flow_data = data["mass_flow"]
+
+    def get_data_at_time(self, time):
+        """
+        Returns methane fraction and mass flow at the
+        requested timestamp, using linear interpolation.
+        """
+        time = pd.Timestamp(time)
+
+        if time.tzinfo is None:
+            time = time.tz_localize("UTC")
+        else:
+            time = time.tz_convert("UTC")
+
+        methane_fraction = self.methane_fraction_data.reindex(
+            self.methane_fraction_data.index.union([time])
+        ).sort_index().interpolate(method="time").loc[time]
+
+        mass_flow = self.mass_flow_data.reindex(
+            self.mass_flow_data.index.union([time])
+        ).sort_index().interpolate(method="time").loc[time]
+
+        return float(methane_fraction), float(mass_flow)
+    

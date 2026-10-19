@@ -15,5 +15,9 @@ class ElectricityGrid(Grid):
 class ColdWaterGrid(Grid):
     # Specific balancing utility for the cold water grid. Useful because it reads the temperature of the water
     def set_inherited_fluid_port_values(self, state: SimulationState):
+        temperature = state.environmental_data.temperature_cold_water
+
+        print(f"[ColdWaterGrid] Porta: {self.port_name}, "f"temperatura: {temperature}")
+    
         self.ports[self.port_name].T = state.environmental_data.temperature_cold_water
         return {self.port_name: state.environmental_data.temperature_cold_water}
