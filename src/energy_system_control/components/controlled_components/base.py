@@ -64,6 +64,16 @@ class HeatSource(ControlledComponent):
 
         if LHV > 0:
           power_input_port.flows['mass'] = chemical_energy / LHV
+            if self.ports[self.power_input_port_name].LHV > 0.0:
+                self.ports[self.power_input_port_name].flows['chemical_energy'] = self.get_power_input(state) * action
+                self.ports[self.power_input_port_name].flows['mass'] = self.ports[self.power_input_port_name].flows['chemical_energy'] / self.ports[self.power_input_port_name].LHV
+                self.ports[self.power_input_port_name].flows['volume'] = self.ports[self.power_input_port_name].flows['mass'] / self.ports[self.power_input_port_name].density
+            else: 
+                self.ports[self.power_input_port_name].flows['chemical_energy'] = 0.0
+                self.ports[self.power_input_port_name].flows['mass'] = 0.0
+                self.ports[self.power_input_port_name].flows['volume'] = 0.0
+        elif isinstance(self.ports[self.power_input_port_name], FuelPort):
+            self.ports[self.power_input_port_name].flows['chemical_energy'] = self.get_power_input(state) * action
         else:
            power_input_port.flows['mass'] = 0.0
         self.ports[self.power_input_port_name].flows['volume'] = self.ports[self.power_input_port_name].flows['mass'] / self.ports[self.power_input_port_name].density

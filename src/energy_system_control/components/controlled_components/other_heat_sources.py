@@ -38,7 +38,10 @@ class GasBoiler(HeatSource):
         self.max_power = max_power      # Potenza termica massima [kW]
 
     def get_heat_output(self, state):
-        return self.max_power
+        if self.ports[self.power_input_port_name].LHV > 0.0:
+            return self.max_power
+        else:
+            return 0.0
 
     def get_efficiency(self, state=None) -> float:
         return self.efficiency
