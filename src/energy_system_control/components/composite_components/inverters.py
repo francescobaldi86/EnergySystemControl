@@ -12,19 +12,27 @@ class Inverter(CompositeComponent):
     The inverter is a component 
     """
     efficiency: float
-    PV_port_name: str
+    #PV_port_name: str
     AC_output_port_name: str
     grid_port_name: str
 
-    def __init__(self, name, design_efficiency: float = 0.92, efficiency_type: str = 'fixed', number_of_ac_output_ports: int = 1):
+    def __init__(self, name, design_efficiency: float = 0.92, efficiency_type: str = 'fixed', number_of_ac_output_ports: int = 1, number_of_pv_input_ports: int = 1):
         super().__init__(name, {})
-        self.PV_port_name = f'{name}_PV_input_port'
+        self.PV_port_names = [f'{name}_PV_input_port_{i}' for i in range(number_of_pv_input_ports)]
         self.AC_output_port_names = [f'{name}_AC_output_port_{i}' for i in range(number_of_ac_output_ports)]
         self.grid_port_name = f'{name}_grid_input_port'
         self.ESS_port_name = f'{name}_ESS_port'
         self.engine_port_name = f'{name}_engine_port'
+
+        dc_bus_ports_info = {self.ESS_port_name: 'electricity', f'{self.name}_dc_bus_internal_port': 'electricity'}
+
+        for pv_port in self.PV_port_names:
+            dc_bus_ports_info[pv_port] = 'electricity'
+
+        
         self.dc_bus = Bus(name = f'{name}_dc_bus', 
-                          ports_info = {self.PV_port_name: 'electricity', self.ESS_port_name: 'electricity', f'{self.name}_dc_bus_internal_port': 'electricity'})
+                          ports_info=dc_bus_ports_info)
+        
         ac_bus_ports_info = {self.grid_port_name: 'electricity', self.engine_port_name: 'electricity', f'{self.name}_ac_bus_internal_port': 'electricity'}
         for port_name in self.AC_output_port_names:
             ac_bus_ports_info[port_name] = 'electricity'

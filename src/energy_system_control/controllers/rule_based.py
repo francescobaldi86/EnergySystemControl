@@ -326,7 +326,8 @@ class BiogasEngineRuleBasedController(Controller):
                  biogas_soc_sensor: str,
                  building_demand_sensor: str,  # Sensore 1 (Consumi Rifugio)
                  hp_demand_sensor: str,        # Sensore 2 (Pompa di Calore)
-                 pv_power_sensor: str,
+                 pv_power_sensor_est: str,
+                 pv_power_sensor_ovest: str,
                  net_power_activation: float,
                  engine_p_el_design: float,
                  min_battery_soc_activation: float = 0.2,
@@ -341,7 +342,8 @@ class BiogasEngineRuleBasedController(Controller):
                          controlled_components=[self.battery_charger_name, engine_name],
                          sensors={'building_demand': building_demand_sensor, 
                                   'hp_demand': hp_demand_sensor,             
-                                  'PV_power': pv_power_sensor,
+                                  'PV_power_est': pv_power_sensor_est,
+                                  'PV_power_ovest': pv_power_sensor_ovest,
                                   'battery_SOC': battery_soc_sensor,
                                   'biogas_SOC': biogas_soc_sensor},
                          minimum_time_off_between_activations_h={engine_name: min_time_on_h},
@@ -368,12 +370,15 @@ class BiogasEngineRuleBasedController(Controller):
         
         total_demand = building_demand + hp_demand # Domanda totale calcolata dal software
         
-        pv_power = abs(self.obs['PV_power'])
+        pv_power_est = abs(self.obs['PV_power_est'])
+        pv_power_ovest = abs(self.obs['PV_power_ovest'])
+        total_pv_power = pv_power_est + pv_power_ovest
+
         battery_soc = self.obs['battery_SOC']  
         biogas_soc = self.obs['biogas_SOC']
         
         # Il deficit è calcolato sulla domanda totale dell'impianto
-        net_deficit = total_demand - pv_power
+        net_deficit = total_demand - total_pv_power
         
         # Macchina a stati del motore
         if not self.engine_is_running:
@@ -403,7 +408,7 @@ class BiogasEngineRuleBasedController(Controller):
 
         # Aggiornamento bilancio della batteria
         engine_power = self.engine_p_el_design * final_engine_action
-        net_balance = pv_power + engine_power - total_demand
+        net_balance = total_pv_power + engine_power - total_demand
         
         action[self.battery_charger_name] = net_balance
         self.previous_action = action

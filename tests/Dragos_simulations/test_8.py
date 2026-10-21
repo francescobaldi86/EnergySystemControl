@@ -17,9 +17,10 @@ def test_8():
         esc.HotWaterStorage(name='hot_water_storage', max_temperature=80, tank_volume=200, T_0=45, convection_coefficient_losses=0.0),
         esc.ElectricityGrid(name='electric_grid'),
         esc.ColdWaterGrid(name='water_grid', utility_type='fluid'),
-        esc.PVpanelFromPVGIS(name='pv_panels', installed_power=7.2, latitude=46.216, longitude=12.215, tilt=30, azimuth=90),
+        esc.PVpanelFromPVGIS(name='pv_panels_est', installed_power=3.6, latitude=46.216, longitude=12.215, tilt=30, azimuth = -90), #pannelli fotovoltaici orientati a est
+        esc.PVpanelFromPVGIS(name='pv_panels_ovest', installed_power=3.6, latitude=46.216, longitude=12.215, tilt=30, azimuth = 90), #pannelli fotovoltaici orientati a ovest
         esc.LithiumIonBattery(name='battery', capacity=2.0, SOC_0=0.5),
-        esc.Inverter(name='inverter', number_of_ac_output_ports=2),
+        esc.Inverter(name='inverter', number_of_ac_output_ports=2, number_of_pv_input_ports=2),
         esc.AnaerobicDigester(name='biogas_producer', biogas_rate=15, methane_fraction=0.65),
         esc.BiogasStorage(name='biogas_storage', capacity=500.0, initial_ch4_mass=50.0, initial_co2_mass=60.0),
         esc.InternalCombustionEngine(name='backup_engine', P_el_design=30, efficiency_el=0.33, fuel='biogas'),
@@ -37,7 +38,8 @@ def test_8():
             biogas_soc_sensor='biogas_SOC_sensor',
             building_demand_sensor='building_demand_sensor',  # Dati CSV
             hp_demand_sensor='hp_demand_sensor',              # Pompa Calore
-            pv_power_sensor='pv_power_sensor',
+            pv_power_sensor_est='pv_power_sensor_est',
+            pv_power_sensor_ovest='pv_power_sensor_ovest',
             net_power_activation=0.2,
             engine_p_el_design=30,
             min_battery_soc_activation=0.7,
@@ -52,9 +54,9 @@ def test_8():
         esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
         esc.SOCSensor('battery_SOC_sensor', 'battery'),
         esc.SOCSensor('biogas_SOC_sensor', 'biogas_storage'),
-        esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port'),
+        esc.ElectricPowerSensor('pv_power_sensor_est', 'inverter_PV_input_port_0'),
+        esc.ElectricPowerSensor('pv_power_sensor_ovest', 'inverter_PV_input_port_1'),
         
-        # sensori separati per la domanda elettrica del rifugio e della pompa di calore
         esc.ElectricPowerSensor('hp_demand_sensor', 'inverter_AC_output_port_0'), 
         esc.ElectricPowerSensor('building_demand_sensor', 'inverter_AC_output_port_1'),
         
@@ -68,7 +70,8 @@ def test_8():
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
         ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
         ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
-        ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+        ('inverter_PV_input_port_0', 'pv_panels_est_electricity_port'),
+        ('inverter_PV_input_port_1', 'pv_panels_ovest_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port'),
         ('inverter_ESS_port', 'battery_electricity_port'),
         ('backup_engine_electricity_port', 'inverter_engine_port'),
