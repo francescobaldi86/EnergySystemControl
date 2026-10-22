@@ -4,6 +4,7 @@ import pandas as pd
 
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+__PLAYGROUND__ = os.path.join(__TEST__, 'PLAYGROUND', 'Dragos')
 
 def test_6(mode='unified'):
     # Like test 5, but adding an ICE with related controller and sensors
@@ -67,7 +68,7 @@ def test_6(mode='unified'):
             esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
             esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
             esc.SOCSensor('battery_SOC_sensor', 'battery'),
-            esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port'),
+            esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port_0'),
             esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_AC_output_port_0'),
             esc.ElectricPowerSensor('battery_power_sensor', 'battery_electricity_port'),
             esc.ElectricPowerSensor('grid_power_sensor', 'electric_grid_electricity_port'),
@@ -79,7 +80,7 @@ def test_6(mode='unified'):
             ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
             ('heat_pump_electricity_input_port', 'inverter_AC_output_port_0'),
             ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
-            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port'),
             ('backup_engine_electricity_port', 'inverter_engine_port'),
@@ -92,8 +93,8 @@ def test_6(mode='unified'):
     results = sim.run()
     df_ports, df_controllers, df_sensors = results.to_dataframe()
 
-    os.makedirs(os.path.join(__HERE__, 'Tabelle_dati'), exist_ok=True)
-    excel_path = os.path.join(__HERE__, 'Tabelle_dati', f"test_6_results_{mode}.xlsx")
+    os.makedirs(__PLAYGROUND__, exist_ok=True)
+    excel_path = os.path.join(__PLAYGROUND__, f"test_6_results_{mode}.xlsx")
     with pd.ExcelWriter(excel_path) as writer:
         df_ports.to_excel(writer, sheet_name='Ports')
         df_sensors.to_excel(writer, sheet_name='Sensors')

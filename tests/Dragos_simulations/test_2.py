@@ -4,6 +4,7 @@ import pandas as pd
 
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+__PLAYGROUND__ = os.path.join(__TEST__, 'PLAYGROUND', 'Dragos')
 
 def test_2():
     for time_step in [1, 0.5, 0.25, 1/6, 5/60, 1/60]:
@@ -35,9 +36,9 @@ def test_2():
         #heat_pump_energy_demand = results.get_cumulated_electricity('heat_pump_electricity_input_port')
         #assert math.isclose(heat_pump_energy_demand, 13, abs_tol = 2)
         df_ports, df_controllers, df_sensors = results.to_dataframe()
-        os.makedirs(os.path.join(__HERE__, 'Tabelle_dati'), exist_ok=True)
+        os.makedirs(__PLAYGROUND__, exist_ok=True)
         nome_file = f'test_2_results_dt_{round(time_step, 3)}.xlsx'
-        excel_path = os.path.join(__HERE__, 'Tabelle_dati', nome_file)
+        excel_path = os.path.join(__PLAYGROUND__, nome_file)
 
         with pd.ExcelWriter(excel_path) as writer:
             df_ports.to_excel(writer, sheet_name='Ports')

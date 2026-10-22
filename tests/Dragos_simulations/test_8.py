@@ -7,6 +7,7 @@ from datetime import datetime
 
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+__PLAYGROUND__ = os.path.join(__TEST__, 'PLAYGROUND', 'Dragos')
 
 
 def test_8():
@@ -88,8 +89,8 @@ def test_8():
     
     df_ports, df_controllers, df_sensors = results.to_dataframe()
 
-    os.makedirs(os.path.join(__HERE__, 'Tabelle_dati'), exist_ok=True)
-    excel_path = os.path.join(__HERE__, 'Tabelle_dati', "test_8_results.xlsx")
+    os.makedirs(__PLAYGROUND__, exist_ok=True)
+    excel_path = os.path.join(__PLAYGROUND__, "test_8_results.xlsx")
     with pd.ExcelWriter(excel_path) as writer:
         df_ports.to_excel(writer, sheet_name='Ports')
         df_sensors.to_excel(writer, sheet_name='Sensors')

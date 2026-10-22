@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+__PLAYGROUND__ = os.path.join(__TEST__, 'PLAYGROUND', 'Dragos')
 
 def test_1():
     # Represent substantially a minimal example of electric heating system
@@ -35,8 +36,8 @@ def test_1():
     df_ports, df_controllers, df_sensors = results.to_dataframe()
     #assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 323, abs_tol = 1)
     #df_ports.to_csv(os.path.join(__TEST__, 'PLAYGROUND', 'test_1_results_ports.csv'), sep = ";")
-    os.makedirs(os.path.join(__HERE__, 'Tabelle_dati'), exist_ok=True)
-    excel_path = os.path.join(__HERE__, 'Tabelle_dati', 'test_1_results.xlsx')
+    os.makedirs(__PLAYGROUND__, exist_ok=True)
+    excel_path = os.path.join(__PLAYGROUND__, 'test_1_results.xlsx')
 
     with pd.ExcelWriter(excel_path) as writer:
         df_ports.to_excel(writer, sheet_name='Ports')
@@ -70,7 +71,7 @@ def test_1():
     plt.title('Test 1: Bilancio Termico e Inerzia dell\'Accumulo')
     plt.grid(True, linestyle='--', alpha=0.5)
         
-    plot_path = os.path.join(__HERE__, 'Tabelle_dati', 'test_1_plot.png')
+    plot_path = os.path.join(__PLAYGROUND__, 'test_1_plot.png')
     plt.tight_layout()
     plt.savefig(plot_path)
     plt.close()

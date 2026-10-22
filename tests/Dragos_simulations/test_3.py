@@ -4,6 +4,7 @@ import pandas as pd
 
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+__PLAYGROUND__ = os.path.join(__TEST__, 'PLAYGROUND', 'Dragos')
 
 def test_3():
     # Trying a more complex system, with PV panels
@@ -27,7 +28,7 @@ def test_3():
     ]
     sensors = [
         esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
-        esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port'),
+        esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port_0'),
         esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_AC_output_port_0')
     ]
     connections = [
@@ -35,7 +36,7 @@ def test_3():
         ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
         ('heat_pump_electricity_input_port', 'inverter_AC_output_port_0'),
         ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
-        ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+        ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port')
     ]
     # Create environment
@@ -47,8 +48,8 @@ def test_3():
     results = sim.run()
     df_ports, df_controllers, df_sensors = results.to_dataframe()
 
-    os.makedirs(os.path.join(__HERE__, 'Tabelle_dati'), exist_ok=True)
-    excel_path = os.path.join(__HERE__, 'Tabelle_dati', "test_3_results.xlsx")
+    os.makedirs(__PLAYGROUND__, exist_ok=True)
+    excel_path = os.path.join(__PLAYGROUND__, "test_3_results.xlsx")
     with pd.ExcelWriter(excel_path) as writer:
             df_ports.to_excel(writer, sheet_name='Ports')
             df_sensors.to_excel(writer, sheet_name='Sensors')
