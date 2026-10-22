@@ -96,8 +96,40 @@ class Controller(ABC):
         # Method to ensure that the controlled component is not turned ON/OFF too often
         if self.on_off_time_limitations:
             for component_name in self.controlled_component_names:
+                # we convert the action to a boolean value, since the time limitations are only valid for ON/OFF controllers
+                current_state_is_on = (action[component_name] > 0)
+                previous_state_is_on = (self.previous_action[component_name] > 0)
+
                 # Check whether the action is valid
-                # First, if no change of action is required, all is good and we simply update the time elapsed since last state change
+                if current_state_is_on == previous_state_is_on:
+                    # If the state has not changed (action passed from 0 to 0 or from 0.65 to 0.8), we simply update the time elapsed since last state change
+                    self.time_since_last_state_change[component_name] += state.time_step
+                elif current_state_is_on and not previous_state_is_on:
+                    # the component needs to be turned ON, we check if the minimum time OFF has passed
+                    if self.time_since_last_state_change[component_name] >= self.minimum_time_off_between_deactivations[component_name]:
+                        self.time_since_last_state_change[component_name] = 0.0
+                    else:
+                        # If the minimum time OFF has not passed, we keep the component OFF and update the time elapsed since last state change
+                        action[component_name] = 0
+                        self.time_since_last_state_change[component_name] += state.time_step
+                elif not current_state_is_on and previous_state_is_on:
+                    # the component needs to be turned OFF, we check if the minimum time ON has passed
+                    if self.time_since_last_state_change[component_name] >= self.minimum_time_on_between_activations[component_name]:
+                        self.time_since_last_state_change[component_name] = 0.0
+                    else:
+                        # If the minimum time ON has not passed, we keep the component ON and update the time elapsed since last state change
+                        action[component_name] = 1
+                        self.time_since_last_state_change[component_name] += state.time_step
+                else:
+                    raise ValueError(
+                        f'The control input to the component {component_name} of type {type(self.controlled_components[component_name])} '
+                        f'should be a boolean value (0 or 1). {action[component_name]} was provided at time step {state.time}'
+                    )
+        return action
+        
+        '''
+                # First, if no c
+                # hange of action is required, all is good and we simply update the time elapsed since last state change
                 if action[component_name] == self.previous_action[component_name]:
                     self.time_since_last_state_change[component_name] += state.time_step
                 elif action[component_name] == True and self.previous_action[component_name] == False:
@@ -112,13 +144,9 @@ class Controller(ABC):
                     else:
                         action[component_name] = True
                         self.time_since_last_state_change[component_name] += state.time_step
-                else:
-                    raise ValueError('There should be no other option')
-
-        return action
+                
+        '''
     
-    
-
 class HeaterControllerWithBandwidth(Controller):
     """
     Controller for a heater with a bandwidth: it tries to keep the temperature within the specific band

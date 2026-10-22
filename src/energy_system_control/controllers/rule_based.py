@@ -313,31 +313,36 @@ class EngineOnOffController(Controller):
         action = 1.0 if self.engine_is_running else 0.0
         return {self.engine_name: action}
 
+from energy_system_control.controllers.base import Controller
+from energy_system_control.sim.state import SimulationState
+
 class BiogasEngineRuleBasedController(Controller):
     """
-    Controllore unificato che gestisce il motore alimentato a biogas e la batteria.
-    Calcola l'azione del motore tenendo conto simultaneamente del SOC della batteria,
-    del biogas e della SOMMA di più carichi elettrici (es. rifugio + pompa di calore).
+    Controllore unificato con regolazione continua della potenza del motore a biogas.
+    Modula il fattore di carico (alfa) in funzione del deficit elettrico e del SOC della batteria.
     """
     def __init__(self, name: str, 
                  battery_name: str, 
                  engine_name: str, 
                  battery_soc_sensor: str, 
                  biogas_soc_sensor: str,
-                 building_demand_sensor: str,  # Sensore 1 (Consumi Rifugio)
-                 hp_demand_sensor: str,        # Sensore 2 (Pompa di Calore)
+                 building_demand_sensor: str,
+                 hp_demand_sensor: str,
                  pv_power_sensor_est: str,
                  pv_power_sensor_ovest: str,
                  net_power_activation: float,
                  engine_p_el_design: float,
                  min_battery_soc_activation: float = 0.2,
+                 target_battery_soc: float = 0.95,          # SOC desiderato per la batteria in ricarica
+                 max_battery_charge_power: float = 10.0,    # Potenza massima [kW] destinata alla ricarica
+                 min_engine_load_factor: float = 0.15,     # Carico minimo tecnico (es. 15% di P_el_design)
                  biogas_soc_on_threshold: float = 0.8,
                  biogas_soc_off_threshold: float = 0.2,
                  min_time_on_h: float = 1.0,
                  min_time_off_h: float = 0.0): 
 
         self.battery_charger_name = f"{battery_name}_charger"
-        
+
         super().__init__(name=name,
                          controlled_components=[self.battery_charger_name, engine_name],
                          sensors={'building_demand': building_demand_sensor, 
@@ -354,21 +359,36 @@ class BiogasEngineRuleBasedController(Controller):
         
         self.net_power_activation = net_power_activation
         self.min_battery_soc_activation = min_battery_soc_activation
+        self.target_battery_soc = target_battery_soc
+        self.max_battery_charge_power = max_battery_charge_power
+        self.min_engine_load_factor = min_engine_load_factor
         self.biogas_soc_on_threshold = biogas_soc_on_threshold
         self.biogas_soc_off_threshold = biogas_soc_off_threshold
         
-        self.min_time_on = min_time_on_h * 3600
-        self.min_time_off = min_time_off_h * 3600
         self.engine_p_el_design = engine_p_el_design
-            
         self.engine_is_running = False
 
+    def _compute_modulated_load(self, net_deficit: float, battery_soc: float) -> float:
+        """
+        Calcola il fattore di carico parziale alfa compreso tra [min_engine_load_factor, 1.0]
+        """
+        # 1. Load Following: copre il deficit istantaneo
+        required_power = max(0.0, net_deficit)
+        
+        # 2. Ricarica batteria: aggiunge potenza proporzionale se la batteria è sotto il target
+        if battery_soc < self.target_battery_soc:
+            soc_error = (self.target_battery_soc - battery_soc) / self.target_battery_soc
+            required_power += self.max_battery_charge_power * soc_error
+            
+        # 3. Fattore di carico: conversione da potenza assoluta ad alfa e saturazione sui limiti tecnici
+        load_factor = required_power / self.engine_p_el_design
+        return min(max(load_factor, self.min_engine_load_factor), 1.0)
+
     def get_action(self, state: SimulationState, **kwargs):
-        #Lettura sensori e somma interna (Approccio EMS Reale)
+        # Lettura dei sensori e calcolo net_deficit
         building_demand = abs(self.obs.get('building_demand', 0.0))
         hp_demand = abs(self.obs.get('hp_demand', 0.0))
-        
-        total_demand = building_demand + hp_demand # Domanda totale calcolata dal software
+        total_demand = building_demand + hp_demand 
         
         pv_power_est = abs(self.obs['PV_power_est'])
         pv_power_ovest = abs(self.obs['PV_power_ovest'])
@@ -377,36 +397,40 @@ class BiogasEngineRuleBasedController(Controller):
         battery_soc = self.obs['battery_SOC']  
         biogas_soc = self.obs['biogas_SOC']
         
-        # Il deficit è calcolato sulla domanda totale dell'impianto
         net_deficit = total_demand - total_pv_power
-        
-        # Macchina a stati del motore
+
+        # Logica di accensione/spegnimento del motore con modulazione della potenza
         if not self.engine_is_running:
+            # Condizioni di avvio
             if (net_deficit >= self.net_power_activation and 
                 battery_soc <= self.min_battery_soc_activation and 
                 biogas_soc >= self.biogas_soc_on_threshold):
-                engine_action = 1.0
+                engine_action = self._compute_modulated_load(net_deficit, battery_soc)
             else:
                 engine_action = 0.0
         else:
+            # Condizioni di spegnimento e mantenimento
             if biogas_soc <= self.biogas_soc_off_threshold:
                 engine_action = 0.0
-            elif net_deficit < self.net_power_activation and battery_soc > self.min_battery_soc_activation:
+            elif net_deficit < self.net_power_activation and battery_soc >= self.target_battery_soc:
                 engine_action = 0.0
             else:
-                engine_action = 1.0
+                engine_action = self._compute_modulated_load(net_deficit, battery_soc)
             
-        # Applicazione del filtro dinamico sui tempi di accensione/spegnimento
+        # Preparazione dell'azione per il filtro di base.py
         action = {
             self.engine_name: engine_action,
             self.battery_charger_name: self.previous_action.get(self.battery_charger_name, 0.0)
         }
         
+        # Il nuovo check_dynamic_limitations tratterà qualsiasi action > 0.0 come "Acceso"
         action = self.check_dynamic_limitations(state, action)
         final_engine_action = action[self.engine_name]
-        self.engine_is_running = (final_engine_action == 1.0)
+        
+        # Aggiornamento stato del motore
+        self.engine_is_running = (final_engine_action > 0.0)
 
-        # Aggiornamento bilancio della batteria
+        # Aggiornamento bilancio per il controllore della batteria
         engine_power = self.engine_p_el_design * final_engine_action
         net_balance = total_pv_power + engine_power - total_demand
         

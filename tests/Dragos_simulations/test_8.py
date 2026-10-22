@@ -23,7 +23,7 @@ def test_8():
         esc.Inverter(name='inverter', number_of_ac_output_ports=2, number_of_pv_input_ports=2),
         esc.AnaerobicDigester(name='biogas_producer', biogas_rate=15, methane_fraction=0.65),
         esc.BiogasStorage(name='biogas_storage', capacity=500.0, initial_ch4_mass=50.0, initial_co2_mass=60.0),
-        esc.InternalCombustionEngine(name='backup_engine', P_el_design=30, efficiency_el=0.33, fuel='biogas'),
+        esc.InternalCombustionEngine(name='backup_engine', P_el_design=30, fuel='biogas', polynomial_efficiency=True),
         esc.ElectricityDemand.from_csv(name='demand_rifugio', path=os.path.join(__TEST__, 'DATA', 'consumi_totali_rifugio_2026.csv'),
                                      var_unit='kWh', rescale_factor=0.001, column_name='Power', time_alignment='yearly', date_format='%d/%m/%Y %H:%M')
     ]
@@ -56,10 +56,8 @@ def test_8():
         esc.SOCSensor('biogas_SOC_sensor', 'biogas_storage'),
         esc.ElectricPowerSensor('pv_power_sensor_est', 'inverter_PV_input_port_0'),
         esc.ElectricPowerSensor('pv_power_sensor_ovest', 'inverter_PV_input_port_1'),
-        
         esc.ElectricPowerSensor('hp_demand_sensor', 'inverter_AC_output_port_0'), 
         esc.ElectricPowerSensor('building_demand_sensor', 'inverter_AC_output_port_1'),
-        
         esc.ElectricPowerSensor('battery_power_sensor', 'battery_electricity_port'),
         esc.ElectricPowerSensor('grid_power_sensor', 'electric_grid_electricity_port'),
         esc.ElectricPowerSensor('engine_power_sensor', 'backup_engine_electricity_port'),
