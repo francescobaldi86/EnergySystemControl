@@ -7,6 +7,8 @@ import math
 import energy_system_control as esc
 from energy_system_control.controllers.predictors import OfflineForecastPredictor
 from energy_system_control.sim.state import SimulationState
+from energy_system_control.core.base_classes import InitContext
+from energy_system_control.sim.config import SimulationConfig
 
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
@@ -80,6 +82,17 @@ def build_forecast_dataframe(forecast_files: list[str], issue_time_offset_hours:
     
     # Use the building method from OfflineForecastPredictor
     return OfflineForecastPredictor.build_forecast_df(daily_frames)
+
+
+def initialize_predictor(predictor: OfflineForecastPredictor, state: SimulationState) -> None:
+    state.initialize(
+        SimulationConfig(
+            simulation_end_h=24.0,
+            time_step_h=state.time_step / 3600,
+            simulation_start_datetime=state.simulation_start_datetime,
+        )
+    )
+    predictor.initialize(InitContext(environment=None, state=state))
 
 
 # ============================================================================
@@ -212,13 +225,12 @@ class TestOfflineForecastPredictorStandalone:
             time_step=3600,  # 1 hour
             simulation_start_datetime=first_valid_time
         )
+        initialize_predictor(predictor, state)
         
         # Make a prediction for 6 hours ahead
         predictions = predictor.predict(horizon=6.0, state=state)
         
-        assert not predictions.empty
-        assert isinstance(predictions, pd.Series)
-        assert predictions.name == 'Global tilted irradiance'
+        assert predictions.shape == (6,)
     
     def test_predict_returns_correct_shape(self, forecast_with_real_pv_data):
         """Test that predivations return correct number of timesteps."""
@@ -236,6 +248,7 @@ class TestOfflineForecastPredictorStandalone:
             time_step=3600,  # 1 hour
             simulation_start_datetime=first_valid_time
         )
+        initialize_predictor(predictor, state)
         
         horizon_hours = 12.0
         predictions = predictor.predict(horizon=horizon_hours, state=state)
@@ -261,10 +274,11 @@ class TestOfflineForecastPredictorStandalone:
                 time_step=1800,  # 30 minutes (different from native 1 hour)
                 simulation_start_datetime=first_valid_time
             )
+            initialize_predictor(predictor, state)
             
             predictions = predictor.predict(horizon=6.0, state=state)
             
-            assert not predictions.empty
+            assert predictions.size > 0
             assert len(predictions) == int(6.0 * 3600 / 1800)
     
     def test_predict_at_different_simulation_times(self, forecast_with_real_pv_data):
@@ -284,11 +298,12 @@ class TestOfflineForecastPredictorStandalone:
                 time_step=3600,
                 simulation_start_datetime=first_valid_time
             )
+            initialize_predictor(predictor, state)
             # Update state.time to reflect the actual simulation time in seconds
             state.time = hours_offset * 3600
             
             predictions = predictor.predict(horizon=6.0, state=state)
-            assert not predictions.empty
+            assert predictions.size > 0
     
     def test_predict_uses_most_recent_issue_time(self, forecast_with_real_pv_data):
         """Test that predictions use the most recent available issue_time."""
@@ -309,10 +324,11 @@ class TestOfflineForecastPredictorStandalone:
                 time_step=3600,
                 simulation_start_datetime=first_valid_time + pd.Timedelta(hours=24)
             )
+            initialize_predictor(predictor, state)
             state.time = 0
             
             predictions = predictor.predict(horizon=6.0, state=state)
-            assert not predictions.empty
+            assert predictions.size > 0
     
     def test_predict_raises_error_when_no_forecast_available(self, forecast_with_real_pv_data):
         """Test that prediction raises error when no forecast is available."""
@@ -330,6 +346,7 @@ class TestOfflineForecastPredictorStandalone:
             time_step=3600,
             simulation_start_datetime=early_time
         )
+        initialize_predictor(predictor, state)
         state.time = 0
         
         # Should raise ValueError
@@ -351,6 +368,7 @@ class TestOfflineForecastPredictorStandalone:
             time_step=3600,
             simulation_start_datetime=first_valid_time
         )
+        initialize_predictor(predictor, state)
         state.time = 0
         
         # Should raise ValueError when trying to get predictions beyond available data
@@ -452,12 +470,12 @@ class TestOfflineForecastPredictorIntegration:
         # Create sensors to monitor the system
         sensors = [
             esc.SOCSensor('battery_SOC_sensor', 'battery'),
-            esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port')
+            esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port_0')
         ]
         
         # Create connections
         connections = [
-            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
         ]
@@ -476,8 +494,7 @@ class TestOfflineForecastPredictorIntegration:
             simulation_hours = min(24.0, (end_time - start_time).total_seconds() / 3600)
             
             sim_config = esc.SimulationConfig(
-                time_start_h=0.0,
-                time_end_h=simulation_hours,
+                simulation_end_h=simulation_hours,
                 time_step_h=1.0  # 1-hour timesteps
             )
             
@@ -530,6 +547,7 @@ class TestOfflineForecastPredictorIntegration:
                 time_step=3600,
                 simulation_start_datetime=valid_times[0] + pd.Timedelta(hours=1)
             )
+            initialize_predictor(predictor, state1)
             state1.time = 0
             
             state2 = SimulationState(
@@ -537,6 +555,7 @@ class TestOfflineForecastPredictorIntegration:
                 time_step=3600,
                 simulation_start_datetime=valid_times[12] + pd.Timedelta(hours=1)
             )
+            initialize_predictor(predictor, state2)
             state2.time = 0
             
             try:
@@ -545,8 +564,8 @@ class TestOfflineForecastPredictorIntegration:
                 
                 # Predictions might be different or similar depending on forecast accuracy
                 # Just verify they're both valid
-                assert not pred1.empty
-                assert not pred2.empty
+                assert pred1.size > 0
+                assert pred2.size > 0
             except ValueError:
                 # This is okay if the second state is outside forecast range
                 pass

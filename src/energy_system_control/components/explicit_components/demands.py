@@ -24,6 +24,7 @@ class Demand(ExplicitComponent):
 
     def initialize(self, ctx) -> None:
         # Create reproducible RNG per component.
+        super().initialize(ctx)
         if self.uncertainty_model is not NoUncertainty:
             if not hasattr(ctx, "seed"):
                 raise(KeyError, 'The context information should include the seed for the uncertainty model')

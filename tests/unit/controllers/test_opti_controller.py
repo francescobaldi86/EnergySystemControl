@@ -8,7 +8,7 @@ def test_opti_controller():
     # This test is simply test 4 of the overall examples.
     # In a first run, we use the "standard" controller, while in a second run we test what happens with a more optimised, rule-based controller
     components = [
-        esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
+        esc.HotWaterDemand.from_iea(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2, heat_capacity_loss = 0.01),
         esc.MultiNodeHotWaterTank(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45),
         esc.ElectricityGrid(name = 'electric_grid'),
@@ -24,23 +24,23 @@ def test_opti_controller():
     sensors = [
         esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
         esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
-        esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port'),
-        esc.ElectricPowerSensor('inverter_AC_power_sensor', 'inverter_AC_output_port'),
+        esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port_0'),
+        esc.ElectricPowerSensor('inverter_AC_power_sensor', 'inverter_AC_output_port_0'),
         esc.SOCSensor('battery_SOC_sensor', 'battery')
     ]
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
         ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-        ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
+        ('heat_pump_electricity_input_port', 'inverter_AC_output_port_0'),
         ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
-        ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+        ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port'),
         ('inverter_ESS_port', 'battery_electricity_port'),
     ]
     env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
     time_step = 1/60  # One minute time step
     time_end = 24.0*7  # One week simulation
-    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = time_end, time_step_h = time_step)
+    sim_config = esc.SimulationConfig(simulation_end_h = time_end, time_step_h = time_step)
     for control_pv_setpoint in [4.0, 0.4]:
         env.controllers['heat_pump_controller'].power_PV_activation = control_pv_setpoint
         sim = esc.Simulator(env, sim_config)

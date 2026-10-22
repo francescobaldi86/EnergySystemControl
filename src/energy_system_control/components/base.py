@@ -50,7 +50,12 @@ class Component:
         pass
     
     def initialize(self, ctx: InitContext):
-        pass
+        if callable(getattr(self, 'resample_data', None)):
+            state = ctx.state
+            self.resample_data(
+                time_step_h = state.time_step / 3600.0, 
+                simulation_end_h = (state.time_vector_for_prediction[-1] - state.time_vector_for_prediction[0]) / 3600.0,
+                simulation_start_datetime = state.simulation_start_datetime)
 
 class ExplicitComponent(Component):
     # Definition of a component that does not depend on anything else to be simulated
