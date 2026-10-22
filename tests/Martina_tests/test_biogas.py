@@ -6,12 +6,11 @@ from energy_system_control.controllers.base import Controller
 from energy_system_control.components.controlled_components.base import HeatSource
 from energy_system_control.components.base import ControlledComponent
 from energy_system_control.components.explicit_components.producers import AnaerobicDigester
-import math
-import os 
+import math, os, pytest
 
 class FakeController(Controller):
 
-    def get_action(self, state):
+    def _compute_action(self, state):
         return {k: 0.0 for k in self.controlled_component_names}
 
 class FakeBoiler(ControlledComponent):
@@ -48,7 +47,7 @@ def test_biogas_production_and_storage():
     # ENVIRONMENT
     env = esc.Environment(components=components,controllers=controllers,sensors=sensors,connections=connections)
 
-    sim_config = esc.SimulationConfig(time_start_h=0.0,time_end_h=1.0,time_step_h=1/60)
+    sim_config = esc.SimulationConfig(simulation_end_h=1.0,time_step_h=1/60)
 
     sim = esc.Simulator(env, sim_config)
 
@@ -81,7 +80,7 @@ def test_biogas_production_and_storage():
 
 class BoilerController(Controller):
 
-    def get_action(self, state):
+    def _compute_action(self, state):
         # Caldaia sempre accesa al 100%
         return {k: 1.0 for k in self.controlled_component_names}
 
@@ -120,8 +119,7 @@ def test_biogas_storage_empty_with_boiler():
 
     # Simulazione di 1 ora
     sim_config = esc.SimulationConfig(
-        time_start_h=0.0,
-        time_end_h=1.0,
+        simulation_end_h=1.0,
         time_step_h=1 / 60
     )
 
@@ -192,7 +190,7 @@ __TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 def test_uno():
     components = [
         # Domanda di acqua calda sanitaria
-        esc.IEAHotWaterDemand(name="demand_DHW",reference_temperature=40,profile_name="M",),
+        esc.HotWaterDemand.from_iea(name="demand_DHW",reference_temperature=40,profile_name="M",),
         # Produzione di biogas
         AnaerobicDigesterFromData(name="anaerobic_digester", data_path=__HERE__, filename="biogas_data.csv"),
         # Accumulo di biogas con dati temporali
@@ -223,7 +221,7 @@ def test_uno():
 
     env = esc.Environment(components=components,controllers=controllers,sensors=sensors,connections=connections,)
 
-    sim_config = esc.SimulationConfig(time_start_h=0.0,time_end_h=24.0 * 7,time_step_h=5/60,)
+    sim_config = esc.SimulationConfig(simulation_end_h=24.0 * 7,time_step_h=5/60,)
 
     sim = esc.Simulator(env, sim_config)
 
@@ -235,4 +233,3 @@ def test_uno():
     assert math.isclose(df_sensors.loc[10.0, "storage_tank_temperature_sensor"],325,abs_tol=1,)
 
     df_ports.to_csv(os.path.join(__HERE__,"test_1_results_ports.csv",),sep=";",)
-test_uno()

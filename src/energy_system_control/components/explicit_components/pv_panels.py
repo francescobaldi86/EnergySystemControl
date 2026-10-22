@@ -1,4 +1,4 @@
-from energy_system_control.components.base import TimeSeriesData
+from energy_system_control.core.base_classes import TimeSeriesData
 from energy_system_control.components.explicit_components.producers import Producer
 from energy_system_control.helpers import *
 from energy_system_control.sim.state import SimulationState
@@ -180,4 +180,3 @@ class PVpanelFromIrradiation(PVpanel):
         power_output = poa_irradiation / 1000 * self.installed_power
         # Update PV port
         self.ports[self.port_name].flows['electricity'] = -power_output
-

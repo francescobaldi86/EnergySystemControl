@@ -84,8 +84,4 @@ class HeatSource(ControlledComponent):
             power_input_port.flows["volume"] = 0.0
 
       else:
-        # Mantieni qui la gestione originale degli altri tipi di fonte
-        # (elettricità o combustibile), secondo le convenzioni del progetto.
-        raise NotImplementedError(
-            f"Gestione della fonte '{self.source_type}' da ripristinare."
-        )
+        power_input_port.flows[self.source_type] = self.get_power_input(state) * action

@@ -4,6 +4,7 @@ import os
 from energy_system_control.components.base import ExplicitComponent
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.constants.fluids import Methane, CarbonDioxide
+from energy_system_control.core.base_classes import TimeSeriesData
 
 
 class Producer(ExplicitComponent):

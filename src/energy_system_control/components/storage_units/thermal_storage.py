@@ -496,7 +496,6 @@ class MultiNodeHotWaterTank(HotWaterStorage):
                 f"T_layer={self.T_layer}"
             )
         self.update_A_matrix(True)
-        super().initialize(ctx)
 
 class BiogasStorage(StorageUnit):
 
@@ -612,4 +611,11 @@ class BiogasStorage(StorageUnit):
         output_port.methane_fraction = self.methane_fraction
         output_port.LHV = self.biogas_LHV
         output_port.density = self.biogas_density
-        return [self.output_port_name]
+        # Then create the output info object:
+        output = {}
+        output[self.output_port_name] = {
+            'methane_fraction': self.methane_fraction,
+            'LHV': self.biogas_LHV,
+            'density': self.biogas_density
+        }
+        return output

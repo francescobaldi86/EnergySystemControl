@@ -11,7 +11,7 @@ from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegresso
 from sklearn.preprocessing import StandardScaler
 from sklearn.multioutput import MultiOutputRegressor
 from energy_system_control.sim.state import SimulationState
-from energy_system_control.components.base import TimeSeriesData
+from energy_system_control.core.base_classes import TimeSeriesData
 from energy_system_control.helpers import *
 
 AlignMethod = Literal["raise", "ffill", "linear"]

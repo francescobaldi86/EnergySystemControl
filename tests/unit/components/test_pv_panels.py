@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from math import isclose
 from energy_system_control.components.explicit_components.pv_panels import PVpanel, PVpanelFromData, PVpanelFromPVGISData
-from energy_system_control.components.base import TimeSeriesData
+from energy_system_control.core.base_classes import TimeSeriesData
 from energy_system_control.sim.state import SimulationState
 from datetime import datetime, timedelta
 import os
@@ -31,7 +31,7 @@ def test_pv_panel_instantiation():
 
 def test_panel_with_custom_data():
     from energy_system_control import PVpanel
-    from energy_system_control.components.base import TimeSeriesData
+    from energy_system_control.core.base_classes import TimeSeriesData
     raw_data = pd.Series(index = [pd.to_datetime('2023-04-13 06:00') + pd.Timedelta(hours=x) for x in [0, 1, 2, 3, 4]], data = [0.12, 0.14, 0.16, 0.13, 0.11])
     pv = PVpanel(
         name = 'test_panel',  
