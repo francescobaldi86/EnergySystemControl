@@ -418,13 +418,14 @@ class TestOfflineForecastPredictorIntegration:
         # Create system components - use only components that are well-tested
         components = [
             # PV generation
-            esc.PVpanelFromPVGIS(
+            esc.PVpanelFromData(
                 name='pv_panels',
-                installed_power=5.0,
-                latitude=44.511,
-                longitude=11.335,
-                tilt=30,
-                azimuth=90
+                data_path=os.path.join(__TEST__, 'DATA'),
+                filename='pvgis_data.csv',
+                column_name='P',
+                skipfooter=11,
+                rescale_factor=5.0,
+                time_alignment='yearly'
             ),
             # Energy storage
             esc.LithiumIonBattery(

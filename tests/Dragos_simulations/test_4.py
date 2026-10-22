@@ -11,7 +11,7 @@ def test_4():
     # Represents a minimal test of an electric system with PV and a battery, that requires control
     components = [
         esc.ElectricityGrid(name = 'electric_grid'),
-        esc.PVpanelFromPVGIS(name = 'pv_panels', installed_power=0.8, latitude=44.500365, longitude=11.350096, tilt=90, azimuth=90),
+        esc.PVpanelFromData(name='pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename='pvgis_data.csv', column_name='P', skipfooter=11, rescale_factor=0.8, time_alignment='yearly'),
         esc.LithiumIonBattery(name = 'battery', capacity = 1.5, SOC_0 = 0.5),
         esc.Inverter(name = 'inverter'),
         esc.ElectricityDemand.from_csv(name = 'demand', path = os.path.join(__TEST__, 'DATA', 'yearly_data_electricity_demand_15min.csv'), var_unit = 'kWh', column_name = 'value', time_alignment = 'yearly')

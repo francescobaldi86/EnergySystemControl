@@ -2,6 +2,9 @@
 import pytest
 import energy_system_control as esc
 import math
+import os
+
+__TEST__ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
 
 class TestSOCSensor:
@@ -19,13 +22,14 @@ class TestSOCSensor:
     def test_soc_sensor_with_battery(self):
         """Test SOCSensor measuring battery state of charge"""
         components = [
-            esc.PVpanelFromPVGIS(
+            esc.PVpanelFromData(
                 name='pv_panels',
-                installed_power=5.0,
-                latitude=44.511,
-                longitude=11.335,
-                tilt=30,
-                azimuth=90
+                data_path=os.path.join(__TEST__, 'DATA'),
+                filename='pvgis_data.csv',
+                column_name='P',
+                skipfooter=11,
+                rescale_factor=5.0,
+                time_alignment='yearly'
             ),
             esc.LithiumIonBattery(
                 name='battery',
@@ -49,11 +53,11 @@ class TestSOCSensor:
         
         sensors = [
             esc.SOCSensor('battery_SOC_sensor', 'battery'),
-            esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port')
+            esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port_0')
         ]
         
         connections = [
-            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
         ]
@@ -66,8 +70,7 @@ class TestSOCSensor:
         )
         
         sim_config = esc.SimulationConfig(
-            time_start_h=0.0,
-            time_end_h=24.0,
+            simulation_end_h=24.0,
             time_step_h=1.0
         )
         
@@ -111,8 +114,7 @@ class TestSOCSensor:
         )
         
         sim_config = esc.SimulationConfig(
-            time_start_h=0.0,
-            time_end_h=1.0,
+            simulation_end_h=1.0,
             time_step_h=0.5
         )
         
@@ -127,13 +129,14 @@ class TestSOCSensor:
     def test_soc_sensor_respects_bounds(self):
         """Test that battery SOC stays within min/max bounds"""
         components = [
-            esc.PVpanelFromPVGIS(
+            esc.PVpanelFromData(
                 name='pv_panels',
-                installed_power=10.0,
-                latitude=44.511,
-                longitude=11.335,
-                tilt=30,
-                azimuth=90
+                data_path=os.path.join(__TEST__, 'DATA'),
+                filename='pvgis_data.csv',
+                column_name='P',
+                skipfooter=11,
+                rescale_factor=10.0,
+                time_alignment='yearly'
             ),
             esc.LithiumIonBattery(
                 name='battery',
@@ -157,11 +160,11 @@ class TestSOCSensor:
         
         sensors = [
             esc.SOCSensor('battery_SOC_sensor', 'battery'),
-            esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port')
+            esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port_0')
         ]
         
         connections = [
-            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
         ]
@@ -174,8 +177,7 @@ class TestSOCSensor:
         )
         
         sim_config = esc.SimulationConfig(
-            time_start_h=0.0,
-            time_end_h=24.0,
+            simulation_end_h=24.0,
             time_step_h=1.0
         )
         

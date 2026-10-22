@@ -17,8 +17,8 @@ def test_8():
         esc.HotWaterStorage(name='hot_water_storage', max_temperature=80, tank_volume=200, T_0=45, convection_coefficient_losses=0.0),
         esc.ElectricityGrid(name='electric_grid'),
         esc.ColdWaterGrid(name='water_grid', utility_type='fluid'),
-        esc.PVpanelFromPVGIS(name='pv_panels_est', installed_power=3.6, latitude=46.216, longitude=12.215, tilt=30, azimuth = -90), #pannelli fotovoltaici orientati a est
-        esc.PVpanelFromPVGIS(name='pv_panels_ovest', installed_power=3.6, latitude=46.216, longitude=12.215, tilt=30, azimuth = 90), #pannelli fotovoltaici orientati a ovest
+        esc.PVpanelFromData(name='pv_panels_est', data_path=os.path.join(__TEST__, 'DATA'), filename='pvgis_data.csv', column_name='P', skipfooter=11, rescale_factor=3.6, time_alignment='yearly'),
+        esc.PVpanelFromData(name='pv_panels_ovest', data_path=os.path.join(__TEST__, 'DATA'), filename='pvgis_data.csv', column_name='P', skipfooter=11, rescale_factor=3.6, time_alignment='yearly'),
         esc.LithiumIonBattery(name='battery', capacity=2.0, SOC_0=0.5),
         esc.Inverter(name='inverter', number_of_ac_output_ports=2, number_of_pv_input_ports=2),
         esc.AnaerobicDigester(name='biogas_producer', biogas_rate=15, methane_fraction=0.65),

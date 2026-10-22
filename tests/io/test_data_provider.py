@@ -14,7 +14,7 @@ from unittest.mock import Mock, patch
 
 from energy_system_control.io.data_provider import (
     EnvironmentalDataProvider,
-    CSVEnvironmentalProvider,
+    CustomEnvironmentalProvider,
     APIEnvironmentalProvider,
 )
 from energy_system_control.sim.config import SimulationConfig
@@ -39,7 +39,7 @@ class TestEnvironmentalDataProvider:
             IncompleteProvider()
 
 
-class TestCSVEnvironmentalProvider:
+class TestCustomEnvironmentalProvider:
     """Tests for the CSVEnvironmentalProvider class."""
 
     @pytest.fixture
@@ -78,7 +78,7 @@ class TestCSVEnvironmentalProvider:
 
     def test_initialization(self, sample_csv_temp_file):
         """Test CSVEnvironmentalProvider initialization."""
-        provider = CSVEnvironmentalProvider(sample_csv_temp_file)
+        provider = CustomEnvironmentalProvider(sample_csv_temp_file)
         
         assert provider.csv_path == sample_csv_temp_file
         assert provider.var_types == {}
@@ -91,13 +91,13 @@ class TestCSVEnvironmentalProvider:
             "temperature_ambient": "intensive",
             "direct_irradiation": "extensive",
         }
-        provider = CSVEnvironmentalProvider(sample_csv_temp_file, var_types=var_types)
+        provider = CustomEnvironmentalProvider(sample_csv_temp_file, var_types=var_types)
         
         assert provider.var_types == var_types
 
     def test_initialize_loads_data(self, sample_csv_temp_file, simulation_config):
         """Test that initialize method loads and resamples CSV data."""
-        provider = CSVEnvironmentalProvider(sample_csv_temp_file)
+        provider = CustomEnvironmentalProvider(sample_csv_temp_file)
         provider.initialize(simulation_config)
 
         # Check that data has been loaded
@@ -115,7 +115,7 @@ class TestCSVEnvironmentalProvider:
 
     def test_get_environmental_data(self, sample_csv_temp_file, simulation_config):
         """Test retrieving environmental data."""
-        provider = CSVEnvironmentalProvider(sample_csv_temp_file)
+        provider = CustomEnvironmentalProvider(sample_csv_temp_file)
         provider.initialize(simulation_config)
 
         current_time = pd.Timestamp("2024-01-01 00:00:00")
@@ -130,7 +130,7 @@ class TestCSVEnvironmentalProvider:
         self, sample_csv_temp_file, simulation_config
     ):
         """Test that different timesteps can be retrieved successfully."""
-        provider = CSVEnvironmentalProvider(sample_csv_temp_file)
+        provider = CustomEnvironmentalProvider(sample_csv_temp_file)
         provider.initialize(simulation_config)
 
         current_time = pd.Timestamp("2024-01-01 00:00:00")
@@ -151,7 +151,7 @@ class TestCSVEnvironmentalProvider:
         self, sample_csv_temp_file, simulation_config
     ):
         """Test behavior when requesting data beyond available range."""
-        provider = CSVEnvironmentalProvider(sample_csv_temp_file)
+        provider = CustomEnvironmentalProvider(sample_csv_temp_file)
         provider.initialize(simulation_config)
 
         current_time = pd.Timestamp("2024-01-02 00:00:00")
@@ -162,7 +162,7 @@ class TestCSVEnvironmentalProvider:
 
     def test_missing_csv_file(self):
         """Test that missing CSV file raises appropriate error."""
-        provider = CSVEnvironmentalProvider("/nonexistent/path/data.csv")
+        provider = CustomEnvironmentalProvider("/nonexistent/path/data.csv")
         cfg = SimulationConfig(time_step_h=0.08333, time_start_h=0, time_end_h=24)
         
         with pytest.raises(FileNotFoundError):
@@ -176,7 +176,7 @@ class TestCSVEnvironmentalProvider:
             "diffuse_irradiation": "intensive",
             "temperature_cold_water": "intensive",
         }
-        provider = CSVEnvironmentalProvider(sample_csv_temp_file, var_types=var_types)
+        provider = CustomEnvironmentalProvider(sample_csv_temp_file, var_types=var_types)
         provider.initialize(simulation_config)
 
         # Should initialize successfully with intensive types
@@ -190,7 +190,7 @@ class TestCSVEnvironmentalProvider:
             "temperature_ambient": "intensive",
             "temperature_cold_water": "intensive",
         }
-        provider = CSVEnvironmentalProvider(sample_csv_temp_file, var_types=var_types)
+        provider = CustomEnvironmentalProvider(sample_csv_temp_file, var_types=var_types)
         provider.initialize(simulation_config)
 
         # Should initialize successfully with mixed types
@@ -200,7 +200,7 @@ class TestCSVEnvironmentalProvider:
         self, sample_csv_temp_file, simulation_config
     ):
         """Test that retrieved data contains reasonable physical values."""
-        provider = CSVEnvironmentalProvider(sample_csv_temp_file)
+        provider = CustomEnvironmentalProvider(sample_csv_temp_file)
         provider.initialize(simulation_config)
 
         # Sample several timesteps

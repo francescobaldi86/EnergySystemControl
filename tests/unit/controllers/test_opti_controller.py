@@ -13,7 +13,7 @@ def test_opti_controller():
         esc.MultiNodeHotWaterTank(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45),
         esc.ElectricityGrid(name = 'electric_grid'),
         esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
-        esc.PVpanelFromPVGIS(name = 'pv_panels', installed_power=1.0, latitude=44.511, longitude=11.335, tilt=30, azimuth=90),
+        esc.PVpanelFromData(name='pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename='pvgis_data.csv', column_name='P', skipfooter=11, rescale_factor=1.0, time_alignment='yearly'),
         esc.Inverter(name = 'inverter'),
         esc.LithiumIonBattery(name = 'battery', capacity = 0.5, SOC_0 = 0.5),
     ]

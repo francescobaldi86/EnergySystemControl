@@ -13,7 +13,7 @@ def test_5():
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
         esc.ElectricityGrid(name = 'electric_grid'),
         esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
-        esc.PVpanelFromPVGIS(name = 'pv_panels', installed_power=3.0, latitude=44.511, longitude=11.335, tilt=30, azimuth=90),
+        esc.PVpanelFromData(name='pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename='pvgis_data.csv', column_name='P', skipfooter=11, rescale_factor=3.0, time_alignment='yearly'),
         esc.LithiumIonBattery(name = 'battery', capacity = 2.0, SOC_0 = 0.5),
         esc.Inverter(name = 'inverter')
     ]
