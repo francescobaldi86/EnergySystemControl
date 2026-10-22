@@ -1,5 +1,6 @@
 from energy_system_control.components.base import ControlledComponent
 from energy_system_control.sim.state import SimulationState
+from energy_system_control.core.port import FuelPort, BiogasPort
 from abc import abstractmethod
 
 class GenericControlledComponent(ControlledComponent):
@@ -34,7 +35,7 @@ class HeatSource(ControlledComponent):
     power_input_port_name: str
     source_type: str
     def __init__(self, name: str, source_type: str):
-        if source_type not in {'electricity', 'fuel'}:
+        if source_type not in {'electricity', 'fuel', 'biogas'}:
             raise(KeyError, f'Source type for heat source {name} is not accepted. {source_type} was provided')
         self.heat_output_port_name = f'{name}_heat_output_port'
         self.power_input_port_name = f'{name}_{source_type}_input_port'
@@ -53,9 +54,38 @@ class HeatSource(ControlledComponent):
         return self.get_heat_output(state) / self.get_efficiency(state)
 
     def step(self, state: SimulationState, action):
-        if action == 0.0:
-            self.ports[self.heat_output_port_name].flows['heat'] = 0.0
-            self.ports[self.power_input_port_name].flows[self.source_type] = 0.0
+      # Potenza termica erogata dalla caldaia
+      heat_output = self.get_heat_output(state) * action
+      self.ports[self.heat_output_port_name].flows["heat"] = -heat_output
+
+      power_input_port = self.ports[self.power_input_port_name]
+
+      if isinstance(power_input_port, BiogasPort):
+        # Potenza chimica richiesta al combustibile [kW]
+        chemical_energy = self.get_power_input(state) * action
+
+        power_input_port.flows["chemical_energy"] = chemical_energy
+
+        LHV = power_input_port.LHV
+        density = power_input_port.density
+
+        # Portata massica del biogas [kg/s], se LHV è in kJ/kg
+        if LHV is not None and LHV > 0:
+            power_input_port.flows["mass"] = chemical_energy / LHV
         else:
-            self.ports[self.heat_output_port_name].flows['heat'] = -self.get_heat_output(state) * action
-            self.ports[self.power_input_port_name].flows[self.source_type] = self.get_power_input(state) * action
+            power_input_port.flows["mass"] = 0.0
+
+        # Portata volumetrica [m³/s]
+        if density is not None and density > 0:
+            power_input_port.flows["volume"] = (
+                power_input_port.flows["mass"] / density
+            )
+        else:
+            power_input_port.flows["volume"] = 0.0
+
+      else:
+        # Mantieni qui la gestione originale degli altri tipi di fonte
+        # (elettricità o combustibile), secondo le convenzioni del progetto.
+        raise NotImplementedError(
+            f"Gestione della fonte '{self.source_type}' da ripristinare."
+        )

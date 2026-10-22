@@ -1,12 +1,12 @@
 from energy_system_control.components.base import StorageUnit
 from energy_system_control.helpers import *
 from energy_system_control.core.base_classes import InitContext
-from energy_system_control.constants import WATER
+from energy_system_control.constants import WATER, METHANE, CARBON_DIOXIDE
 from energy_system_control.sim.state import SimulationState
 from typing import Dict, List
 from scipy.linalg import solve_banded
 import warnings, math
-
+import os, requests
         
 
 class HotWaterStorage(StorageUnit):
@@ -76,7 +76,19 @@ class HotWaterStorage(StorageUnit):
     def step(self, state: SimulationState, action):
         # Heat port inputs are provided from external sources. Hot water output also. Hence, only the cold water input is updated
         self.ports[self.cold_water_input_port_name].flows['mass'] = -self.ports[self.hot_water_output_port_name].flows['mass']
-        self.ports[self.cold_water_input_port_name].flows['heat'] = abs(self.ports[self.cold_water_input_port_name].flows['mass']) * WATER.cp * self.ports[self.cold_water_input_port_name].T
+        cold_port = self.ports[self.cold_water_input_port_name]
+
+        print("Temperatura acqua fredda:", cold_port.T)
+        print("Portata massica acqua fredda:", cold_port.flows.get("mass"))
+        print("Temperatura ambientale acqua fredda:", getattr(state.environmental_data, "temperature_cold_water", None))
+        #self.ports[self.cold_water_input_port_name].flows['heat'] = abs(self.ports[self.cold_water_input_port_name].flows['mass']) * WATER.cp * self.ports[self.cold_water_input_port_name].T
+        cold_port = self.ports[self.cold_water_input_port_name]
+
+        if cold_port.T is None:
+         cold_port.T = state.environmental_data.temperature_cold_water
+         print("Temperatura acqua fredda:", cold_port.T)
+        cold_port.flows['heat'] = (abs(cold_port.flows['mass'])* WATER.cp*cold_port.T)
+        
         heat_losses = self.calculate_losses(state)
         heat_input = 0.0
         for input_port in self.heat_input_port_names:
@@ -483,3 +495,121 @@ class MultiNodeHotWaterTank(HotWaterStorage):
                 f"t={state.time}, step={state.time_id}, stage={stage}\n"
                 f"T_layer={self.T_layer}"
             )
+        self.update_A_matrix(True)
+        super().initialize(ctx)
+
+class BiogasStorage(StorageUnit):
+
+    def __init__(self,name: str,capacity: float,initial_ch4_mass: float = 0.0,initial_co2_mass: float = 0.0,):
+        
+        self.capacity = capacity
+        self.ch4_mass = initial_ch4_mass
+        self.co2_mass = initial_co2_mass
+        self.SOC_0 = self.total_mass / self.biogas_density / self.capacity
+
+        self.input_port_name = f"{name}_input"
+        self.output_port_name = f"{name}_output"
+
+        super().__init__(name,{self.input_port_name: "biogas",self.output_port_name: "biogas"})
+
+    @property
+    def total_mass(self) -> float:
+        return self.ch4_mass + self.co2_mass
+
+    @property
+    def methane_mass_fraction(self) -> float:
+        if self.total_mass <= 0:
+            return 0.0
+        return self.ch4_mass / self.total_mass
+
+    @property
+    def methane_fraction(self) -> float:
+        if self.total_mass <= 0:
+            return 0.0
+        n_ch4 = (self.ch4_mass / METHANE.MW)
+        n_co2 = self.co2_mass / CARBON_DIOXIDE.MW
+        total_moles = n_ch4 + n_co2
+        return n_ch4 / total_moles if total_moles > 0 else 0.0
+
+    @property
+    def biogas_density(self) -> float:
+        x_ch4 = self.methane_fraction
+        x_co2 = 1.0 - x_ch4
+        return (x_ch4 * METHANE.rho + x_co2 * CARBON_DIOXIDE.rho)
+
+    @property
+    def biogas_LHV(self) -> float:
+        """ LHV in [kJ/kg]. """
+        return self.methane_mass_fraction * METHANE.LHV
+
+    def initialize(self, ctx: InitContext):
+        output_port = self.ports[self.output_port_name]
+        output_port.methane_fraction = self.methane_fraction
+        output_port.LHV = self.biogas_LHV
+        output_port.density = self.biogas_density
+        super().initialize(ctx)
+
+    @property
+    def volume(self) -> float:
+         if self.biogas_density <= 0:
+          return 0.0
+         return self.total_mass / self.biogas_density
+
+
+    def step(self, state, action=None):
+        dt = state.time_step
+        input_port = self.ports[self.input_port_name]
+        output_port = self.ports[self.output_port_name]
+
+        # 1. INGRESSO
+        mass_flow_in = max(0.0, input_port.flows.get("mass", 0.0))  
+        methane_fraction_in = getattr(input_port, "methane_fraction", 0.0)
+
+        # if mass_flow_in > 0:  # Perchè solo se il mass_flow_in non è zero?
+        density_in = (methane_fraction_in * METHANE.rho+(1.0 - methane_fraction_in) * CARBON_DIOXIDE.rho)
+        methane_mass_frac_in = (methane_fraction_in * METHANE.rho) / density_in if density_in > 0 else 0.0 #da vol a massica
+        
+        # Massa entrante nell'intervallo dt [kg]
+        delta_mass_in = mass_flow_in * dt
+        #controllo troppo pieno
+       
+        current_volume=(self.total_mass/self.biogas_density if self.biogas_density>0 else 0.0)
+
+        available_volume = max(0.0, self.capacity - current_volume)  
+        max_mass_in = available_volume * density_in
+        accepted_mass_in = min(delta_mass_in, max_mass_in)
+        overflow_mass = delta_mass_in - accepted_mass_in
+        ch4_in = accepted_mass_in * methane_mass_frac_in
+        co2_in = accepted_mass_in - ch4_in
+
+        self.ch4_mass += ch4_in
+        self.co2_mass += co2_in
+
+        # 2. USCITA (Gestita dalla richiesta del componente a valle o da azione)
+        #energy_flow_out = max(0.0, -output_port.flows.get("chemical_energy", 0.0))
+        chemical_energy_out = output_port.flows.get("chemical_energy")
+
+        if chemical_energy_out is None:
+         chemical_energy_out = 0.0
+
+        energy_flow_out = max(0.0, -chemical_energy_out)
+        mass_flow_out = (energy_flow_out / self.biogas_LHV  if self.biogas_LHV > 0 else 0.0)
+        delta_mass_out =( mass_flow_out * dt)
+
+        
+        delta_mass_out = min(delta_mass_out,self.total_mass)
+
+        if delta_mass_out > 0:
+            w_ch4 = self.methane_mass_fraction
+            self.ch4_mass -= delta_mass_out * w_ch4
+            self.co2_mass -= delta_mass_out * (1.0 - w_ch4)
+
+        self.SOC = current_volume / self.capacity
+
+    def set_inherited_port_values(self, state: SimulationState):
+        # First update values of the output port
+        output_port = self.ports[self.output_port_name]
+        output_port.methane_fraction = self.methane_fraction
+        output_port.LHV = self.biogas_LHV
+        output_port.density = self.biogas_density
+        return [self.output_port_name]

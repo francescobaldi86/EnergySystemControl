@@ -177,8 +177,8 @@ class CompositeComponent(Component):
 
 @dataclass()
 class TimeSeriesData:
-    raw: pd.Series
-    var_type: Literal['energy', 'power', 'volume', 'mass', 'temperature']
+    raw: pd.Series | pd.DataFrame
+    var_type: Literal['energy', 'power', 'volume', 'mass', 'temperature', 'mass_flow', 'volume_flow', 'adimensional']
     var_unit: Literal['Wh', 'kWh', 'MWh', 'W', 'kW', 'MW', 'l', 'm3', 'kg', 'C', 'K']
     time_alignment: TimeAlignment
     data: np.ndarray | None = None
@@ -207,6 +207,10 @@ class TimeSeriesData:
                                                         var_type="intensive")
                 if self.var_unit[0] != 'k':
                     self.data = self.data * 1.0e-3
+            elif self.var_type in {'mass_flow', 'volume_flow'}:
+                self.data = resample_with_interpolation(self.raw, target_freq, sim_end_h*3600.0, var_type="intensive")
+            elif self.var_type == 'adimensional':
+                self.data = resample_with_interpolation(self.raw, target_freq, sim_end_h*3600.0, var_type="intensive")
             elif self.var_type == 'energy':
                 self.data = resample_with_interpolation(df = self.raw, 
                                                         target_freq = target_freq,
@@ -223,6 +227,6 @@ class TimeSeriesData:
                                                         time_alignment = self.time_alignment,
                                                         var_type="extensive")
             else:
-                raise(ValueError, f'Unknown variable type {self.var_type}')
+                raise ValueError(f'Unknown variable type {self.var_type}')
         else:
             raise(ValueError, 'No raw data available to resample for TimeSeriesDemand object')
