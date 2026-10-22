@@ -265,22 +265,6 @@ class MultiNodeHotWaterTank(HotWaterStorage):
             return output
         elif output_type == 'layer_id':
             return layer_id
-    
-    def step_backup(self, state: SimulationState, action):
-        output = {}
-        self._check_state(state)
-        change_in_water_mass_flow = not math.isclose(self.water_mass_flow_t, -self.ports[self.hot_water_output_port_name].flows['mass'], abs_tol = 1e-4)
-        self.water_mass_flow_t = -self.ports[self.hot_water_output_port_name].flows['mass']
-        self.update_A_matrix(change_in_water_mass_flow)
-        C = self.create_C_vector(state)
-        D = -(self.matrix_B * self.T_layer + C)
-        self.T_layer = solve_banded((1, 1), self.matrix_A, D)  
-        self.temperature = self.T_layer.mean()
-        self.SOC = self.temperature_to_SOC(state)
-        # In the end, the only value that needs updating is the input from the cold water grid
-        self.ports[self.cold_water_input_port_name].flows['mass'] = self.water_mass_flow_t
-        self.ports[self.cold_water_input_port_name].flows['heat'] = self.water_mass_flow_t * WATER.cp * self.ports[self.cold_water_input_port_name].T
-        return output
 
     def step(self, state: SimulationState, action):
         # Sanity check of the current state
@@ -495,7 +479,6 @@ class MultiNodeHotWaterTank(HotWaterStorage):
                 f"t={state.time}, step={state.time_id}, stage={stage}\n"
                 f"T_layer={self.T_layer}"
             )
-        self.update_A_matrix(True)
 
 class BiogasStorage(StorageUnit):
 
