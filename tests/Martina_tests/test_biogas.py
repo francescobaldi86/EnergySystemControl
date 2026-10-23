@@ -186,13 +186,14 @@ def test_biogas_storage_empty_with_boiler():
 
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+__DATA__ = os.path.join(__TEST__, 'DATA')
 
 def test_uno():
     components = [
         # Domanda di acqua calda sanitaria
         esc.HotWaterDemand.from_iea(name="demand_DHW",reference_temperature=40,profile_name="M",),
         # Produzione di biogas
-        AnaerobicDigesterFromData(name="anaerobic_digester", data_path=__HERE__, filename="biogas_data.csv"),
+        AnaerobicDigesterFromData(name="anaerobic_digester", data_path=__DATA__, filename="biogas_data.csv"),
         # Accumulo di biogas con dati temporali
         BiogasStorage(name="biogas_storage",capacity=100.0,initial_ch4_mass=0.0,initial_co2_mass=0.0),
         # Caldaia alimentata a biogas
@@ -221,7 +222,7 @@ def test_uno():
 
     env = esc.Environment(components=components,controllers=controllers,sensors=sensors,connections=connections,)
 
-    sim_config = esc.SimulationConfig(simulation_end_h=24.0 * 7,time_step_h=5/60,)
+    sim_config = esc.SimulationConfig(simulation_end_h=24.0 * 7,time_step_h=5/60)
 
     sim = esc.Simulator(env, sim_config)
 
@@ -230,6 +231,6 @@ def test_uno():
     df_ports, df_controllers, df_sensors = results.to_dataframe()
 
     # Verifica della temperatura dell'accumulo
-    assert math.isclose(df_sensors.loc[10.0, "storage_tank_temperature_sensor"],325,abs_tol=1,)
+    assert math.isclose(df_sensors.loc[df_sensors.index[int(10/sim_config.time_step_h)], "storage_tank_temperature_sensor"],325,abs_tol=1,)
 
     df_ports.to_csv(os.path.join(__HERE__,"test_1_results_ports.csv",),sep=";",)

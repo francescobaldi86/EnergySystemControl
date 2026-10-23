@@ -5,6 +5,7 @@ from energy_system_control.components.base import ExplicitComponent
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.constants.fluids import Methane, CarbonDioxide
 from energy_system_control.core.base_classes import TimeSeriesData
+from energy_system_control.helpers import TimeAlignment
 
 
 class Producer(ExplicitComponent):
@@ -126,7 +127,8 @@ class AnaerobicDigesterFromData(AnaerobicDigester):
     def __init__(self,
                  name: str, 
                  data_path: str, 
-                 filename: str, 
+                 filename: str,
+                 time_alignment: TimeAlignment = 'yearly',
                  date_format: str = "%Y%m%d:%H%M", 
                  rescale_factor: float = 1.0, 
                  mass_flow_column_name: str = 'mass_flow',
@@ -149,11 +151,13 @@ class AnaerobicDigesterFromData(AnaerobicDigester):
                                 raw = data_mass_flow,
                                 var_type = 'mass_flow',
                                 var_unit = mass_flow_unit,
+                                time_alignment = time_alignment
                             )
         ts_methane_fraction = TimeSeriesData(
                                 raw = data_methane_fraction,
                                 var_type = 'adimensional',
                                 var_unit = methane_fraction_unit,
+                                time_alignment = time_alignment
                             )
 
         # Conserva le serie temporali
@@ -162,9 +166,9 @@ class AnaerobicDigesterFromData(AnaerobicDigester):
 
         super().__init__(name=name,biogas_rate = 0.0, methane_fraction = 0.0)
 
-    def resample_data(self, time_step_h: float, sim_end_h: float):
-        self.methane_fraction_data.resample(time_step_h=time_step_h, sim_end_h=sim_end_h)
-        self.mass_flow_data.resample(time_step_h=time_step_h, sim_end_h=sim_end_h)
+    def resample_data(self, time_step_h: float, simulation_end_h: float, simulation_start_datetime: str):
+        self.methane_fraction_data.resample(time_step_h=time_step_h, simulation_end_h=simulation_end_h, simulation_start_datetime = simulation_start_datetime)
+        self.mass_flow_data.resample(time_step_h=time_step_h, simulation_end_h=simulation_end_h, simulation_start_datetime = simulation_start_datetime)
 
     def step(self, state: SimulationState, action = None):
 
