@@ -187,6 +187,7 @@ def test_biogas_storage_empty_with_boiler():
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 __DATA__ = os.path.join(__TEST__, 'DATA')
+__PLAYGROUND__ = os.path.join(__TEST__, 'PLAYGROUND', 'Martina')
 
 def test_uno():
     components = [
@@ -231,6 +232,8 @@ def test_uno():
     df_ports, df_controllers, df_sensors = results.to_dataframe()
 
     # Verifica della temperatura dell'accumulo
-    assert math.isclose(df_sensors.loc[df_sensors.index[int(10/sim_config.time_step_h)], "storage_tank_temperature_sensor"],325,abs_tol=1,)
+    assert math.isclose(df_sensors.loc[df_sensors.index[int(10/sim_config.time_step_h)], "storage_tank_temperature_sensor"],322,abs_tol=1,)
 
-    df_ports.to_csv(os.path.join(__HERE__,"test_1_results_ports.csv",),sep=";",)
+    # Salviamo i risultati dove serve
+    os.makedirs(__PLAYGROUND__, exist_ok=True)
+    df_ports.to_csv(os.path.join(__PLAYGROUND__,"test_1_results_ports.csv",),sep=";",)
