@@ -31,7 +31,7 @@ def test_1():
     sim = esc.Simulator(env, sim_config)
     results = sim.run()
     df_ports, df_controllers, df_sensors = results.to_dataframe()
-    assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 323, abs_tol = 1)
+    assert math.isclose(df_sensors.loc[df_sensors.index[600], 'storage_tank_temperature_sensor'], 323, abs_tol = 1)
     df_ports.to_csv(os.path.join(__TEST__, 'PLAYGROUND', 'test_1_results_ports.csv'), sep = ";")
 
 def test_2():
@@ -72,7 +72,7 @@ def test_3():
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
         esc.ElectricityGrid(name = 'electric_grid'),
         esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
-        esc.PVpanelFromPVGIS(name = 'pv_panels', installed_power=3.0, latitude=44.511, longitude=11.335, tilt=30, azimuth=90),
+        esc.PVpanelFromData(name='pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename='pvgis_data.csv', column_name='P', skipfooter=11, rescale_factor=3.0, time_alignment='yearly'),
         esc.Inverter(name = 'inverter')
     ]
     controllers = [
@@ -81,15 +81,15 @@ def test_3():
     ]
     sensors = [
         esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
-        esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port'),
-        esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_AC_output_port')
+        esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port_0'),
+        esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_AC_output_port_0')
     ]
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
         ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-        ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
+        ('heat_pump_electricity_input_port', 'inverter_AC_output_port_0'),
         ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
-        ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+        ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port')
     ]
     # Create environment
@@ -102,23 +102,23 @@ def test_3():
     df_ports, df_controllers, df_sensors = results.to_dataframe()
     # Verify results
     heat_pump_energy_demand = results.get_cumulated_electricity('heat_pump_electricity_input_port')
-    electricity_from_pv = results.get_cumulated_electricity('inverter_PV_input_port')
+    electricity_from_pv = results.get_cumulated_electricity('inverter_PV_input_port_0')
     net_electricity_demand = results.get_cumulated_electricity('electric_grid_electricity_port')
     electricity_to_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only positive')
     electricity_from_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only negative')
-    assert math.isclose(electricity_from_pv, 27, abs_tol = 2)
+    assert math.isclose(electricity_from_pv, 28, abs_tol = 2)
     assert math.isclose(heat_pump_energy_demand, 13, abs_tol = 2)
     assert math.isclose(electricity_from_grid, 9, abs_tol = 2)
     assert math.isclose(electricity_to_grid, 22, abs_tol = 2)
     assert math.isclose(net_electricity_demand, 13, abs_tol = 2)
-    assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 325, abs_tol = 1)
+    assert math.isclose(df_sensors.loc[df_sensors.index[20], 'storage_tank_temperature_sensor'], 325, abs_tol = 1)
 
 
 def test_4():
     # Represents a minimal test of an electric system with PV and a battery, that requires control
     components = [
         esc.ElectricityGrid(name = 'electric_grid'),
-        esc.PVpanelFromPVGIS(name = 'pv_panels', installed_power=0.8, latitude=44.500365, longitude=11.350096, tilt=90, azimuth=90),
+        esc.PVpanelFromData(name='pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename='pvgis_data.csv', column_name='P', skipfooter=11, rescale_factor=0.8, time_alignment='yearly'),
         esc.LithiumIonBattery(name = 'battery', capacity = 1.5, SOC_0 = 0.5),
         esc.Inverter(name = 'inverter'),
         esc.ElectricityDemand.from_csv(name = 'demand', path = os.path.join(__TEST__, 'DATA', 'yearly_data_electricity_demand_15min.csv'), var_unit = 'kWh', column_name = 'value', time_alignment = 'yearly')
@@ -128,16 +128,16 @@ def test_4():
     ]
     sensors = [
         esc.SOCSensor('battery_SOC_sensor', 'battery'),
-        esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port'),
-        esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_AC_output_port'),
+        esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port_0'),
+        esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_AC_output_port_0'),
         esc.ElectricPowerSensor('grid_exchange_sensor', 'electric_grid_electricity_port'),
         esc.ElectricPowerSensor('battery_power_sensor', 'battery_electricity_port'),
     ]
     connections = [
-        ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+        ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port'),
         ('inverter_ESS_port', 'battery_electricity_port'),
-        ('inverter_AC_output_port', 'demand_electricity_port')
+        ('inverter_AC_output_port_0', 'demand_electricity_port')
     ]
     # Create environment
     env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
@@ -149,7 +149,7 @@ def test_4():
     df_ports, df_controllers, df_sensors = results.to_dataframe()
     # Verify results
     electricity_demand = results.get_cumulated_electricity('demand_electricity_port')
-    electricity_from_pv = results.get_cumulated_electricity('inverter_PV_input_port')
+    electricity_from_pv = results.get_cumulated_electricity('inverter_PV_input_port_0')
     net_electricity_demand = results.get_cumulated_electricity('electric_grid_electricity_port')
     electricity_to_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only positive')
     electricity_from_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only negative')
@@ -167,7 +167,7 @@ def test_5():
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
         esc.ElectricityGrid(name = 'electric_grid'),
         esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
-        esc.PVpanelFromPVGIS(name = 'pv_panels', installed_power=3.0, latitude=44.511, longitude=11.335, tilt=30, azimuth=90),
+        esc.PVpanelFromData(name='pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename='pvgis_data.csv', column_name='P', skipfooter=11, rescale_factor=3.0, time_alignment='yearly'),
         esc.LithiumIonBattery(name = 'battery', capacity = 2.0, SOC_0 = 0.5),
         esc.Inverter(name = 'inverter')
     ]
@@ -179,17 +179,17 @@ def test_5():
         esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
         esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
         esc.SOCSensor('battery_SOC_sensor', 'battery'),
-        esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port'),
-        esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_AC_output_port'),
+        esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port_0'),
+        esc.ElectricPowerSensor('electricity_demand_sensor', 'inverter_AC_output_port_0'),
         esc.ElectricPowerSensor('battery_power_sensor', 'battery_electricity_port'),
         esc.ElectricPowerSensor('grid_power_sensor', 'electric_grid_electricity_port')
     ]
     connections = [
         ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
         ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-        ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
+        ('heat_pump_electricity_input_port', 'inverter_AC_output_port_0'),
         ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
-        ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+        ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port'),
         ('inverter_ESS_port', 'battery_electricity_port')
     ]
@@ -203,13 +203,13 @@ def test_5():
     df_ports, df_controllers, df_sensors = results.to_dataframe()
     # Verify results
     heat_pump_energy_demand = results.get_cumulated_electricity('heat_pump_electricity_input_port')
-    electricity_from_pv = results.get_cumulated_electricity('inverter_PV_input_port')
+    electricity_from_pv = results.get_cumulated_electricity('inverter_PV_input_port_0')
     net_electricity_demand = results.get_cumulated_electricity('electric_grid_electricity_port')
     electricity_to_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only positive')
     electricity_from_grid = results.get_cumulated_electricity('electric_grid_electricity_port', sign='only negative')
-    assert math.isclose(electricity_from_pv, 27, abs_tol = 2)
+    assert math.isclose(electricity_from_pv, 29, abs_tol = 2)
     assert math.isclose(heat_pump_energy_demand, 13, abs_tol = 2)
-    assert math.isclose(net_electricity_demand, 11, abs_tol = 2)
+    assert math.isclose(net_electricity_demand, 13, abs_tol = 2)
     assert math.isclose(electricity_from_grid, 1, abs_tol = 2)
-    assert math.isclose(electricity_to_grid, 12, abs_tol = 2)
-    assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 323, abs_tol = 1)
+    assert math.isclose(electricity_to_grid, 14, abs_tol = 2)
+    assert math.isclose(df_sensors.loc[df_sensors.index[600], 'storage_tank_temperature_sensor'], 323, abs_tol = 1)

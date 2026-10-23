@@ -11,7 +11,7 @@ from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegresso
 from sklearn.preprocessing import StandardScaler
 from sklearn.multioutput import MultiOutputRegressor
 from energy_system_control.sim.state import SimulationState
-from energy_system_control.components.base import TimeSeriesData
+from energy_system_control.core.base_classes import TimeSeriesData
 from energy_system_control.helpers import *
 
 AlignMethod = Literal["raise", "ffill", "linear"]
@@ -48,10 +48,10 @@ class Predictor(ABC):
         """
         Generic method that allows for the adjustment of the prediction to a specific time step
         """
-        time_step_prediction = time_step_prediction_h * 3600
-        if time_step_prediction is None:
+        if time_step_prediction_h is None:
             time_step_prediction = self.time_step_simulation
             return prediction_raw
+        time_step_prediction = time_step_prediction_h * 3600
         if time_step_prediction < self.time_step_simulation:
             raise ValueError(
                 "time_step_prediction cannot be smaller than the simulation time step"

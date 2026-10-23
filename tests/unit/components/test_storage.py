@@ -19,7 +19,7 @@ def test_battery_creation():
 
 def test_battery_soc(base_test_env):
     from energy_system_control import SimulationConfig, Simulator
-    sim_config = SimulationConfig(time_start_h = 0.0, time_end_h = 1, time_step_h = 0.5)
+    sim_config = SimulationConfig(simulation_end_h = 1, time_step_h = 0.5)
     sim = Simulator(base_test_env, sim_config)
     results = sim.run()
     assert math.isclose(base_test_env.components['battery'].SOC, 0.592, abs_tol=0.01)
@@ -50,14 +50,14 @@ def test_multinode_water_tank_internal_heating_flows():
     test_storage.create_ports()
     ctx = InitContext(environment = None, state = SimulationState(time = 0.0, time_step = 900))
     test_storage.initialize(ctx)
-    test_flows = test_storage.calculate_heat_exchange_between_layers()
-    assert True
+    test_storage.ports[test_storage.hot_water_output_port_name].flows['mass'] = 1.32
+    assert test_storage._check_need_to_update_coefficients()
 
 def test_multinode_water_tank_base_system(base_test_env_TES):
     from energy_system_control.sim.config import SimulationConfig
     from energy_system_control.sim.simulator import Simulator
     time_step = 0.1
-    sim_config = SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = time_step)
+    sim_config = SimulationConfig(simulation_end_h = 24.0*7, time_step_h = time_step)
     sim = Simulator(base_test_env_TES, sim_config)
     results = sim.run()
     assert True
@@ -74,14 +74,14 @@ def base_test_env():
     ]
     sensors = [
         SOCSensor('battery_SOC_sensor', 'battery'),
-        ElectricPowerSensor('inverter_PV_sensor', 'inverter_PV_input_port'),
+        ElectricPowerSensor('inverter_PV_sensor', 'inverter_PV_input_port_0'),
         ElectricPowerSensor('inverter_grid_sensor', 'inverter_grid_input_port'),
     ]
     controllers = [
         ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', PV_power_sensor_name = 'inverter_PV_sensor')
     ]
     connections = [
-        ('inverter_PV_input_port', 'producer_electricity_port'),
+        ('inverter_PV_input_port_0', 'producer_electricity_port'),
         ('inverter_grid_input_port', 'electric_grid_electricity_port'),
         ('inverter_ESS_port', 'battery_electricity_port')
     ]
@@ -91,9 +91,9 @@ def base_test_env():
 
 @pytest.fixture
 def base_test_env_TES():
-    from energy_system_control import MultiNodeHotWaterTank, IEAHotWaterDemand, HeatPumpConstantEfficiency, TankTemperatureSensor, ElectricityGrid, ColdWaterGrid, HeaterControllerWithBandwidth, Environment
+    from energy_system_control import MultiNodeHotWaterTank, HotWaterDemand, HeatPumpConstantEfficiency, TankTemperatureSensor, ElectricityGrid, ColdWaterGrid, HeaterControllerWithBandwidth, Environment
     components = [
-        IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
+        HotWaterDemand.from_iea(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design = 3.2),
         MultiNodeHotWaterTank(name = 'test_TES', max_temperature = 80, tank_volume = 250, number_of_layers=10, tank_height=1.5, height_main_heat_input=0.5, height_aux_heat_input=0.3, T_0=80),
         ElectricityGrid(name = 'electric_grid'),

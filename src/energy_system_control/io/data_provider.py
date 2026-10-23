@@ -17,9 +17,7 @@ APIEnvironmentalProvider
 
 from abc import ABC, abstractmethod
 import pandas as pd
-from energy_system_control.core.base_classes import EnvironmentalData
-from energy_system_control.sim.config import SimulationConfig
-from energy_system_control.sim.state import SimulationState
+from energy_system_control.core.base_classes import EnvironmentalData, InitContext
 from energy_system_control.helpers import resample_with_interpolation, C2K
 from energy_system_control.io.weather_api import WeatherAPI
 import os
@@ -117,7 +115,7 @@ class CustomEnvironmentalProvider(EnvironmentalDataProvider):
     Additional custom columns may be included and will be loaded automatically.
     """
 
-    def __init__(self, data_path: str | None = None, filename:str | None = None, column_names: dict[str,str] | None = None, df: pd.DataFrame | None = None, var_types=None):
+    def __init__(self, full_path: str | None = None, folder_path: str | None = None, filename:str | None = None, column_names: dict[str,str] | None = None, df: pd.DataFrame | None = None, var_types: dict = None):
         """
         Initialize the CSV environmental data provider.
 
@@ -132,13 +130,32 @@ class CustomEnvironmentalProvider(EnvironmentalDataProvider):
         df: pandas Dataframe, optional
             A pandas DataFrame containing the environmental data. If provided, the `data_path` and `filename` parameters are not used. If not provided, the data is loaded from the csv file
         """
-        self.csv_path = os.path.join(data_path, filename) if data_path is not None else None
+        if full_path is not None:
+            self.csv_path = full_path
+            self.raw_data = None
+        elif folder_path is not None and filename is not None:
+            self.csv_path = os.path.join(folder_path, filename)
+            self.raw_data = None
+        elif df is not None:
+            self.csv_path = None
+            self.raw_data = df
+        else:
+            raise ValueError(f'Either full_path or both folder_path and filename must be provided as input')
         self.column_names = column_names
-        self.raw_data = df
         self.data = {}
         self.datetime_index = None
+        if var_types is not None:
+            self.var_types = var_types
+        else:
+            self.var_types = {
+                'temperature_ambient': 'intensive',  # Ambient temperature [k]
+                'temperature_cold_water' : 'intensive',  # Cold water temperature [K]
+                'direct_irradiation' : 'intensive',  # Direct irradiation [W/m²].
+                'diffuse_irradiation' : 'intensive'  # Diffuse irradiation [W/m²].
+            }
 
-    def initialize(self, state: SimulationState | None = None, cfg: SimulationConfig | None = None):
+
+    def initialize(self, ctx: InitContext):
         """
         Load and resample environmental data from CSV file.
 
@@ -158,21 +175,23 @@ class CustomEnvironmentalProvider(EnvironmentalDataProvider):
         KeyError
             If required columns are missing from the CSV file.
         """
+        state = ctx.state
+
         if self.raw_data is None:
             self.raw_data = pd.read_csv(self.csv_path, parse_dates=["datetime"])
             self.raw_data = self.raw_data.set_index("datetime")
         if self.column_names is not None:
             self.raw_data.rename(columns = self.column_names)
 
-        target_freq = f"{int(cfg.time_step_h*3600)}s"
+        target_freq = f"{int(ctx.state.time_step)}s"
 
         for col in self.raw_data.columns:
 
             arr = resample_with_interpolation(
                 self.raw_data[[col]],
                 target_freq=target_freq,
-                simulation_end_s=cfg.simulation_end_h*3600.0,
-                simulation_start_datetime = cfg.simulation_start_datetime,
+                simulation_end_s=(state.time_vector_for_prediction[-1] - state.time_vector_for_prediction[0]),
+                simulation_start_datetime = state.simulation_start_datetime,
                 var_type='intensive',
             )
 

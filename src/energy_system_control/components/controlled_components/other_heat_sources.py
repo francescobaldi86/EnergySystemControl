@@ -1,5 +1,6 @@
 from energy_system_control.components.controlled_components.base import HeatSource
 from energy_system_control.sim.state import SimulationState
+from energy_system_control.components.controlled_components.base import ControlledComponent
 
 class ResistanceHeater(HeatSource):
     def __init__(self, name: str, Qdot_max: float, efficiency: float):
@@ -27,4 +28,20 @@ class ResistanceHeater(HeatSource):
         return self.Qdot_out
     
     def get_efficiency(self, state: SimulationState):
+        return self.efficiency
+
+class GasBoiler(HeatSource):
+
+    def __init__(self, name: str, efficiency: float, max_power: float, source_type: str = "biogas"):
+        super().__init__(name, source_type)
+        self.efficiency = efficiency    # Rendimento (0.0 - 1.0)
+        self.max_power = max_power      # Potenza termica massima [kW]
+
+    def get_heat_output(self, state):
+        if self.ports[self.power_input_port_name].LHV > 0.0:
+            return self.max_power
+        else:
+            return 0.0
+
+    def get_efficiency(self, state=None) -> float:
         return self.efficiency

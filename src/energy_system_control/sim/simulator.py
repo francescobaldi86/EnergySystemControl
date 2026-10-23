@@ -34,7 +34,7 @@ class Simulator:
             self.env.signal_registry_sensors,
         )
         # Read any time series data once
-        self._read_timeseries_data()
+        # self._read_timeseries_data()  <-- MOVED TO "_initialize_units()"
         # Initialize units / reset components, controllers, sensors
         self._initialize_units()        
 
@@ -75,7 +75,7 @@ class Simulator:
         for _, controller in self.env.controllers.items():
             controller.initialize(ctx)
         
-
+    """
     def _read_timeseries_data(self):
         # Read timeseries data from components
         for _, component in self.env.components.items():
@@ -90,7 +90,8 @@ class Simulator:
                     time_step_h = self.cfg.time_step_h, 
                     simulation_end_h = self.cfg.simulation_end_h + self.cfg.prediction_horizon_margin_h,
                     simulation_start_datetime = self.cfg.simulation_start_datetime)
-
+    """
+    
     def _normalize_measurement(self, value):
         """
         Normalize a measurement value to a single scalar.
@@ -253,10 +254,12 @@ class Simulator:
             if port.connected_port:
                 for attribute in port.attribute_names:
                     setattr(port.connected_port, attribute, getattr(port, attribute))
-    
+
+
     def _check_connection_balance(self):
-        # Checks that all connections have the same flow on both sides
+    # Checks that all connections have the same flow on both sides
         env = self.env
+
         for connection in env.connections:
             for layer, value in env.ports[connection[0]].flows.items():
 

@@ -25,13 +25,14 @@ class TestElectricPowerSensor:
     def test_sensor_in_pv_system(self):
         """Test ElectricPowerSensor in PV system with battery"""
         components = [
-            esc.PVpanelFromPVGIS(
+            esc.PVpanelFromData(
                 name='pv_panels',
-                installed_power=5.0,
-                latitude=44.511,
-                longitude=11.335,
-                tilt=30,
-                azimuth=90
+                data_path=__DATA__,
+                filename='pvgis_data.csv',
+                column_name='P',
+                skipfooter=11,
+                rescale_factor=5.0,
+                time_alignment='yearly'
             ),
             esc.LithiumIonBattery(
                 name='battery',
@@ -54,14 +55,14 @@ class TestElectricPowerSensor:
         ]
         
         sensors = [
-            esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port'),
+            esc.ElectricPowerSensor('pv_power_sensor', 'inverter_PV_input_port_0'),
             esc.ElectricPowerSensor('grid_power_sensor', 'inverter_grid_input_port'),
             esc.ElectricPowerSensor('ess_power_sensor', 'inverter_ESS_port'),
             esc.SOCSensor('battery_SOC_sensor', 'battery'),
         ]
         
         connections = [
-            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
         ]
@@ -74,8 +75,7 @@ class TestElectricPowerSensor:
         )
         
         sim_config = esc.SimulationConfig(
-            time_start_h=0.0,
-            time_end_h=24.0,
+            simulation_end_h=24.0,
             time_step_h=1.0
         )
         
@@ -134,8 +134,7 @@ class TestElectricPowerSensor:
         )
         
         sim_config = esc.SimulationConfig(
-            time_start_h=0.0,
-            time_end_h=10.0,
+            simulation_end_h=10.0,
             time_step_h=0.5
         )
         
@@ -150,13 +149,14 @@ class TestElectricPowerSensor:
     def test_power_sensor_measures_in_kilowatts(self):
         """Test that power sensor returns values in kW"""
         components = [
-            esc.PVpanelFromPVGIS(
+            esc.PVpanelFromData(
                 name='pv_panels',
-                installed_power=3.0,  # 3 kW peak
-                latitude=44.511,
-                longitude=11.335,
-                tilt=30,
-                azimuth=90
+                data_path=__DATA__,
+                filename='pvgis_data.csv',
+                column_name='P',
+                skipfooter=11,
+                rescale_factor=3.0,
+                time_alignment='yearly'
             ),
             esc.ElectricityGrid(name='electric_grid'),
         ]
@@ -177,8 +177,7 @@ class TestElectricPowerSensor:
         )
         
         sim_config = esc.SimulationConfig(
-            time_start_h=0.0,
-            time_end_h=24.0,
+            simulation_end_h=24.0,
             time_step_h=1.0
         )
         

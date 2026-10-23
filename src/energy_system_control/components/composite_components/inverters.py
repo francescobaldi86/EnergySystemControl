@@ -16,7 +16,12 @@ class Inverter(CompositeComponent):
     AC_output_port_name: str
     grid_port_name: str
 
-    def __init__(self, name, design_efficiency: float = 0.92, efficiency_type: str = 'fixed', number_of_ac_output_ports: int = 1, number_of_pv_input_ports: int = 1):
+    def __init__(self, 
+                 name, 
+                 design_efficiency: float = 0.92, 
+                 efficiency_type: str = 'fixed', 
+                 number_of_ac_output_ports: int = 1, 
+                 number_of_pv_input_ports: int = 1):
         super().__init__(name, {})
         self.PV_port_names = [f'{name}_PV_input_port_{i}' for i in range(number_of_pv_input_ports)]
         self.AC_output_port_names = [f'{name}_AC_output_port_{i}' for i in range(number_of_ac_output_ports)]
@@ -76,9 +81,9 @@ class InverterConverter(ImplicitComponent):
                 self.ports[self.dc_port_name].flows['electricity'] = -ac_flow / self.efficiency
             return True, [self.dc_port_name]
         elif dc_flow is not None:
-            if self.ports[self.dc_port_name].flows['electricity'] >= 0:  # Positive DC flow: the inverter is converting DC to AC
+            if dc_flow >= 0:  # Positive DC flow: the inverter is converting DC to AC
                 self.ports[self.ac_port_name].flows['electricity'] = -dc_flow * self.efficiency
-            elif self.ports[self.dc_port_name].flows['electricity'] < 0:  # Negative DC flow: the inverter is converting AC to DC
+            elif dc_flow < 0:  # Negative DC flow: the inverter is converting AC to DC
                 self.ports[self.ac_port_name].flows['electricity'] = -dc_flow / self.efficiency
             return True, [self.ac_port_name]
         else:

@@ -1,6 +1,11 @@
+import pandas as pd
+import os
+
 from energy_system_control.components.base import ExplicitComponent
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.constants.fluids import Methane, CarbonDioxide
+from energy_system_control.core.base_classes import TimeSeriesData
+from energy_system_control.helpers import TimeAlignment
 
 
 class Producer(ExplicitComponent):
@@ -22,7 +27,19 @@ class ConstantPowerProducer(Producer):
 
 class AnaerobicDigester(Producer):
 
-    def __init__(self, name: str, biogas_rate: float, methane_fraction: float):
+    def __init__(self,name: str,biogas_rate: float,methane_fraction: float):
+        """
+        Model of an anerobic digster with constant biogas production
+
+        Parameters
+        ----------
+        name : str
+            Name of the component
+        biogas_rate : float
+            Constant production rate of the digester, in [m3/h]
+        methane_fraction : float
+            Constant methane fraction of the biogas produced, in [vol/vol]. Must be between 0 and 1
+        """
         super().__init__(name, "biogas")
 
         if not 0.0 <= methane_fraction <= 1.0:
@@ -36,25 +53,7 @@ class AnaerobicDigester(Producer):
 
     def create_ports(self):
         # 1. Chiama il metodo originale per creare materialmente la porta
-        ports = super().create_ports()
-        '''
-        port = self.ports[self.port_name]
-
-        if hasattr(port, "layers"):
-            port.layers = list(set(port.layers) | {"mass", "volume", "chemical_energy"})
-        # 2. Registra esplicitamente i nuovi layer per il file di output
-        custom_layers = ["mass", "volume", "chemical_energy"]
-        if hasattr(port, "layers"):
-            new_layers = list(port.layers)
-            for layer in custom_layers:
-                if layer not in new_layers:
-                    new_layers.append(layer)
-            port.layers = new_layers  # Riassegna in caso port.layers fosse una tupla
-            
-        # 3. Inizializza i flussi a 0.0 per evitare il TypeError (NoneType)
-        for layer in custom_layers:
-            port.flows[layer] = 0.0
-        '''    
+        ports = super().create_ports()   
         return ports
 
     @property
@@ -118,3 +117,73 @@ class AnaerobicDigester(Producer):
                 'density': self.biogas_density
             }
         }
+
+class AnaerobicDigesterFromData(AnaerobicDigester):
+    """
+    Biogas storage with time-dependent biogas composition
+    and production data read from a CSV file.
+    """
+
+    def __init__(self,
+                 name: str, 
+                 data_path: str, 
+                 filename: str,
+                 time_alignment: TimeAlignment = 'yearly',
+                 date_format: str = "%Y%m%d:%H%M", 
+                 rescale_factor: float = 1.0, 
+                 mass_flow_column_name: str = 'mass_flow',
+                 methane_fraction_column_name: str = 'methane_fraction',
+                 mass_flow_unit: str = 'kg/s',
+                 methane_fraction_unit: str = 'adimensional'):
+        # Inizializza il componente di accumulo
+
+        # Legge il file CSV
+        data = pd.read_csv(os.path.join(data_path, filename),sep=";",decimal=".",index_col=0,)
+
+        # Converte l'indice in date
+        data["time"] = pd.to_datetime(data.index,format=date_format,utc=True,)
+
+        data = data.set_index("time").sort_index()
+        data_mass_flow = data[mass_flow_column_name]
+        data_methane_fraction = data[methane_fraction_column_name]
+        data_mass_flow *= rescale_factor
+        ts_mass_flow = TimeSeriesData(
+                                raw = data_mass_flow,
+                                var_type = 'mass_flow',
+                                var_unit = mass_flow_unit,
+                                time_alignment = time_alignment
+                            )
+        ts_methane_fraction = TimeSeriesData(
+                                raw = data_methane_fraction,
+                                var_type = 'adimensional',
+                                var_unit = methane_fraction_unit,
+                                time_alignment = time_alignment
+                            )
+
+        # Conserva le serie temporali
+        self.methane_fraction_data = ts_methane_fraction
+        self.mass_flow_data = ts_mass_flow
+
+        super().__init__(name=name,biogas_rate = 0.0, methane_fraction = 0.0)
+
+    def resample_data(self, time_step_h: float, simulation_end_h: float, simulation_start_datetime: str):
+        self.methane_fraction_data.resample(time_step_h=time_step_h, simulation_end_h=simulation_end_h, simulation_start_datetime = simulation_start_datetime)
+        self.mass_flow_data.resample(time_step_h=time_step_h, simulation_end_h=simulation_end_h, simulation_start_datetime = simulation_start_datetime)
+
+    def step(self, state: SimulationState, action = None):
+
+        # recupero dai dati TimeSeries data la frazione di metano e la portata in massa di produzione di biogas
+        methane_fraction = self.methane_fraction_data.data[state.time_id]
+        mass_flow = self.mass_flow_data.data[state.time_id]
+        # Calcolo gli altri valori utili
+        volume_flow = mass_flow / self.biogas_density
+        chemical_power = mass_flow * self.biogas_LHV
+        # Assegno i valori alla porta di output
+        port = self.ports[self.port_name]
+        port.methane_fraction = methane_fraction
+        port.LHV = self.biogas_LHV
+
+        port.flows["mass"] = -mass_flow
+        port.flows["volume"] = -volume_flow
+        port.flows["chemical_energy"] = -chemical_power
+    

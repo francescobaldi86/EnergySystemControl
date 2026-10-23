@@ -27,7 +27,7 @@ def test_system_with_fixed_efficiecy_heat_pump(base_environment_info):
     sim = esc.Simulator(env, sim_config)
     results = sim.run()
     df_ports, df_controllers, df_sensors = results.to_dataframe()
-    assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 323, abs_tol = 1)
+    assert math.isclose(df_sensors.loc[df_sensors.index[int(10.0/sim_config.time_step_h)], 'storage_tank_temperature_sensor'], 323, abs_tol = 1)
     assert math.isclose(results.get_cumulated_electricity('heat_pump_electricity_input_port'), 15.8, abs_tol = 0.1)
 
 def test_lorentz_heat_pump_creation():
@@ -68,7 +68,7 @@ def test_system_with_lorentz_heat_pump_from_COP(base_environment_info):
     results = sim.run()
     df_ports, df_controllers, df_sensors = results.to_dataframe()
     assert math.isclose(env.components['heat_pump'].eta_lorentz, 0.433, abs_tol = 0.01)
-    assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 323, abs_tol = 1)
+    assert math.isclose(df_sensors.loc[df_sensors.index[int(10.0/sim_config.time_step_h)], 'storage_tank_temperature_sensor'], 323, abs_tol = 1)
     assert math.isclose(results.get_cumulated_electricity('heat_pump_electricity_input_port'), 12.2, abs_tol = 0.1)
 
 

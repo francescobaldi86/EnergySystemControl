@@ -3,7 +3,7 @@ from energy_system_control.components.base import ExplicitComponent
 from energy_system_control.helpers import *
 from energy_system_control.constants import WATER
 from energy_system_control.uncertainty import UncertaintyModel, NoUncertainty
-from energy_system_control.components.base import TimeSeriesData
+from energy_system_control.core.base_classes import TimeSeriesData
 import os, yaml
 import numpy as np
 from importlib.resources import files
@@ -24,6 +24,7 @@ class Demand(ExplicitComponent):
 
     def initialize(self, ctx) -> None:
         # Create reproducible RNG per component.
+        super().initialize(ctx)
         if self.uncertainty_model is not NoUncertainty:
             if not hasattr(ctx, "seed"):
                 raise(KeyError, 'The context information should include the seed for the uncertainty model')

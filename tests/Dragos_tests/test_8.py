@@ -7,6 +7,7 @@ from datetime import datetime
 
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+__PLAYGROUND__ = os.path.join(__TEST__, 'PLAYGROUND', 'Dragos')
 
 
 def test_8():
@@ -17,8 +18,8 @@ def test_8():
         esc.HotWaterStorage(name='hot_water_storage', max_temperature=80, tank_volume=200, T_0=45, convection_coefficient_losses=0.0),
         esc.ElectricityGrid(name='electric_grid'),
         esc.ColdWaterGrid(name='water_grid', utility_type='fluid'),
-        esc.PVpanelFromPVGIS(name='pv_panels_est', installed_power=3.6, latitude=46.216, longitude=12.215, tilt=30, azimuth = -90), #pannelli fotovoltaici orientati a est
-        esc.PVpanelFromPVGIS(name='pv_panels_ovest', installed_power=3.6, latitude=46.216, longitude=12.215, tilt=30, azimuth = 90), #pannelli fotovoltaici orientati a ovest
+        esc.PVpanelFromData(name='pv_panels_est', data_path=os.path.join(__TEST__, 'DATA'), filename='pvgis_data.csv', column_name='P', skipfooter=11, rescale_factor=3.6, time_alignment='yearly'),
+        esc.PVpanelFromData(name='pv_panels_ovest', data_path=os.path.join(__TEST__, 'DATA'), filename='pvgis_data.csv', column_name='P', skipfooter=11, rescale_factor=3.6, time_alignment='yearly'),
         esc.LithiumIonBattery(name='battery', capacity=2.0, SOC_0=0.5),
         esc.Inverter(name='inverter', number_of_ac_output_ports=2, number_of_pv_input_ports=2),
         esc.AnaerobicDigester(name='biogas_producer', biogas_rate=15, methane_fraction=0.65),
@@ -86,10 +87,8 @@ def test_8():
     
     df_ports, df_controllers, df_sensors = results.to_dataframe()
 
-    os.makedirs(os.path.join(__HERE__, 'Tabelle_dati'), exist_ok=True)
-    excel_path = os.path.join(__HERE__, 'Tabelle_dati', "test_8_results.xlsx")
-    df_plot = df_sensors.loc[:, ['pv_power_sensor_ovest', 'pv_power_sensor_est']]
-    df_plot['pv_power_total'] = df_sensors['pv_power_sensor_ovest'] + df_sensors['pv_power_sensor_est']
+    os.makedirs(__PLAYGROUND__, exist_ok=True)
+    excel_path = os.path.join(__PLAYGROUND__, "test_8_results.xlsx")
     with pd.ExcelWriter(excel_path) as writer:
         df_ports.to_excel(writer, sheet_name='Ports')
         df_sensors.to_excel(writer, sheet_name='Sensors')

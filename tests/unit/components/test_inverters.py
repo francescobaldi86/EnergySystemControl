@@ -41,8 +41,8 @@ class TestInverterInitialization:
     def test_inverter_port_names_defined(self):
         """Test that port name attributes are correctly set."""
         inverter = Inverter(name="test_inverter")
-        assert inverter.PV_port_name == "test_inverter_PV_input_port"
-        assert inverter.AC_output_port_name == "test_inverter_AC_output_port"
+        assert inverter.PV_port_names == ["test_inverter_PV_input_port_0"]
+        assert inverter.AC_output_port_names == ["test_inverter_AC_output_port_0"]
         assert inverter.grid_port_name == "test_inverter_grid_input_port"
         assert inverter.ESS_port_name == "test_inverter_ESS_port"
 
@@ -105,7 +105,7 @@ class TestDCBusComponent:
         dc_bus.create_ports()
         
         expected_ports = {
-            "test_inverter_PV_input_port",
+            "test_inverter_PV_input_port_0",
             "test_inverter_ESS_port",
             "test_inverter_dc_bus_internal_port",
         }
@@ -127,7 +127,7 @@ class TestDCBusComponent:
         dc_bus.create_ports()
         
         # Set flows for PV and internal port
-        dc_bus.ports["test_inverter_PV_input_port"].flows["electricity"] = 5.0
+        dc_bus.ports["test_inverter_PV_input_port_0"].flows["electricity"] = 5.0
         dc_bus.ports["test_inverter_dc_bus_internal_port"].flows["electricity"] = 2.0
         # ESS port flow is None - should be calculated
         
@@ -147,7 +147,7 @@ class TestDCBusComponent:
         pv_flow = 3.5
         ess_flow = -1.5
         
-        dc_bus.ports["test_inverter_PV_input_port"].flows["electricity"] = pv_flow
+        dc_bus.ports["test_inverter_PV_input_port_0"].flows["electricity"] = pv_flow
         dc_bus.ports["test_inverter_ESS_port"].flows["electricity"] = ess_flow
         # Internal port should be calculated
         
@@ -170,8 +170,8 @@ class TestACBusComponent:
         ac_bus.create_ports()
         
         assert ac_bus.name == "test_inverter_ac_bus"
-        # AC bus should have 3 ports: AC output, grid, and internal port
-        assert len(ac_bus.ports) == 3
+        # AC bus should have 4 ports: AC output, grid, engine, and internal port
+        assert len(ac_bus.ports) == 4
 
     def test_ac_bus_port_structure(self):
         """Test that AC bus has the correct ports defined."""
@@ -180,9 +180,10 @@ class TestACBusComponent:
         ac_bus.create_ports()
         
         expected_ports = {
-            "test_inverter_AC_output_port",
+            "test_inverter_AC_output_port_0",
             "test_inverter_grid_input_port",
             "test_inverter_ac_bus_internal_port",
+            "test_inverter_engine_port"
         }
         assert set(ac_bus.ports.keys()) == expected_ports
 
@@ -193,8 +194,9 @@ class TestACBusComponent:
         ac_bus.create_ports()
         
         # Set flows for AC output and internal port
-        ac_bus.ports["test_inverter_AC_output_port"].flows["electricity"] = 2.0
+        ac_bus.ports["test_inverter_AC_output_port_0"].flows["electricity"] = 2.0
         ac_bus.ports["test_inverter_ac_bus_internal_port"].flows["electricity"] = 1.5
+        ac_bus.ports["test_inverter_engine_port"].flows["electricity"] = 0.0
         # Grid port flow is None - should be calculated
         
         is_solved, updated_ports = ac_bus.balance(SimulationState(time=0, time_step=900, time_id=0))
@@ -390,8 +392,8 @@ class TestInverterIntegration:
         inv2 = Inverter(name="inverter_2")
         
         # Verify port names are independent
-        assert inv1.PV_port_name != inv2.PV_port_name
-        assert inv1.AC_output_port_name != inv2.AC_output_port_name
+        assert inv1.PV_port_names[0] != inv2.PV_port_names[0]
+        assert inv1.AC_output_port_names[0] != inv2.AC_output_port_names[0]
         assert inv1.grid_port_name != inv2.grid_port_name
         assert inv1.ESS_port_name != inv2.ESS_port_name
 
