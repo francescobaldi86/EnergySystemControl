@@ -24,10 +24,10 @@ class Controller(ABC):
                  name, 
                  controlled_components: List[str], 
                  sensors: Dict[str, str],
-                 minimum_time_off_h: dict = {},
-                 minimum_time_on_h: dict = {},
-                 predictors: Dict[str, str] = {},
-                 minimum_load: dict = {k: 0.0 for k in controlled_components}):
+                 minimum_time_off_h: dict = None,
+                 minimum_time_on_h: dict = None,
+                 predictors: Dict[str, str] = None,
+                 minimum_load: dict = None):
         """
         Class for a generic controller
 
@@ -46,6 +46,16 @@ class Controller(ABC):
         predictors: dict, optional
             A dictionary of the predictors used by the controller
         """
+        # Inizializzazione sicura degli argomenti mutabili
+        if minimum_time_off_h is None:
+            minimum_time_off_h = {}
+        if minimum_time_on_h is None:
+            minimum_time_on_h = {}
+        if predictors is None:
+            predictors = {}
+        if minimum_load is None:
+            minimum_load = {k: 0.0 for k in controlled_components}
+
         self.name = name
         self.controlled_component_names = controlled_components
         self.sensor_names = sensors
@@ -99,56 +109,35 @@ class Controller(ABC):
         # Method to ensure that the controlled component is not turned ON/OFF too often
         if self.on_off_time_limitations:
             for component_name in self.controlled_component_names:
-                # we convert the action to a boolean value, since the time limitations are only valid for ON/OFF controllers
-                current_state_is_on = (action[component_name] > 0)
-                previous_state_is_on = (self.previous_action[component_name] > 0)
+                # Salta i componenti che non hanno vincoli di tempo definiti per evitare KeyError
+                if component_name not in self.minimum_time_off or component_name not in self.minimum_time_on:
+                    continue
+
+                # we force the boolean representation of the current and previous state to avoid issues with float comparisons
+                current_state_is_on = bool(action[component_name] > 0)
+                previous_state_is_on = bool(self.previous_action.get(component_name, 0) > 0)
 
                 # Check whether the action is valid
                 if current_state_is_on == previous_state_is_on:
-                    # If the state has not changed (action passed from 0 to 0 or from 0.65 to 0.8), we simply update the time elapsed since last state change
+                    # If the state has not changed we simply update the time elapsed since last state change
                     self.time_since_last_state_change[component_name] += state.time_step
-                elif current_state_is_on is True and previous_state_is_on is False:
+                elif current_state_is_on and not previous_state_is_on:
                     # the component needs to be turned ON, we check if the minimum time OFF has passed
                     if self.time_since_last_state_change[component_name] >= self.minimum_time_off[component_name]:
                         self.time_since_last_state_change[component_name] = 0.0
                     else:
-                        # If the minimum time OFF has not passed, we keep the component OFF and update the time elapsed since last state change
-                        action[component_name] = 0
+                        # If the minimum time OFF has not passed, we keep the component OFF
+                        action[component_name] = 0.0
                         self.time_since_last_state_change[component_name] += state.time_step
-                elif current_state_is_on is False and previous_state_is_on is True:
+                elif not current_state_is_on and previous_state_is_on:
                     # the component needs to be turned OFF, we check if the minimum time ON has passed
                     if self.time_since_last_state_change[component_name] >= self.minimum_time_on[component_name]:
                         self.time_since_last_state_change[component_name] = 0.0
                     else:
-                        # If the minimum time ON has not passed, we keep the component ON and update the time elapsed since last state change
-                        action[component_name] = self.minimum_load[component_name]
+                        # If the minimum time ON has not passed, we keep the component ON
+                        action[component_name] = self.minimum_load.get(component_name, 0.0)
                         self.time_since_last_state_change[component_name] += state.time_step
-                else:
-                    raise ValueError(
-                        f'The control input to the component {component_name} of type {type(self.controlled_components[component_name])} '
-                        f'should be a boolean value (0 or 1). {action[component_name]} was provided at time step {state.time}'
-                    )
         return action
-        
-        '''
-                # First, if no c
-                # hange of action is required, all is good and we simply update the time elapsed since last state change
-                if action[component_name] == self.previous_action[component_name]:
-                    self.time_since_last_state_change[component_name] += state.time_step
-                elif action[component_name] == True and self.previous_action[component_name] == False:
-                    if self.time_since_last_state_change[component_name] >= self.minimum_time_off_between_deactivations[component_name]:
-                        self.time_since_last_state_change[component_name] = 0.0
-                    else:
-                        action[component_name] = False
-                        self.time_since_last_state_change[component_name] += state.time_step
-                elif action[component_name] == False and self.previous_action[component_name] == True:
-                    if self.time_since_last_state_change[component_name] >= self.minimum_time_on_between_activations[component_name]:
-                        self.time_since_last_state_change[component_name] = 0.0
-                    else:
-                        action[component_name] = True
-                        self.time_since_last_state_change[component_name] += state.time_step
-                
-        '''
     
 class HeaterControllerWithBandwidth(Controller):
     """
@@ -160,21 +149,25 @@ class HeaterControllerWithBandwidth(Controller):
                  temperature_sensor: str,
                  temperature_comfort: float, 
                  temperature_bandwidth: float,
-                 minimum_time_off_between_activations_h: float | None = None,
-                 minimum_time_on_between_deactivations_h: float | None = None):
-        if minimum_time_off_between_activations_h is not None:
-            minimum_time_off_between_activations_h = {controlled_component: minimum_time_off_between_activations_h}
+                 minimum_time_off_h: float | None = None,
+                 minimum_time_on_h: float | None = None):
+        
+        if minimum_time_off_h is not None:
+            minimum_time_off_h = {controlled_component: minimum_time_off_h}
         else:
-            minimum_time_off_between_activations_h = {}
-        if minimum_time_on_between_deactivations_h is not None:
-            minimum_time_on_between_deactivations_h = {controlled_component: minimum_time_on_between_deactivations_h}
+            minimum_time_off_h = {}
+            
+        if minimum_time_on_h is not None:
+            minimum_time_on_h = {controlled_component: minimum_time_on_h}
         else:
-            minimum_time_on_between_deactivations_h = {}
+            minimum_time_on_h = {}
+            
         super().__init__(name, 
                          [controlled_component], 
                          {'Storage temperature': temperature_sensor}, 
-                         minimum_time_off_between_activations_h=minimum_time_off_between_activations_h,
-                         minimum_time_on_between_deactivations_h=minimum_time_on_between_deactivations_h)
+                         minimum_time_off_h=minimum_time_off_h,
+                         minimum_time_on_h=minimum_time_on_h)
+                         
         self.temperature_comfort = C2K(temperature_comfort)
         self.temperature_bandwidth = temperature_bandwidth
         self.temperature_sensor_name = temperature_sensor

@@ -78,15 +78,9 @@ class HotWaterStorage(StorageUnit):
         self.ports[self.cold_water_input_port_name].flows['mass'] = -self.ports[self.hot_water_output_port_name].flows['mass']
         cold_port = self.ports[self.cold_water_input_port_name]
 
-        print("Temperatura acqua fredda:", cold_port.T)
-        print("Portata massica acqua fredda:", cold_port.flows.get("mass"))
-        print("Temperatura ambientale acqua fredda:", getattr(state.environmental_data, "temperature_cold_water", None))
-        #self.ports[self.cold_water_input_port_name].flows['heat'] = abs(self.ports[self.cold_water_input_port_name].flows['mass']) * WATER.cp * self.ports[self.cold_water_input_port_name].T
-        cold_port = self.ports[self.cold_water_input_port_name]
-
         if cold_port.T is None:
          cold_port.T = state.environmental_data.temperature_cold_water
-         print("Temperatura acqua fredda:", cold_port.T)
+
         cold_port.flows['heat'] = (abs(cold_port.flows['mass'])* WATER.cp*cold_port.T)
         
         heat_losses = self.calculate_losses(state)

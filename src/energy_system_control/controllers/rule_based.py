@@ -43,15 +43,17 @@ class HeatPumpRuleBasedController(HeaterControllerWithBandwidth):
                  temperature_bandwidth: float, 
                  power_PV_activation: float, 
                  max_storage_temperature_for_activation: float = 60,
-                 minimum_time_off_between_activations_h: float | None = None,
-                 minimum_time_on_between_deactivations_h: float | None = None):
+                 minimum_time_off_h: float | None = None,
+                 minimum_time_on_h: float | None = None):
+                 
         super().__init__(name, 
                          controlled_component, 
                          temperature_sensor, 
                          temperature_comfort, 
                          temperature_bandwidth,
-                         minimum_time_off_between_activations_h,
-                         minimum_time_on_between_deactivations_h)
+                         minimum_time_off_h=minimum_time_off_h,
+                         minimum_time_on_h=minimum_time_on_h)
+                         
         self.sensor_names.update({'PV power': PV_power_sensor})
         self.max_storage_temperature_for_activation = C2K(max_storage_temperature_for_activation)
         self.power_PV_activation = power_PV_activation
@@ -155,13 +157,14 @@ class ChargeControllerWithEngine(Controller):
 
         self.battery_charger_name = f"{battery_name}_charger"
         
+        # Sostituzione dei vecchi nomi con minimum_time_off_h e minimum_time_on_h
         super().__init__(name=name,
                          controlled_components=[self.battery_charger_name, engine_name],
                          sensors={'demand': electricity_demand_sensor,
                                   'PV_power': pv_power_sensor,
                                   'battery_SOC': battery_soc_sensor},
-                                  minimum_time_off_between_activations_h={engine_name: min_time_on_h},
-                                  minimum_time_on_between_deactivations_h={engine_name: min_time_off_h})
+                         minimum_time_off_h={engine_name: min_time_on_h},
+                         minimum_time_on_h={engine_name: min_time_off_h})
         
         self.battery_name = battery_name
         self.engine_name = engine_name
@@ -175,38 +178,6 @@ class ChargeControllerWithEngine(Controller):
         self.last_activation_time = -float('inf')
         self.engine_is_running = False
 
-    def get_action(self, state: SimulationState, **kwargs):
-        demand = abs(self.obs['demand'])      
-        pv_power = abs(self.obs['PV_power'])
-        soc = self.obs['battery_SOC']  
-        
-        net_deficit = demand - pv_power
-        
-        # 1. Logica teorica del motore
-        if net_deficit >= self.net_power_activation and soc <= self.min_soc_activation:
-            engine_action = 1.0
-        else:
-            engine_action = 0.0
-            
-        # 2. Creazione dell'azione temporanea e applicazione del filtro ereditato
-        action = {
-            self.engine_name: engine_action,
-            self.battery_charger_name: self.previous_action.get(self.battery_charger_name, 0.0)
-        }
-        
-        action = self.check_dynamic_limitations(state, action)
-        final_engine_action = action[self.engine_name]
-
-        # 3. Aggiornamento bilancio della batteria con l'azione reale del motore appena validata
-        engine_power = self.engine_p_el_design * final_engine_action
-        net_balance = pv_power + engine_power - demand
-        
-        action[self.battery_charger_name] = net_balance
-        self.previous_action = action
-        return action
-
-    def _compute_action(self, state: SimulationState):
-        pass
 
 class BatteryControllerAware(Controller):
     """

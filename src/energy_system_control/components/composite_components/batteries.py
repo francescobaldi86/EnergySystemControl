@@ -80,5 +80,21 @@ class Battery(CompositeComponent):
         return self.battery_pack.SOC
     
 class LithiumIonBattery(Battery):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs, battery_type = 'lithium ion')
+    def __init__(self, SOC_min: float = 0.1, **kwargs):
+        # we initialize the mother class creating self.charger and self.battery_pack with the lithium ion type
+        super().__init__(**kwargs, battery_type='lithium ion')
+        
+        self.SOC_min = SOC_min
+        
+        # saving the original method of the charger to be able to call it later
+        original_step = self.charger.step
+        
+        # we define a new step method that checks the SOC before allowing discharge
+        def safe_charger_step(state, action=None):
+            # if there is a discharge action and the SOC is below the minimum, we set the action to 0 (no discharge)
+            if action is not None and action < 0 and self.battery_pack.SOC <= self.SOC_min:
+                action = 0.0  
+            return original_step(state, action)
+        
+        # we override the step method of the charger with our new safe method
+        self.charger.step = safe_charger_step
