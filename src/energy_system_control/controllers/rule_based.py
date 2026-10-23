@@ -351,8 +351,9 @@ class BiogasEngineRuleBasedController(Controller):
                                   'PV_power_ovest': pv_power_sensor_ovest,
                                   'battery_SOC': battery_soc_sensor,
                                   'biogas_SOC': biogas_soc_sensor},
-                         minimum_time_off_between_activations_h={engine_name: min_time_on_h},
-                         minimum_time_on_between_deactivations_h={engine_name: min_time_off_h})
+                         minimum_time_off_h={engine_name: min_time_on_h},
+                         minimum_time_on_h={engine_name: min_time_off_h},
+                         minimum_load = {engine_name: min_engine_load_factor})
         
         self.battery_name = battery_name
         self.engine_name = engine_name
@@ -384,7 +385,7 @@ class BiogasEngineRuleBasedController(Controller):
         load_factor = required_power / self.engine_p_el_design
         return min(max(load_factor, self.min_engine_load_factor), 1.0)
 
-    def get_action(self, state: SimulationState, **kwargs):
+    def _compute_action(self, state: SimulationState, **kwargs):
         # Lettura dei sensori e calcolo net_deficit
         building_demand = abs(self.obs.get('building_demand', 0.0))
         hp_demand = abs(self.obs.get('hp_demand', 0.0))
@@ -437,6 +438,3 @@ class BiogasEngineRuleBasedController(Controller):
         action[self.battery_charger_name] = net_balance
         self.previous_action = action
         return action
-
-    def _compute_action(self, state: SimulationState):
-        pass

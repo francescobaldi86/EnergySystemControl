@@ -88,6 +88,8 @@ def test_8():
 
     os.makedirs(os.path.join(__HERE__, 'Tabelle_dati'), exist_ok=True)
     excel_path = os.path.join(__HERE__, 'Tabelle_dati', "test_8_results.xlsx")
+    df_plot = df_sensors.loc[:, ['pv_power_sensor_ovest', 'pv_power_sensor_est']]
+    df_plot['pv_power_total'] = df_sensors['pv_power_sensor_ovest'] + df_sensors['pv_power_sensor_est']
     with pd.ExcelWriter(excel_path) as writer:
         df_ports.to_excel(writer, sheet_name='Ports')
         df_sensors.to_excel(writer, sheet_name='Sensors')
