@@ -6,7 +6,7 @@ from .components.explicit_components.producers import ConstantPowerProducer, Ana
 from .components.explicit_components.pv_panels import PVpanel, PVpanelFromPVGISData, PVpanelFromData, PVpanelFromPVGIS
 from .components.storage_units.thermal_storage import HotWaterStorage, MultiNodeHotWaterTank
 from .components.storage_units.biogas_storage import BiogasStorage
-from .components.composite_components.batteries import LithiumIonBattery, Battery
+from .components.composite_components.batteries import LithiumIonBattery, Battery, LeadAcidBattery
 from .components.explicit_components.demands import ConstantPowerDemand, ElectricityDemand, HotWaterDemand
 from .components.grids.grids import ElectricityGrid, ColdWaterGrid, GasGrid
 from .components.composite_components.inverters import Inverter
@@ -22,7 +22,7 @@ __all__ = [
     "Environment",
     "SimulationConfig", "Simulator",
     "PVpanel", "PVpanelFromPVGISData", "PVpanelFromData", "PVpanelFromPVGIS", "ConstantPowerProducer", "AnaerobicDigester",
-    "HotWaterStorage", "LithiumIonBattery", "MultiNodeHotWaterTank", "BiogasStorage","Battery",
+    "HotWaterStorage", "LithiumIonBattery", "MultiNodeHotWaterTank", "BiogasStorage","Battery", "LeadAcidBattery",
     "HotWaterDemand", "ThermalLoss", "ConstantPowerDemand", "ElectricityDemand",
     "ResistanceHeater", "BalancingUtility", "ColdWaterGrid", "GenericUtility", "Inverter", "ElectricityGrid",
     "HeatPumpLorentzEfficiency", "HeatPumpConstantEfficiency", "HeatPump", "Bus",

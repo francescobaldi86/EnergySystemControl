@@ -305,7 +305,7 @@ class BiogasEngineRuleBasedController(Controller):
                  engine_p_el_design: float,
                  min_battery_soc_activation: float = 0.2,
                  target_battery_soc: float = 0.95,          # SOC desiderato per la batteria in ricarica
-                 max_battery_charge_power: float = 10.0,    # Potenza massima [kW] destinata alla ricarica
+                 max_battery_charge_power: float = 0.6,    # Potenza massima [kW] destinata alla ricarica
                  min_engine_load_factor: float = 0.15,     # Carico minimo tecnico (es. 15% di P_el_design)
                  biogas_soc_on_threshold: float = 0.8,
                  biogas_soc_off_threshold: float = 0.2,

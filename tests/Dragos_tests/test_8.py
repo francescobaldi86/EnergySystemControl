@@ -20,7 +20,7 @@ def test_8():
         esc.ColdWaterGrid(name='water_grid', utility_type='fluid'),
         esc.PVpanelFromPVGIS(name='pv_panels_est', installed_power=3.6, latitude=46.216, longitude=12.215, tilt=30, azimuth = -90, years=[2023]), #pannelli fotovoltaici orientati a est
         esc.PVpanelFromPVGIS(name='pv_panels_ovest', installed_power=3.6, latitude=46.216, longitude=12.215, tilt=30, azimuth = 90, years=[2023]), #pannelli fotovoltaici orientati a ovest
-        esc.LithiumIonBattery(name='battery', capacity=2.0, SOC_0=0.5),
+        esc.LeadAcidBattery(name='battery', capacity=3.18, SOC_0=0.5, SOC_min=0.3, SOC_derate=0.6, crate = 0.2),
         esc.Inverter(name='inverter', number_of_ac_output_ports=2, number_of_pv_input_ports=2),
         esc.AnaerobicDigester(name='biogas_producer', biogas_rate=3, methane_fraction=0.65),
         esc.BiogasStorage(name='biogas_storage', capacity=500.0, initial_ch4_mass=50.0, initial_co2_mass=60.0),

@@ -30,7 +30,8 @@ class HotWaterStorage(StorageUnit):
                  T_0: float = 40.0, 
                  convection_coefficient_losses: float = 0.8, 
                  located_inside: bool = True, 
-                 T_amb: float = 22):
+                 T_amb: float = 22,
+                 use_aux_heat_port: bool = False): 
         """
         Simplified model of hot water storage tank, assuming perfect mixing.
         Has potentially two heat sources: main and auxiliary
@@ -51,9 +52,11 @@ class HotWaterStorage(StorageUnit):
             Defines the location where the tank is placed. If True the heat losses are calculated assuming T_amb. If False, the outer air temperature is used. Defaults to True
         T_amb: float, optional
             Temperature [°C] used to calculate heat losses to the ambient from the tank if located_inside is True. Defaults to 22.0
+        use_aux_heat_port: bool, optional
+            Whether to instantiate an auxiliary heat input port. Defaults to False.
         """
-        self.volume = tank_volume * 1e-3  # Volume input is in liters, so it is converted to m3 to ensure the use of SI
-        self.height = tank_height if tank_height else (self.volume * 16 / math.pi)**(1/3)  # based on the assumption of height over diameter equal to 2.0
+        self.volume = tank_volume * 1e-3  
+        self.height = tank_height if tank_height else (self.volume * 16 / math.pi)**(1/3)  
         self.diameter = (4 * self.volume / self.height / math.pi)**0.5
         self.surface = math.pi * self.diameter * (self.height + 0.5 * self.diameter) 
         self.max_temperature = C2K(max_temperature)
@@ -61,17 +64,28 @@ class HotWaterStorage(StorageUnit):
         self.T_amb = C2K(T_amb)
         self.convection_coefficient_losses = convection_coefficient_losses
         self.located_inside = located_inside
+        
         self.cold_water_input_port_name = f'{name}_cold_water_input_port'
         self.hot_water_output_port_name = f'{name}_hot_water_output_port'
         self.main_heat_input_port_name = f'{name}_main_heat_input_port'
-        self.aux_heat_input_port_name = f'{name}_aux_heat_input_port'
-        self.heat_input_port_names = [self.main_heat_input_port_name, self.aux_heat_input_port_name]
-        self.fluid_port_names = [self.cold_water_input_port_name, self.hot_water_output_port_name]
         
-        super().__init__(name, {self.cold_water_input_port_name: 'fluid',
-                                      self.hot_water_output_port_name: 'fluid',
-                                      self.main_heat_input_port_name: 'heat',
-                                      self.aux_heat_input_port_name: 'heat'})
+        self.fluid_port_names = [self.cold_water_input_port_name, self.hot_water_output_port_name]
+        self.heat_input_port_names = [self.main_heat_input_port_name]
+        
+        ports_dict = {
+            self.cold_water_input_port_name: 'fluid',
+            self.hot_water_output_port_name: 'fluid',
+            self.main_heat_input_port_name: 'heat'
+        }
+        
+        if use_aux_heat_port:
+            self.aux_heat_input_port_name = f'{name}_aux_heat_input_port'
+            self.heat_input_port_names.append(self.aux_heat_input_port_name)
+            ports_dict[self.aux_heat_input_port_name] = 'heat'
+        else:
+            self.aux_heat_input_port_name = None
+        
+        super().__init__(name, ports_dict)
     
     def step(self, state: SimulationState, action):
         # Heat port inputs are provided from external sources. Hot water output also. Hence, only the cold water input is updated

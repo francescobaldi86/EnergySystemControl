@@ -98,3 +98,72 @@ class LithiumIonBattery(Battery):
         
         # we override the step method of the charger with our new safe method
         self.charger.step = safe_charger_step
+
+class LeadAcidBattery(Battery):
+    def __init__(self, SOC_min: float = 0.3, SOC_derate: float = 0.6, **kwargs):
+        """
+        Model of a VRLA GEL Deep Cycle Lead-Acid Battery (e.g., Victron BAT412126101).
+        
+        Parameters
+        ----------
+        SOC_min : float
+            Minimum State of Charge below which the battery stops providing power (Depth of Discharge limit).
+        SOC_derate : float
+            State of Charge threshold below which the maximum discharge power starts to linearly derate.
+        """
+        # Set typical physical parameters for GEL VRLA batteries
+        kwargs.setdefault('efficiency_charge', 0.85)
+        kwargs.setdefault('efficiency_discharge', 0.95)
+        # Self-discharge rate of <2% per month (at 20°C) converted to an hourly basis
+        kwargs.setdefault('self_discharge_rate', 0.0000277) 
+        
+        # Initialize the mother class utilizing 'base' to load the standard BatteryPack from BATTERY_REGISTRY
+        super().__init__(**kwargs, battery_type='base')
+        
+        self.SOC_min = SOC_min
+        self.SOC_derate = SOC_derate
+        
+        self.battery_capacity = kwargs.get('capacity', 0.0)
+        
+        # Save the original step method of the charger to wrap it with the new physical constraints
+        original_step = self.charger.step
+        
+        def safe_charger_step(state, action=None):
+            if action is not None: 
+                current_soc = self.battery_pack.SOC
+                
+                # Charge: Overcharge prevention (Virtual Curtailment)
+                if action > 0:
+                    # Maximum energy (kWh) that the battery can still store before reaching 100%
+                    energy_space_kwh = self.battery_capacity * (1.0 - current_soc)
+                    
+                    # Maximum acceptable power in this step without exceeding SOC = 1.0
+                    # This accounts for charging efficiency and time step duration in hours
+                    max_charge_power = energy_space_kwh / (self.charger.efficiency_charge * state.time_step)
+                    
+                    # The final physical limit is the minimum between the remaining thermodynamic space 
+                    # and the nominal maximum charging power (C-rate limit)
+                    max_charge_power = min(max_charge_power, self.charger.max_charging_power)
+                    
+                    # Cut the excess power requested by the controller
+                    if action > max_charge_power:
+                        action = max_charge_power
+
+                # Deep discharge prevention and linear derating 
+                elif action < 0:
+                    # Absolute cutoff of power output if the SOC drops below the critical minimum threshold
+                    if current_soc <= self.SOC_min:
+                        action = 0.0  
+                    # Linear reduction of the maximum power output when operating in a partial state of charge
+                    elif current_soc < self.SOC_derate:
+                        derating_factor = (current_soc - self.SOC_min) / (self.SOC_derate - self.SOC_min)
+                        max_possible_discharge = -self.charger.max_discharging_power * derating_factor
+                        
+                        # Limit the requested discharge action to what the battery can physically provide
+                        if action < max_possible_discharge:
+                            action = max_possible_discharge
+                        
+            return original_step(state, action)
+        
+        # Override the default charger step method with the new constrained method
+        self.charger.step = safe_charger_step
