@@ -71,13 +71,19 @@ class AnaerobicDigester(Producer):
         return (self.methane_mass_fraction* Methane.LHV)
 
     @property
+    def volume_flow_l_h(self) -> float:
+     """Biogas volume flow [L/h]."""
+     return self.biogas_rate
+
+    @property
+    def volume_flow_m3_s(self) -> float:
+      """Biogas volume flow [m³/s]."""
+      return self.volume_flow_l_h / 3_600_000.0
+
+    @property
     def mass_flow(self) -> float:
-        """Biogas mass flow [kg/s]."""
-
-        # Nm³/h -> m³/s
-        volume_flow_m3_s = self.biogas_rate / 3600.0
-
-        return (volume_flow_m3_s * self.biogas_density)
+     """Biogas mass flow [kg/s]."""
+     return self.volume_flow_m3_s * self.biogas_density
 
     @property
     def chemical_power(self) -> float:
@@ -89,7 +95,7 @@ class AnaerobicDigester(Producer):
 
         mass_flow = self.mass_flow
 
-        volume_flow = self.biogas_rate / 3600.0
+        volume_flow = self.volume_flow_m3_s
 
         chemical_power = self.chemical_power
 
@@ -156,16 +162,24 @@ class AnaerobicDigesterFromData(AnaerobicDigester):
 
         # recupero dai dati TimeSeries data la frazione di metano e la portata in massa di produzione di biogas
         methane_fraction = self.methane_fraction_data.data[state.time_id]
-        mass_flow = self.mass_flow_data.data[state.time_id]
-        # Calcolo gli altri valori utili
-        volume_flow = mass_flow / self.biogas_density
+        volume_flow_l_h = self.volume_flow_data.data[state.time_id]
+        # Aggiorna la frazione di metano
+        self.methane_fraction = methane_fraction
+
+        # Portata volumetrica: L/h -> m³/s
+        volume_flow_m3_s = volume_flow_l_h / 3_600_000.0
+
+        # Calcola la portata massica [kg/s]
+        mass_flow = volume_flow_m3_s * self.biogas_density
+
+        # Calcola la potenza chimica [kW]
         chemical_power = mass_flow * self.biogas_LHV
-        # Assegno i valori alla porta di output
+
+       # Assegna i valori alla porta di output
         port = self.ports[self.port_name]
         port.methane_fraction = methane_fraction
         port.LHV = self.biogas_LHV
 
         port.flows["mass"] = -mass_flow
-        port.flows["volume"] = -volume_flow
+        port.flows["volume"] = -volume_flow_m3_s
         port.flows["chemical_energy"] = -chemical_power
-    

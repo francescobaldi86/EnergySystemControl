@@ -236,3 +236,147 @@ def test_uno():
 
     df_ports.to_csv(os.path.join(__HERE__,"test_1_results_ports.csv",),sep=";",)
 test_uno()
+
+
+__HERE__ = os.path.dirname(os.path.realpath(__file__))
+__TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+
+
+def test_due():
+    components = [
+        # Domanda di acqua calda sanitaria
+        esc.IEAHotWaterDemand(
+            name="demand_DHW",
+            reference_temperature=40,
+            profile_name="M",
+        ),
+
+        # Digestore anaerobico
+        AnaerobicDigesterFromData(
+            name="anaerobic_digester",
+            data_path=__HERE__,
+            filename="biogas_data.csv",
+            # Impostare qui rescale_factor=2.5
+            # se questo parametro è supportato dalla classe.
+        ),
+
+        # Accumulo di biogas: 300 litri = 0.3 m3
+        BiogasStorage(
+            name="biogas_storage",
+            capacity=0.3,
+            initial_soc=1.0,
+            initial_methane_fraction=0.6,
+        ),
+
+        # Caldaia alimentata a biogas
+        GasBoiler(
+            name="gas_boiler",
+            efficiency=0.90,
+            max_power=10.0,
+        ),
+
+        # Accumulo di acqua calda
+        esc.HotWaterStorage(
+            name="hot_water_storage",
+            max_temperature=80,
+            tank_volume=200,
+            T_0=45,
+            convection_coefficient_losses=0.0,
+        ),
+
+        # Rete di acqua fredda
+        esc.ColdWaterGrid(
+            name="water_grid",
+            utility_type="fluid",
+        ),
+    ]
+
+    controllers = [
+        esc.HeaterControllerWithBandwidth(
+            "gas_boiler_controller",
+            "gas_boiler",
+            "storage_tank_temperature_sensor",
+            40,
+            10,
+        )
+    ]
+
+    sensors = [
+        esc.TankTemperatureSensor(
+            "storage_tank_temperature_sensor",
+            "hot_water_storage",
+        ),
+        esc.SOCSensor(
+            "biogas_storage_SOC_sensor",
+            "biogas_storage",
+        ),
+    ]
+
+    connections = [
+        # Domanda e accumulo di acqua calda
+        (
+            "demand_DHW_fluid_port",
+            "hot_water_storage_hot_water_output_port",
+        ),
+
+        # Caldaia e accumulo termico
+        (
+            "gas_boiler_heat_output_port",
+            "hot_water_storage_main_heat_input_port",
+        ),
+
+        # Digestore e accumulo di biogas
+        (
+            "anaerobic_digester_biogas_port",
+            "biogas_storage_input",
+        ),
+
+        # Accumulo di biogas e caldaia
+        (
+            "biogas_storage_output",
+            "gas_boiler_biogas_input_port",
+        ),
+
+        # Ingresso dell'acqua fredda
+        (
+            "hot_water_storage_cold_water_input_port",
+            "water_grid_fluid_port",
+        ),
+    ]
+
+    env = esc.Environment(
+        components=components,
+        controllers=controllers,
+        sensors=sensors,
+        connections=connections,
+    )
+
+    sim_config = esc.SimulationConfig(
+        time_start_h=0.0,
+        time_end_h=24.0 * 7,
+        time_step_h=5 / 60,
+    )
+
+    sim = esc.Simulator(env, sim_config)
+    results = sim.run()
+
+    df_ports, df_controllers, df_sensors = results.to_dataframe()
+
+    # Verifica della temperatura dell'accumulo termico
+    assert math.isclose(
+        df_sensors.loc[10.0, "storage_tank_temperature_sensor"],
+        325,
+        abs_tol=1,
+    )
+
+    # Verifica che lo storage di biogas si svuoti almeno una volta
+    soc = df_sensors["biogas_storage_SOC_sensor"]
+
+    assert (soc <= 1e-9).any(), (
+        "Lo storage di biogas non si è mai svuotato."
+    )
+
+    df_ports.to_csv(
+        os.path.join(__HERE__, "test_1_results_ports.csv"),
+        sep=";",
+    )
