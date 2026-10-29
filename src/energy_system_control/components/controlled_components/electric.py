@@ -57,4 +57,3 @@ class BatteryCharger(ControlledComponent):
                 return self.max_discharging_power * SOC / SOC_min
         else:  # If it's not lithium-ion, we assume constant max discharging power
             return self.max_discharging_power
-        

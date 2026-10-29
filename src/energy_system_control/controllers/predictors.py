@@ -11,7 +11,9 @@ from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegresso
 from sklearn.preprocessing import StandardScaler
 from sklearn.multioutput import MultiOutputRegressor
 from energy_system_control.sim.state import SimulationState
-from energy_system_control.components.base import Component
+from energy_system_control.core.base_classes import TimeSeriesData
+from energy_system_control.helpers import *
+
 AlignMethod = Literal["raise", "ffill", "linear"]
 ANNModelType = Literal["pure regressor", "regressor-classifier"]
 
@@ -23,7 +25,8 @@ class Predictor(ABC):
         self.name = name
         self.variable_to_predict = variable_to_predict
 
-    def initialize(self):
+    def initialize(self, ctx):
+        self.time_step_simulation = float(np.diff(ctx.state.time_vector[:2])[0])
         return None
     
     def update(self):
@@ -40,6 +43,33 @@ class Predictor(ABC):
 
         Output: DataFrame indexed by target timestamps, columns = variables.
         """
+
+    def adjust_prediction_to_timestep(self, prediction_raw, time_step_prediction_h):
+        """
+        Generic method that allows for the adjustment of the prediction to a specific time step
+        """
+        if time_step_prediction_h is None:
+            time_step_prediction = self.time_step_simulation
+            return prediction_raw
+        time_step_prediction = time_step_prediction_h * 3600
+        if time_step_prediction < self.time_step_simulation:
+            raise ValueError(
+                "time_step_prediction cannot be smaller than the simulation time step"
+            )
+        if time_step_prediction % self.time_step_simulation != 0:
+            raise ValueError(f'The prediction time step must be a multiple of the simulation time step. Current values are ts_sim: {self.time_step_simulation/3600:.1f} h, ts_pred: {time_step_prediction_h:.1f} h')
+        if time_step_prediction <= 0:
+            raise ValueError("time_step_prediction must be positive")
+
+        samples_per_bin = int(time_step_prediction / self.time_step_simulation)
+        if len(prediction_raw.shape) == 1:
+            return prediction_raw.reshape(-1, samples_per_bin).mean(axis=1)
+        else:
+            pred = np.ndarray(shape = (int(prediction_raw.shape[0] / samples_per_bin), prediction_raw.shape[1]))
+            for var_id in range(prediction_raw.shape[1]):
+                pred[:, var_id] = prediction_raw[:,var_id].reshape(-1, samples_per_bin).mean(axis=1)
+            #return prediction_raw.reshape(-1, samples_per_bin).mean(axis=1)
+            return pred
     
  
 class OfflineForecastPredictor(Predictor):
@@ -134,7 +164,8 @@ class OfflineForecastPredictor(Predictor):
     def predict(
         self,
         horizon: float,  # In seconds
-        state: SimulationState
+        state: SimulationState,
+        time_step_prediction_h: float | None = None
     ) -> np.array:
         """
         Return predictions from (now, now+horizon] on a dt grid.
@@ -147,6 +178,8 @@ class OfflineForecastPredictor(Predictor):
             The prediction horizon in hours.
         state : SimulationState
             The current state of the simulation (instance of the SimulationState class)
+        time_step_prediction_h: float
+            Prediction time step, in hours. Defaults to None (in which case, the simulation time step is used)
 
         Returns:
         --------
@@ -184,10 +217,17 @@ class OfflineForecastPredictor(Predictor):
         else:
             out = self._align_to_grid(run, target_index, method=self.align)
         # Ensure variables exist
-        if self.variable_to_predict not in out.columns:
-            raise KeyError(f"Missing variables in forecast_df: {self.variable_to_predict}")
+        variable_to_predict = safe_to_list(self.variable_to_predict)
+        for var in variable_to_predict:
+            if var not in out.columns:
+                raise KeyError(f"Missing variables in forecast_df: {var}")
 
-        return out.loc[target_index, self.variable_to_predict]
+        pred = out.loc[target_index, self.variable_to_predict]
+        pred = self.adjust_prediction_to_timestep(pred.values, time_step_prediction_h)
+
+        return pred
+
+
     
     def _align_to_grid(
         self,
@@ -310,16 +350,85 @@ class DailyProfilePredictor(Predictor):
 
 
 class PerfectTimeSeriesPredictor(Predictor):
-    read_component: str
-    def __init__(self, name: str, read_component: str, variable_to_predict: str = None):
+    data_source: str
+    def __init__(self, name: str, data_source: str, ts_data: TimeSeriesData | None = None, read_component: str | None = None, variable_to_predict: str = None):
         super().__init__(name = name, variable_to_predict=variable_to_predict)
+        self.data_source = data_source
+        self.ts_data = ts_data
         self.read_component = read_component
 
     def initialize(self, ctx):
-        self.data = ctx.environment.components[self.read_component].ts.data
+        match self.data_source:
+            case 'component data':
+                self.data = ctx.environment.components[self.read_component].ts.data
+            case 'external data':
+                self.data = self.ts_data.data
+            case _:
+                raise KeyError(f'Data source {self.data_source} not among the admissible options: ["component data", "external data"]')
+        super().initialize(ctx)
 
-    def predict(self, horizon, state):
-        return self.data[state.time_id: np.where(state.time_vector_for_prediction == state.time + horizon*3600)[0][0]]
+    def predict(
+        self,
+        horizon: float,
+        state: SimulationState,
+        time_step_prediction_h: float | None = None,
+    ) -> np.ndarray:
+        """Return source data averaged over the requested prediction time step."""
+        prediction_at_simulation_time_step = self.data[state.time_id: np.where(state.time_vector_for_prediction == state.time + horizon*3600)[0][0]]
+        prediction = self.adjust_prediction_to_timestep(prediction_at_simulation_time_step, time_step_prediction_h)
+        return prediction
+
+    @classmethod
+    def from_component_data(
+        cls,
+        name: str,
+        read_component: str,
+        variable_to_predict: str = None,
+        **kwargs
+    ):
+        return cls(name = name, 
+                   data_source = 'component data',
+                   read_component = read_component,
+                   variable_to_predict = variable_to_predict,
+                    **kwargs)
+
+    @classmethod
+    def from_external_data(
+        cls,
+        name: str,
+        variable_to_predict: str,
+        time_alignment: TimeAlignment,
+        df: pd.DataFrame | pd.Series,
+        var_type: VariableType = "energy", 
+        var_unit: VariableUnit = 'kWh',
+        column_name: str | None = None,
+        **kwargs
+    ):
+        if isinstance(df, pd.DataFrame):
+            raw = df[column_name]
+        elif isinstance(df, pd.Series):
+            raw = df
+        else:
+            raise TypeError('The input "df" provided should be either a pandas Series or DataFrame.')
+        ts_data = TimeSeriesData(
+                    raw = raw,
+                    time_alignment = time_alignment,
+                    var_type = var_type,
+                    var_unit = var_unit)
+
+        return cls(name = name, 
+                   variable_to_predict = variable_to_predict,
+                   data_source = 'external data',
+                   ts_data = ts_data,
+                   **kwargs)
+
+    def resample_data(self, time_step_h: float, simulation_end_h: float, simulation_start_datetime: datetime):
+        if self.ts_data is not None:
+            self.ts_data.resample(
+                time_step_h=time_step_h, 
+                simulation_end_h=simulation_end_h, 
+                simulation_start_datetime=simulation_start_datetime)
+
     
 
 class MLBasedPredictor(Predictor):
@@ -462,6 +571,8 @@ class MLBasedPredictor(Predictor):
 
         self.sensor = ctx.environment.sensors[self.sensor_name]
 
+        super().initialize(ctx)
+
     # ------------------------------------------------------------------
 
     def update(self, time_s):
@@ -536,7 +647,7 @@ class MLBasedPredictor(Predictor):
 
     # ------------------------------------------------------------------
 
-    def predict(self, horizon_h: float, state: SimulationState):
+    def predict(self, horizon_h: float, state: SimulationState, time_step_prediction_h: float | None = None):
 
         if horizon_h != self.prediction_horizon_h:
             raise ValueError("Prediction horizon mismatch")
@@ -574,6 +685,8 @@ class MLBasedPredictor(Predictor):
 
         # enforce non-negativity
         pred = np.maximum(pred, 0)
+
+        pred = self.adjust_prediction_to_timestep(pred, time_step_prediction_h)
 
         return pred
 
@@ -633,6 +746,7 @@ class AutocorrPredictor(Predictor):
         self.prediction_horizon = int(self.prediction_horizon_h * 3600 // dt)
         # convert user-specified lags in hours to steps
         self.lags_steps = [int(lag_h * 3600 // dt) for lag_h in self.lags_h]
+        super().initialize(ctx)
 
     # ---------------- Update ----------------
     def update(self, time_s):
@@ -641,7 +755,7 @@ class AutocorrPredictor(Predictor):
         self.time_buffer.append(time_s)
 
     # ---------------- Predict ----------------
-    def predict(self, horizon_h: float, state):
+    def predict(self, horizon_h: float, state, time_step_prediction_h: float | None = None):
         """
         Predict future values using weighted average based on autocorrelation.
 
@@ -686,6 +800,9 @@ class AutocorrPredictor(Predictor):
 
         # enforce non-negativity
         pred = np.maximum(pred, 0)
+
+        pred = self.adjust_prediction_to_timestep(pred, time_step_prediction_h)
+
         return pred
 
 
@@ -749,6 +866,7 @@ class ProfileARPredictor(Predictor):
         self.residual_lags = [
             int(lag_h * 3600 // dt) for lag_h in self.residual_lags_h
         ]
+        super().initialize(ctx)
 
     # ------------------------------------------------------------------
 
@@ -765,7 +883,7 @@ class ProfileARPredictor(Predictor):
         values = np.array(self.buffer)[-self.buffer_size:]
         times = np.array(self.time_buffer)[-self.buffer_size:]
 
-        dt = times[1] - times[0]
+        dt = times[2] - times[1]
         steps_per_day = int(86400 // dt)
 
         # --- 1. Build weekly profile ---
@@ -814,7 +932,7 @@ class ProfileARPredictor(Predictor):
 
     # ------------------------------------------------------------------
 
-    def predict(self, horizon_h: float, state):
+    def predict(self, horizon_h: float, state, time_step_prediction_h: float | None = None):
 
         if horizon_h != self.prediction_horizon_h:
             raise ValueError("Prediction horizon mismatch")
@@ -861,4 +979,6 @@ class ProfileARPredictor(Predictor):
             y_pred = base + r_pred
             pred.append(max(y_pred, 0))  # enforce non-negative
 
-        return np.array(pred)
+        pred = self.adjust_prediction_to_timestep(np.array(pred), time_step_prediction_h)
+
+        return 

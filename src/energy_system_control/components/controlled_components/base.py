@@ -53,37 +53,6 @@ class HeatSource(ControlledComponent):
     def get_power_input(self, state: SimulationState):
         return self.get_heat_output(state) / self.get_efficiency(state)
 
-    ''' def step(self, state: SimulationState, action):
-        self.ports[self.heat_output_port_name].flows['heat'] = -self.get_heat_output(state) * action
-        if isinstance(self.ports[self.power_input_port_name], BiogasPort):
-           """ self.ports[self.power_input_port_name].flows['chemical_energy'] = self.get_power_input(state) * action
-           self.ports[self.power_input_port_name].flows['mass'] = self.ports[self.power_input_port_name].flows['chemical_energy'] / self.ports[self.power_input_port_name].LHV"""
-        power_input_port = self.ports[self.power_input_port_name]
-        LHV = power_input_port.LHV
-        chemical_energy = power_input_port.flows['chemical_energy']
-
-        if LHV > 0:
-          power_input_port.flows['mass'] = chemical_energy / LHV
-            if self.ports[self.power_input_port_name].LHV > 0.0:
-                self.ports[self.power_input_port_name].flows['chemical_energy'] = self.get_power_input(state) * action
-                self.ports[self.power_input_port_name].flows['mass'] = self.ports[self.power_input_port_name].flows['chemical_energy'] / self.ports[self.power_input_port_name].LHV
-                self.ports[self.power_input_port_name].flows['volume'] = self.ports[self.power_input_port_name].flows['mass'] / self.ports[self.power_input_port_name].density
-            else: 
-                self.ports[self.power_input_port_name].flows['chemical_energy'] = 0.0
-                self.ports[self.power_input_port_name].flows['mass'] = 0.0
-                self.ports[self.power_input_port_name].flows['volume'] = 0.0
-        elif isinstance(self.ports[self.power_input_port_name], FuelPort):
-            self.ports[self.power_input_port_name].flows['chemical_energy'] = self.get_power_input(state) * action
-        else:
-           power_input_port.flows['mass'] = 0.0
-        self.ports[self.power_input_port_name].flows['volume'] = self.ports[self.power_input_port_name].flows['mass'] / self.ports[self.power_input_port_name].density
-        
-        """elif isinstance(self.ports[self.power_input_port_name], FuelPort):
-        self.ports[self.power_input_port_name].flows['chemical_energy'] = self.get_power_input(state) * action
-        else:
-        self.ports[self.power_input_port_name].flows[self.source_type] = self.get_power_input(state) * action"""
-        '''
-
     def step(self, state: SimulationState, action):
       # Potenza termica erogata dalla caldaia
       heat_output = self.get_heat_output(state) * action
@@ -115,8 +84,4 @@ class HeatSource(ControlledComponent):
             power_input_port.flows["volume"] = 0.0
 
       else:
-        # Mantieni qui la gestione originale degli altri tipi di fonte
-        # (elettricità o combustibile), secondo le convenzioni del progetto.
-        raise NotImplementedError(
-            f"Gestione della fonte '{self.source_type}' da ripristinare."
-        )
+        power_input_port.flows[self.source_type] = self.get_power_input(state) * action

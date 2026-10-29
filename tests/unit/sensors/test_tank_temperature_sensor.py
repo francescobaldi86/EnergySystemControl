@@ -20,7 +20,7 @@ class TestTankTemperatureSensor:
     def test_temperature_sensor_in_hot_water_system(self):
         """Test TankTemperatureSensor in hot water system"""
         components = [
-            esc.IEAHotWaterDemand(
+            esc.HotWaterDemand.from_iea(
                 name="demand_DHW",
                 reference_temperature=40,
                 profile_name='M'
@@ -55,8 +55,7 @@ class TestTankTemperatureSensor:
         )
         
         sim_config = esc.SimulationConfig(
-            time_start_h=0.0,
-            time_end_h=6.0,
+            simulation_end_h=6.0,
             time_step_h=1.0
         )
         
@@ -77,7 +76,7 @@ class TestTankTemperatureSensor:
         initial_temp_c = 55.0
         
         components = [
-            esc.IEAHotWaterDemand(
+            esc.HotWaterDemand.from_iea(
                 name="demand_DHW",
                 reference_temperature=40,
                 profile_name='M'
@@ -112,8 +111,7 @@ class TestTankTemperatureSensor:
         )
         
         sim_config = esc.SimulationConfig(
-            time_start_h=0.0,
-            time_end_h=0.5,
+            simulation_end_h=0.5,
             time_step_h=0.5
         )
         
@@ -129,7 +127,7 @@ class TestTankTemperatureSensor:
     def test_temperature_sensor_with_heat_input(self):
         """Test temperature sensor reading with heat input from hot water demand"""
         components = [
-            esc.IEAHotWaterDemand(
+            esc.HotWaterDemand.from_iea(
                 name="demand_DHW",
                 reference_temperature=40,
                 profile_name='M'
@@ -164,8 +162,7 @@ class TestTankTemperatureSensor:
         )
         
         sim_config = esc.SimulationConfig(
-            time_start_h=0.0,
-            time_end_h=6.0,
+            simulation_end_h=6.0,
             time_step_h=1.0
         )
         

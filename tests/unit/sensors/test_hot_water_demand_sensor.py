@@ -22,7 +22,7 @@ class TestHotWaterDemandSensor:
     def test_sensor_measures_net_heat_flow(self):
         """Test that HotWaterDemandSensor measures net heat flow (T_hot - T_cold)"""
         components = [
-            esc.IEAHotWaterDemand(
+            esc.HotWaterDemand.from_iea(
                 name="demand_DHW",
                 reference_temperature=40,
                 profile_name='M'
@@ -57,8 +57,7 @@ class TestHotWaterDemandSensor:
         )
         
         sim_config = esc.SimulationConfig(
-            time_start_h=0.0,
-            time_end_h=6.0,
+            simulation_end_h=6.0,
             time_step_h=1.0
         )
         
@@ -77,7 +76,7 @@ class TestHotWaterDemandSensor:
     def test_sensor_in_simple_hot_water_system(self):
         """Test HotWaterDemandSensor in a simple hot water system"""
         components = [
-            esc.IEAHotWaterDemand(
+            esc.HotWaterDemand.from_iea(
                 name="demand_DHW",
                 reference_temperature=40,
                 profile_name='M'
@@ -112,8 +111,7 @@ class TestHotWaterDemandSensor:
         )
         
         sim_config = esc.SimulationConfig(
-            time_start_h=0.0,
-            time_end_h=24.0,
+            simulation_end_h=24.0,
             time_step_h=1.0
         )
         
@@ -133,7 +131,7 @@ class TestHotWaterDemandSensor:
         """Test that heat flow increases when hot water temperature increases"""
         # Test case 1: Lower hot water temperature
         components_low = [
-            esc.IEAHotWaterDemand(
+            esc.HotWaterDemand.from_iea(
                 name="demand_DHW",
                 reference_temperature=40,
                 profile_name='M'
@@ -168,8 +166,7 @@ class TestHotWaterDemandSensor:
         )
         
         sim_config = esc.SimulationConfig(
-            time_start_h=0.0,
-            time_end_h=6.0,
+            simulation_end_h=6.0,
             time_step_h=1.0
         )
         
@@ -181,7 +178,7 @@ class TestHotWaterDemandSensor:
         
         # Test case 2: Higher hot water temperature
         components_high = [
-            esc.IEAHotWaterDemand(
+            esc.HotWaterDemand.from_iea(
                 name="demand_DHW",
                 reference_temperature=40,
                 profile_name='M'

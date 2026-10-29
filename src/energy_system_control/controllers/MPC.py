@@ -13,6 +13,7 @@ from energy_system_control import HotWaterDemand, HotWaterStorage, ElectricityDe
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.helpers import find_object_of_type
 from energy_system_control.constants import WATER
+from energy_system_control.helpers import calculate_solar_angles, calculate_effective_irradiance
 
 
 SolverName = Literal["OSQP", "HIGHS"]
@@ -38,8 +39,16 @@ class MPCController(Controller):
         predictors: Dict[str, str],
         horizon: float,
         solver: SolverName = "HIGHS",
+        minimum_time_off_between_activations_h: dict = {},
+        minimum_time_on_between_deactivations_h: dict = {},
     ):
-        super().__init__(name, controlled_components, sensors, predictors)
+        super().__init__(
+            name = name, 
+            controlled_components = controlled_components, 
+            sensors = sensors, 
+            predictors = predictors,
+            minimum_time_off_between_activations_h = minimum_time_off_between_activations_h,
+            minimum_time_on_between_deactivations_h = minimum_time_on_between_deactivations_h)
         if horizon <= 0:
             raise ValueError("horizon_steps must be > 0")
         self.horizon = horizon 
@@ -65,6 +74,7 @@ class MPCController_HybridDHW(MPCController):
     def __init__(self,
                     name: str,
                     horizon: float,
+                    time_step_h: float,
                     heat_pump_name: str,
                     storage_temperature_sensor: str | None = None,
                     battery_SOC_sensor: str | None = None,
@@ -73,9 +83,13 @@ class MPCController_HybridDHW(MPCController):
                     electricity_demand_predictor_name: str | None = None,
                     bounds_SOC: Tuple[float, float] = (0.3, 0.9),
                     bounds_temperature: Tuple[float, float] = (313.15, 353.15),
-                    cost_of_temperature_violation: float = 1000.0
+                    cost_of_temperature_violation: float = 1000.0,
+                    minimum_time_off_between_activations_h: float | None = None,
+                    minimum_time_on_between_deactivations_h: float | None = None,
+                    pv_power_prediction_type: str = 'PV power'
                     ):
         self.PV_power_predictor_name = PV_power_predictor_name
+        self.PV_power_prediction_type = pv_power_prediction_type
         self.heat_demand_predictor_name = heat_demand_predictor_name
         self.electricity_demand_predictor_name = electricity_demand_predictor_name
         sensors = {"temperature_storage": storage_temperature_sensor, "soc_battery": battery_SOC_sensor}
@@ -85,13 +99,24 @@ class MPCController_HybridDHW(MPCController):
         self.bounds_SOC = bounds_SOC
         self.bounds_temperature = bounds_temperature
         self.cost_of_temperature_violation = cost_of_temperature_violation
+        self.optimization_time_step_h = time_step_h
+        if minimum_time_off_between_activations_h is not None:
+            minimum_time_off_between_activations_h = {heat_pump_name: minimum_time_off_between_activations_h}
+        else:
+            minimum_time_off_between_activations_h = {}
+        if minimum_time_on_between_deactivations_h is not None:
+            minimum_time_on_between_deactivations_h = {heat_pump_name: minimum_time_on_between_deactivations_h}
+        else:
+            minimum_time_on_between_deactivations_h = {}
         super().__init__(
             name = name,
             controlled_components = [heat_pump_name],
             sensors = sensors,
             predictors = predictors,
             horizon = horizon,
-            solver = cp.HIGHS)
+            solver = cp.HIGHS,
+            minimum_time_off_between_activations_h=minimum_time_off_between_activations_h,
+            minimum_time_on_between_deactivations_h=minimum_time_on_between_deactivations_h)
         
     def load_controlled_components(self, components):
         self.heat_pump = find_object_of_type(HeatPump, components)
@@ -133,8 +158,7 @@ class MPCController_HybridDHW(MPCController):
         problem = self.problem
         
         # Calculating first parameters
-        TIME_STEP = ctx.state.time_step / 3600
-        TIME_HORIZON = int(self.horizon // TIME_STEP)
+        TIME_HORIZON = int(self.horizon // (self.optimization_time_step_h))
         problem.variables = {
             'temperature_hot_water_storage': cp.Variable(TIME_HORIZON),
             'energy_battery': cp.Variable(TIME_HORIZON),
@@ -154,8 +178,8 @@ class MPCController_HybridDHW(MPCController):
             'MASS_STORAGE': self.hot_water_storage.volume * WATER.rho,
             'EFFICIENCY_EES_CHA': self.battery.charger.efficiency_charge * self.inverter.converter.efficiency,
             'EFFICIENCY_EES_DIS': self.battery.charger.efficiency_discharge * self.inverter.converter.efficiency,
-            'POWER_HP_EL': self.heat_pump.Qdot_design if self.heat_pump else 0.0,
-            'POWER_HP_TH': self.heat_pump.Qdot_design * self.heat_pump.COP_design if self.heat_pump else 0.0,
+            'POWER_HP_TH': self.heat_pump.Qdot_design if self.heat_pump else 0.0,
+            'POWER_HP_EL': self.heat_pump.Qdot_design / self.heat_pump.COP_design if self.heat_pump else 0.0,
             'POWER_RESISTANCE_EL': self.resistance_heater.power if self.resistance_heater else 0.0,
             'POWER_RESISTANCE_TH': self.resistance_heater.power if self.resistance_heater else 0.0,
             'ENERGY_COST': self.electricity_grid.cost_of_energy_purchased,
@@ -179,18 +203,18 @@ class MPCController_HybridDHW(MPCController):
         }
         # Matrices and vectors for thermal storage temperature update
         A_TES = np.zeros(shape=[TIME_HORIZON-1,TIME_HORIZON])
-        A_TES_main = np.array([problem.constant_parameters['DISPERSION_COEFFICIENT'] * problem.constant_parameters['DISPERSION_SURFACE'] * TIME_STEP / (problem.constant_parameters['MASS_STORAGE'] * WATER.cp) - 1] * TIME_HORIZON)
+        A_TES_main = np.array([problem.constant_parameters['DISPERSION_COEFFICIENT'] * problem.constant_parameters['DISPERSION_SURFACE'] * self.optimization_time_step_h / (problem.constant_parameters['MASS_STORAGE'] * WATER.cp) - 1] * TIME_HORIZON)
         A_TES_above = np.array([1] * (TIME_HORIZON-1))
         A_TES = np.diag(A_TES_main) + np.diag(A_TES_above, k=1)
         problem.constant_parameters['A_TES'] = A_TES = A_TES[:-1, :]
-        problem.constant_parameters['B1_TES'] = TIME_STEP / (problem.constant_parameters['MASS_STORAGE'] * problem.constant_parameters['HEAT_CAPACITY_WATER'])
+        problem.constant_parameters['B1_TES'] = self.optimization_time_step_h / (problem.constant_parameters['MASS_STORAGE'] * problem.constant_parameters['HEAT_CAPACITY_WATER'])
 
         # Matrices and vectors for electrical storage energy update
         A_EES = np.zeros(shape=[TIME_HORIZON-1,TIME_HORIZON])
         A_EES = np.diag(np.ones(TIME_HORIZON-1), k=1) - np.diag(np.ones(TIME_HORIZON)) 
         problem.constant_parameters['A_EES'] = A_EES = A_EES[:-1, :]
-        problem.constant_parameters['B1_EES_CHA'] = TIME_STEP * problem.constant_parameters['EFFICIENCY_EES_CHA']
-        problem.constant_parameters['B1_EES_DIS'] = TIME_STEP / problem.constant_parameters['EFFICIENCY_EES_DIS']
+        problem.constant_parameters['B1_EES_CHA'] = self.optimization_time_step_h * problem.constant_parameters['EFFICIENCY_EES_CHA']
+        problem.constant_parameters['B1_EES_DIS'] = self.optimization_time_step_h / problem.constant_parameters['EFFICIENCY_EES_DIS']
 
         # Update problem parameters, with values available at start
         self.update_problem_parameters(state = ctx.state)
@@ -219,7 +243,7 @@ class MPCController_HybridDHW(MPCController):
         objective = cp.Minimize(problem.constant_parameters['ENERGY_COST'] *np.ones([1,TIME_HORIZON]) @ problem.variables['power_from_grid'] - problem.constant_parameters['ENERGY_VALUE']*np.ones([1,TIME_HORIZON]) @ problem.variables['power_to_grid'] + problem.constant_parameters['COST_OF_TEMPERATURE_VIOLATION'] * cp.sum(problem.variables['slack_temperature']))
         self.problem.problem = cp.Problem(objective, constraints)
     
-    def get_action(self, state):
+    def _compute_action(self, state):
         action = {}
         self.update_problem_parameters(state)
         self.problem.problem.solve(self.solver)
@@ -254,18 +278,40 @@ class MPCController_HybridDHW(MPCController):
         # Method that updates problem parameters depending on the current state of the simulation
         param = self.problem.variable_parameters
         # Prediction of future heat demand
-        param['TH_DEMAND'].value = self.safe_predict(self.heat_demand_predictor, state)[:param['TH_DEMAND'].size]
-        param['POWER_PV'].value = self.safe_predict(self.PV_power_predictor, state)[:param['TH_DEMAND'].size]
-        param['EL_DEMAND'].value = self.safe_predict(self.electricity_demand_predictor, state)[:param['TH_DEMAND'].size]
+        prediction_required_size = param['TH_DEMAND'].size
+        param['TH_DEMAND'].value = self.safe_predict(self.heat_demand_predictor, state, prediction_required_size)
+        param['EL_DEMAND'].value = self.safe_predict(self.electricity_demand_predictor, state, prediction_required_size)
         param['TEMPERATURE_STORAGE_0'].value = self.obs['temperature_storage'] if 'temperature_storage' in self.obs.keys() else 273.15+50
         param['SOC_0'].value = self.obs['soc_battery'] if 'soc_battery' in self.obs.keys() else 0.5
         param['B_TES'].value = param['TH_DEMAND'].value[:-1] * self.problem.constant_parameters['B1_TES']
+        pv_related_prediction = self.safe_predict(self.PV_power_predictor, state, prediction_required_size)
+        match self.PV_power_prediction_type:
+            case 'PV power':
+                param['POWER_PV'].value = pv_related_prediction
+            case 'Solar radiation':
+                current_datetime = state.simulation_start_datetime + pd.Timedelta(seconds = state.time)
+                prediction_index = pd.DatetimeIndex(data = current_datetime + np.array([pd.Timedelta(hours = n * self.optimization_time_step_h) for n in range(pv_related_prediction.shape[0])]))
+                solar_zenith, solar_azimuth = calculate_solar_angles(self.pv_panel.latitude, self.pv_panel.longitude, prediction_index)
+                poa_irradiation = calculate_effective_irradiance(
+                    solar_zenith, 
+                    solar_azimuth, 
+                    self.pv_panel.tilt_rad, 
+                    self.pv_panel.azimuth_rad, 
+                    pv_related_prediction[:, 0],
+                    pv_related_prediction[:, 1])
+                param['POWER_PV'].value = poa_irradiation / 1000 * self.pv_panel.installed_power
+                
     
-    def safe_predict(self, predictor: Predictor | None, state: SimulationState):
+    def safe_predict(self, predictor: Predictor | None, state: SimulationState, prediction_required_size: int):
         if predictor:  # If no predictor is loaded, it takes "None" value
-            return predictor.predict(self.horizon, state)
+            pred = predictor.predict(self.horizon, state, self.optimization_time_step_h)
+            try:
+                pred = pred[:prediction_required_size]
+            except (IndexError, TypeError):
+                pred = np.zeros(int(self.horizon // (state.time_step/3600)))[:prediction_required_size]
+            return pred    
         else:  # If there is no predictor, we interpret it as that there is no demand
-            return np.zeros(int(self.horizon // (state.time_step/3600)))
+            return np.zeros(int(self.horizon // (state.time_step/3600)))[:prediction_required_size]
 
 @dataclass
 class MPCProblem:

@@ -5,6 +5,7 @@ from energy_system_control.controllers.RL.RLcontrollers import QLearningControll
 from energy_system_control.controllers.RL.discretizers import StateDiscretizer, Discretizer, TemporalAggregator
 from energy_system_control.controllers.RL.agents import QLearningAgent
 from energy_system_control.controllers.predictors import PerfectTimeSeriesPredictor
+from energy_system_control.components.explicit_components.demands import TimeSeriesData
 from energy_system_control.controllers.RL.reward_functions import CompositeReward, TemperatureTrackingReward, EnergyCostReward, TemperatureMinMaxReward
 from energy_system_control.helpers import C2K
 import math, os
@@ -17,12 +18,26 @@ __TEST__ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__fi
 @pytest.fixture
 def test_components():
     test_components = [
-        esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
+        esc.HotWaterDemand.from_iea(name="demand_DHW", reference_temperature=40, profile_name='M'),
         esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design= 3.2),
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45),
         esc.ElectricityGrid(name = 'electric_grid', cost_of_electricity_purchased=0.24, value_of_electricity_sold=0.06),
         esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
-        esc.PVpanelFromPVGISData(name = 'pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename = 'pvgis_data.csv', rescale_factor = 0.5),
+        esc.PVpanelFromPVGISData(name='pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename='pvgis_data.csv', rescale_factor=0.5, time_alignment='yearly'),
+        esc.LithiumIonBattery(name = 'battery', capacity = 2.0, SOC_0 = 0.5),
+        esc.Inverter(name = 'inverter')
+    ]
+    return test_components
+
+@pytest.fixture
+def test_components_advanced():
+    test_components = [
+        esc.HotWaterDemand.from_iea(name="demand_DHW", reference_temperature=40, profile_name='M'),
+        esc.HeatPumpLorentzEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design= 3.2),
+        esc.MultiNodeHotWaterTank(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45),
+        esc.ElectricityGrid(name = 'electric_grid', cost_of_electricity_purchased=0.24, value_of_electricity_sold=0.06),
+        esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
+        esc.PVpanelFromPVGISData(name='pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename='pvgis_data.csv', rescale_factor=0.5, time_alignment='yearly'),
         esc.LithiumIonBattery(name = 'battery', capacity = 2.0, SOC_0 = 0.5),
         esc.Inverter(name = 'inverter')
     ]
@@ -34,8 +49,8 @@ def test_sensors():
         esc.TankTemperatureSensor('storage_tank_temperature_sensor', 'hot_water_storage'),
         esc.SOCSensor('storage_tank_SOC_sensor', 'hot_water_storage'),
         esc.SOCSensor('battery_SOC_sensor', 'battery'),
-        esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port'),
-        esc.ElectricPowerSensor('inverter_power_output_sensor', 'inverter_AC_output_port'),
+        esc.ElectricPowerSensor('PV_power_sensor', 'inverter_PV_input_port_0'),
+        esc.ElectricPowerSensor('inverter_power_output_sensor', 'inverter_AC_output_port_0'),
         esc.ElectricPowerSensor('grid_power_sensor', 'inverter_grid_input_port'),
         esc.ElectricPowerSensor('battery_power_sensor', 'inverter_ESS_port'),
         esc.HotWaterDemandSensor('demand_heat_flow_sensor', 'demand_DHW')
@@ -44,8 +59,18 @@ def test_sensors():
 
 @pytest.fixture
 def test_predictors():
-    test_predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
-                       PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
+    test_predictors = [
+        PerfectTimeSeriesPredictor.from_component_data(
+            name='pv_power_predictor',
+            read_component='pv_panels',
+            variable_to_predict='electricity',
+        ),
+        PerfectTimeSeriesPredictor.from_component_data(
+            name='dhw_demand_predictor',
+            read_component='demand_DHW',
+            variable_to_predict='heat',
+        ),
+    ]
     return test_predictors
 
 
@@ -724,18 +749,28 @@ class TestRLControllerFull:
         connections = [
             ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
             ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-            ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
+            ('heat_pump_electricity_input_port', 'inverter_AC_output_port_0'),
             ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
-            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port')
         ]
-        predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
-                    PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
+        predictors = [
+            PerfectTimeSeriesPredictor.from_component_data(
+                name='pv_power_predictor',
+                read_component='pv_panels',
+                variable_to_predict='electricity',
+            ),
+            PerfectTimeSeriesPredictor.from_component_data(
+                name='dhw_demand_predictor',
+                read_component='demand_DHW',
+                variable_to_predict='heat',
+            ),
+        ]
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 5/60)
+        sim_config = esc.SimulationConfig(simulation_end_h = 24.0*14, time_step_h = 5/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -768,18 +803,28 @@ class TestRLControllerFull:
         connections = [
             ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
             ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-            ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
+            ('heat_pump_electricity_input_port', 'inverter_AC_output_port_0'),
             ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
-            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port')
         ]
-        predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
-                    PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
+        predictors = [
+            PerfectTimeSeriesPredictor.from_component_data(
+                name='pv_power_predictor',
+                read_component='pv_panels',
+                variable_to_predict='electricity',
+            ),
+            PerfectTimeSeriesPredictor.from_component_data(
+                name='dhw_demand_predictor',
+                read_component='demand_DHW',
+                variable_to_predict='heat',
+            ),
+        ]
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 5/60)
+        sim_config = esc.SimulationConfig(simulation_end_h = 24.0*14, time_step_h = 5/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -812,18 +857,28 @@ class TestRLControllerFull:
         connections = [
             ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
             ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-            ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
+            ('heat_pump_electricity_input_port', 'inverter_AC_output_port_0'),
             ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
-            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port')
         ]
-        predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
-                    PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
+        predictors = [
+            PerfectTimeSeriesPredictor.from_component_data(
+                name='pv_power_predictor',
+                read_component='pv_panels',
+                variable_to_predict='electricity',
+            ),
+            PerfectTimeSeriesPredictor.from_component_data(
+                name='dhw_demand_predictor',
+                read_component='demand_DHW',
+                variable_to_predict='heat',
+            ),
+        ]
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 5/60)
+        sim_config = esc.SimulationConfig(simulation_end_h = 24.0*14, time_step_h = 5/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -859,16 +914,16 @@ class TestRLControllerFull:
         connections = [
             ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
             ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-            ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
+            ('heat_pump_electricity_input_port', 'inverter_AC_output_port_0'),
             ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
-            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port')
         ]
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*30, time_step_h = 1/60)
+        sim_config = esc.SimulationConfig(simulation_end_h = 24.0*30, time_step_h = 1/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -904,16 +959,16 @@ class TestRLControllerFull:
         connections = [
             ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
             ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-            ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
+            ('heat_pump_electricity_input_port', 'inverter_AC_output_port_0'),
             ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
-            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port')
         ]
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 1/60)
+        sim_config = esc.SimulationConfig(simulation_end_h = 24.0*14, time_step_h = 1/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -956,16 +1011,16 @@ class TestRLControllerFull:
         connections = [
             ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
             ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-            ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
+            ('heat_pump_electricity_input_port', 'inverter_AC_output_port_0'),
             ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
-            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port')
         ]
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*180, time_step_h = 1/60)
+        sim_config = esc.SimulationConfig(simulation_end_h = 24.0*180, time_step_h = 1/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -1006,16 +1061,65 @@ class TestRLControllerFull:
         connections = [
             ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
             ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
-            ('heat_pump_electricity_input_port', 'inverter_AC_output_port'),
+            ('heat_pump_electricity_input_port', 'inverter_AC_output_port_0'),
             ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
-            ('inverter_PV_input_port', 'pv_panels_electricity_port'),
+            ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port')
         ]
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*180, time_step_h = 1/60)
+        sim_config = esc.SimulationConfig(simulation_end_h = 24.0*180, time_step_h = 1/60)
+        sim = esc.Simulator(env, sim_config)
+        # Run simulation
+        results = sim.run()
+        df_ports, df_controllers, df_sensors = results.to_dataframe()    
+        assert (df_sensors['storage_tank_temperature_sensor'] < C2K(40)).sum() < 500
+        assert (df_sensors['storage_tank_temperature_sensor'] > C2K(80)).sum() < 100
+        assert True
+
+
+    def test_RL_HybridDHW_application_TandP_with_minimum_switch_time_hour_HiFi_model(self, test_components, test_sensors):
+        # Test of a standard hybrid system, where the only signals read by the RL controller are:
+        # - The storage tank temperature
+        # - The heat pump power
+        # This specific case, in addition to the previous one, also includes a minimum switch time of 30 minutes for the heat pump.
+        controllers = [
+            QLearningController(
+                name = 'test_RL_controller',
+                sensors = {'storage tank temperature': 'storage_tank_temperature_sensor',
+                           'power PV': 'PV_power_sensor'},
+                actions = {'heat_pump': [0, 1]},
+                exploration_policy = {'type': 'epsilon-greedy',
+                                      'config info': {
+                                          'bias function': {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): [(0, 0.0), (1, 1.0)], (273+35, 273+40): [(0, 0.1), (1, 0.9)], (273+40, 273+60): [(0, 0.5), (1, 0.5)], (273+60, 273+70): [(0, 0.8), (1, 0.2)], (273+70, 273+100): [(0, 1.0), (1, 0.0)]}}}},
+                valid_states_function = {'control variable': 'storage tank temperature', 'config info': {(273+0, 273+35): {'heat_pump': [1]}, (273+35, 273+65): {'heat_pump': [0, 1]}, (273+65, 273+100): {'heat_pump': [0]}}},
+                minimum_time_between_state_switches_h = {'heat_pump': 0.25},
+                agent_config_info = {'epsilon': 0.4, 'decay': 24*30, 'alpha': 0.1, 'min_epsilon': 0.1},
+                reward_function = CompositeReward([
+                    TemperatureMinMaxReward(sensor_name='storage_tank_temperature_sensor', min_temp=40, max_temp=65.0, weight=0.1),
+                    EnergyCostReward(cost_components = [{'component': 'electric_grid', 'sensor': 'grid_power_sensor'}])
+                ]),
+                include_hour_of_day = True,
+                include_day_of_the_year = False,
+                state_discretizer = {'storage tank temperature': {"min": C2K(30), "max": C2K(80), "bins": 10},
+                                     'power PV': {'min': 0, 'max': 0.5, "bins": 10}}),
+            esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'inverter_power_output_sensor', 'PV_power_sensor')
+                    ]
+        connections = [
+            ('demand_DHW_fluid_port', 'hot_water_storage_hot_water_output_port'),
+            ('heat_pump_heat_output_port', 'hot_water_storage_main_heat_input_port'),
+            ('heat_pump_electricity_input_port', 'inverter_AC_output_port_0'),
+            ('hot_water_storage_cold_water_input_port', 'water_grid_fluid_port'),
+            ('inverter_PV_input_port_0', 'pv_panels_electricity_port'),
+            ('inverter_grid_input_port', 'electric_grid_electricity_port'),
+            ('inverter_ESS_port', 'battery_electricity_port')
+        ]
+        # Create environment
+        env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections)  # dt = 60 s
+        # Create simulator object
+        sim_config = esc.SimulationConfig(simulation_end_h = 24.0*180, time_step_h = 1/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()

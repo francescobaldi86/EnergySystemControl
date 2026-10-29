@@ -1,5 +1,5 @@
 # energy_system_control/sim/simulator.py
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from typing import Any
 from numbers import Number
 import numpy as np
@@ -23,7 +23,7 @@ class Simulator:
     def run(self) -> SimulationData:
         self.state = SimulationState()
         self.state.initialize(self.cfg)
-        self.env.initialize(self.state)  # This allows the environment to initialize the provider if needed
+        self.env.initialize(self.state, self.cfg)  # This allows the environment to initialize the provider if needed
 
         # Prepare simulation data storage
         sim_data = SimulationData()
@@ -34,20 +34,29 @@ class Simulator:
             self.env.signal_registry_sensors,
         )
         # Read any time series data once
-        self._read_timeseries_data()
+        # self._read_timeseries_data()  <-- MOVED TO "_initialize_units()"
         # Initialize units / reset components, controllers, sensors
         self._initialize_units()        
 
         # Main loop
-        while self.state.time < (self.cfg.time_end_h * 3600.0 - 1e-9):
+        while self.state.time < (self.cfg.simulation_end_h * 3600.0 - 1e-9):
             self._step(sim_data)
             self.state.time += self.cfg.time_step_s
             self.state.time_id += 1
 
         # Creating results object
+        if self.cfg.simulation_start_datetime is not None:
+            results_index = pd.date_range(start = self.cfg.simulation_start_datetime,
+                                          end = self.cfg.simulation_start_datetime + pd.Timedelta(hours = self.cfg.simulation_end_h),
+                                          freq = pd.Timedelta(hours = self.cfg.time_step_h),
+                                          inclusive = "left"
+                                          )
+        else:
+            results_index = self.state.time_vector
+
         simulation_results = SimulationResults(sim_data, 
                                                self.state.time_step, 
-                                               self.state.time_vector,
+                                               results_index,
                                                self.env.signal_registry_ports,
                                                self.env.signal_registry_controllers,
                                                self.env.signal_registry_sensors,)
@@ -66,13 +75,23 @@ class Simulator:
         for _, controller in self.env.controllers.items():
             controller.initialize(ctx)
         
-
+    """
     def _read_timeseries_data(self):
         # Read timeseries data from components
         for _, component in self.env.components.items():
             if callable(getattr(component, 'resample_data', None)):
-                component.resample_data(self.cfg.time_step_h, self.cfg.time_end_h + self.cfg.prediction_horizon_margin_h)
-
+                component.resample_data(
+                    time_step_h = self.cfg.time_step_h, 
+                    simulation_end_h = self.cfg.simulation_end_h + self.cfg.prediction_horizon_margin_h,
+                    simulation_start_datetime = self.cfg.simulation_start_datetime)
+        for _, predictor in self.env.predictors.items():
+            if callable(getattr(predictor, 'resample_data', None)):
+                predictor.resample_data(
+                    time_step_h = self.cfg.time_step_h, 
+                    simulation_end_h = self.cfg.simulation_end_h + self.cfg.prediction_horizon_margin_h,
+                    simulation_start_datetime = self.cfg.simulation_start_datetime)
+    """
+    
     def _normalize_measurement(self, value):
         """
         Normalize a measurement value to a single scalar.
@@ -138,6 +157,10 @@ class Simulator:
         # Example: overwrite with forecast / time series if available
         if self.env.environmental_data_provider:
             env_data = self.env.environmental_data_provider.get_environmental_data(self.state.time_id, self.state.simulation_start_datetime + pd.to_timedelta(self.state.time, unit='s'))
+            # Check for None values and substitute them with defaults
+            for field in fields(env_data):
+                if getattr(env_data, field.name) is None:
+                    setattr(env_data, field.name, getattr(self.cfg.environmental_defaults, field.name))
 
         # Automatically compute solar angles if not available
         if env_data.solar_zenith is None or env_data.solar_azimuth is None:
@@ -148,15 +171,30 @@ class Simulator:
         return env_data
 
     def _propagate_port_values(self):
+        ### DA AGGIORNARE PER DRAGOS ###
         env = self.env
         for _, component in env.components.items():
-            ports_to_update = component.set_inherited_port_values(self.state)
-            for port_name in ports_to_update:
-                port = env.ports[port_name]
-                if port_name and port.connected_port is not None:
-                    for attribute_name in port.attribute_names:
-                        setattr(port.connected_port, attribute_name, getattr(port, attribute_name))
-    
+            # Ottenere il dizionario delle porte e degli attributi dal componente
+            inherited_ports_info = component.set_inherited_port_values(self.state)
+            # Iterazione in modo sicuro sulle coppie porta-attributi usando .items()
+            for port_name, attributes in inherited_ports_info.items():
+                if port_name and env.ports[port_name].connected_port is not None:
+                    # Iterazione sulle singole grandezze (es. 'LHV': 22000, 'density': 1.2)
+                    for attr_name, attr_value in attributes.items():
+                        setattr(env.ports[port_name].connected_port, attr_name, attr_value)
+                # Example of inherited_ports_info:
+            # {'port_name': {'attribute_name_1': 10, 'attribute_name_2': 22}}
+            # inherited_ports_info = {'engine_biogas_port': {'LHV': 22000, 'density': 1.2, 'methane_faction': 0.58}}
+            """
+            inherited_fluid_ports_info = component.set_inherited_fluid_port_values(self.state)
+            for port_name, temperature in inherited_fluid_ports_info.items():
+                if port_name and env.ports[port_name].connected_port is not None:
+                    env.ports[port_name].connected_port.T = temperature
+            inherited_heat_ports_info = component.set_inherited_heat_port_values(self.state)
+            for port_name, temperature in inherited_heat_ports_info.items():
+                if port_name and env.ports[port_name].connected_port is not None:
+                    env.ports[port_name].connected_port.T = temperature
+            """
     def _simulate_all_components(self):
         self.components_to_simulate = list(self.env.components.keys())
         self._simulate_components_of_type("ExplicitComponent")
@@ -204,56 +242,43 @@ class Simulator:
         component.step(self.state, action)
         # Update values of connected ports
         for _, port in component.ports.items():
+            for layer, value in port.flows.items():
+                """
+                # Se il componente non ha toccato questo layer, assumiamo che il flusso sia nullo
+                if value is None:
+                    value = 0.0
+                    port.flows[layer] = 0.0
+                """
+                if port.connected_port:
+                    port.connected_port.flows[layer] = -value
             if port.connected_port:
-                port.propagate_port_values()
-  
-    #def _check_connection_balance(self):
-        # Checks that all connections have the same flow on both sides
-     #   env = self.env
-      #  for connection in env.connections:
-       #     for layer, value in env.ports[connection[0]].flows.items():
-        #        print("Connessione:", connection)
-         #       print("Layer:", layer)
-          #      print("Valore prima della somma:", value)
-           #     print("Valore seconda porta:", env.ports[connection[1]].flows[layer])
-            #    if abs(value + env.ports[connection[1]].flows[layer]) > 1e-5:
-             #       raise ValueError(f"Connection {connection} has unbalanced flows: {env.ports[connection[0]].flows[layer]:.2f} != {env.ports[connection[1]].flows[layer]:.2f}")
+                for attribute in port.attribute_names:
+                    setattr(port.connected_port, attribute, getattr(port, attribute))
+
 
     def _check_connection_balance(self):
     # Checks that all connections have the same flow on both sides
         env = self.env
 
         for connection in env.connections:
-         port_1 = env.ports[connection[0]]
-         port_2 = env.ports[connection[1]]
+            for layer, value in env.ports[connection[0]].flows.items():
 
-         for layer, value in port_1.flows.items():
-            value_2 = port_2.flows.get(layer)
+                # Verifichiamo che entrambi i valori siano numerici prima della somma
+                val0 = value if value is not None else 0.0
+                val1 = env.ports[connection[1]].flows.get(layer)
+                val1 = val1 if val1 is not None else 0.0
 
-            print(f"\nConnessione: {connection}")
-            print(f"Layer: {layer}")
-            print(f"Porta 1 ({connection[0]}): {value}")
-            print(f"Porta 2 ({connection[1]}): {value_2}")
-
-            if value is None or value_2 is None:
-                raise ValueError(
-                    f"Flusso non inizializzato nella connessione "
-                    f"{connection}, layer '{layer}': "
-                    f"{connection[0]}={value}, "
-                    f"{connection[1]}={value_2}"
-                )
-
-            if abs(value + value_2) > 1e-5:
-                raise ValueError(
-                    f"Connection {connection} has unbalanced flows: "
-                    f"{value:.2f} != {value_2:.2f}"
-                )
+                if abs(val0 + val1) > 1e-5:
+                    raise ValueError(f"Connection {connection} has unbalanced flows: {env.ports[connection[0]].flows[layer]:.2f} != {env.ports[connection[1]].flows[layer]:.2f}")
 
     def _save_simulation_data(self, sim_data):
         # Ports
         time_id = self.state.time_id
         for port_name, port in self.env.ports.items():
-            for layer, flow in port.flows.items():
+            # Iteriamo esclusivamente sui layer ufficiali, non sulle chiavi iniettate dinamicamente
+            for layer in getattr(port, 'layers', []):
+                # Il .get() restituisce None se la chiave è assente, attivando il default np.nan nella riga sotto
+                flow = port.flows.get(layer) 
                 col = self.env.signal_registry_ports.col_index(port_name, layer)
                 try:
                     sim_data.ports[time_id, col] = flow if flow is not None else np.nan

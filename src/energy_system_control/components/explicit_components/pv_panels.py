@@ -1,4 +1,4 @@
-from energy_system_control.components.base import TimeSeriesData
+from energy_system_control.core.base_classes import TimeSeriesData
 from energy_system_control.components.explicit_components.producers import Producer
 from energy_system_control.helpers import *
 from energy_system_control.sim.state import SimulationState
@@ -16,8 +16,9 @@ class PVpanel(Producer):
     def step(self, state: SimulationState, action = None):
         self.ports[self.port_name].flows['electricity'] = -self.ts.data[state.time_id]
 
-    def resample_data(self, time_step_h: float, sim_end_h: float):
-        self.ts.resample(time_step_h=time_step_h, sim_end_h=sim_end_h)
+    def resample_data(self, time_step_h: float, simulation_end_h: float, simulation_start_datetime: datetime | None = None):
+        if self.ts is not None:  # In the case of the PV from irradiation data, self.ts is None
+            self.ts.resample(time_step_h=time_step_h, simulation_end_h=simulation_end_h, simulation_start_datetime=simulation_start_datetime)
 
 
 class PVpanelFromData(PVpanel):
@@ -43,9 +44,18 @@ class PVpanelFromData(PVpanel):
     rescale_factor : float | None
         Factor to rescale the power data. Defaults to None.
     """
-    def __init__(self, name: str, data_path: str, filename: str, column_name: str = 'P', date_format: str = '%Y%m%d:%H%M', skipfooter: int = 0, var_unit: Literal['kW', 'W'] = 'W', rescale_factor: float | None = None):
+    def __init__(self, 
+                 name: str,
+                 time_alignment: TimeAlignment,
+                 data_path: str, 
+                 filename: str, 
+                 column_name: str = 'P', 
+                 date_format: str = '%Y%m%d:%H%M', 
+                 skipfooter: int = 0, 
+                 var_unit: Literal['kW', 'W'] = 'W', 
+                 rescale_factor: float | None = None):
         temp = pd.read_csv(os.path.join(data_path, filename), sep = ";", decimal = '.', skipfooter = skipfooter, engine='python', index_col = 0)
-        temp['time'] = pd.to_datetime(temp.index, format=date_format, utc=True)
+        temp['time'] = pd.to_datetime(temp.index, format=date_format, utc=False)
         temp = temp.set_index('time')
         temp = temp[column_name]
         if rescale_factor:
@@ -54,17 +64,18 @@ class PVpanelFromData(PVpanel):
             raw = temp,
             var_type = 'power',
             var_unit = var_unit,
+            time_alignment = time_alignment,
         )
         super().__init__(name, ts)
 
 
 class PVpanelFromPVGISData(PVpanelFromData):
-    def __init__(self, name: str, data_path: str, filename: str, rescale_factor: float | None = None):
-        super().__init__(name, data_path=data_path, filename=filename, column_name = 'P', date_format = '%Y%m%d:%H%M', skipfooter=11, var_unit = 'W', rescale_factor=rescale_factor)
+    def __init__(self, name: str, time_alignment: TimeAlignment, data_path: str, filename: str, rescale_factor: float | None = None):
+        super().__init__(name, time_alignment = time_alignment, data_path=data_path, filename=filename, column_name = 'P', date_format = '%Y%m%d:%H%M', skipfooter=11, var_unit = 'W', rescale_factor=rescale_factor)
 
 
 class PVpanelFromPVGIS(PVpanel):
-    def __init__(self, name: str, installed_power: float, latitude: float, longitude: float, tilt: float, azimuth: float, loss: float = 14, years: list[int] = [2023]):
+    def __init__(self, name: str, installed_power: float, latitude: float, longitude: float, tilt: float, azimuth: float, loss: float = 14, years: list[int] = [2023], time_alignment: TimeAlignment = 'yearly'):
         """
         Reads data from PVGIS for the selected location. 
 
@@ -93,7 +104,8 @@ class PVpanelFromPVGIS(PVpanel):
         ts = TimeSeriesData(
             raw = self.pvgis_api_call(),
             var_type = 'power',
-            var_unit = 'W'
+            var_unit = 'W',
+            time_alignment = time_alignment
         )
         super().__init__(name, ts)
 
@@ -113,7 +125,7 @@ class PVpanelFromPVGIS(PVpanel):
         params = "&".join([f'{key}={value}' for key, value in pvgis_params.items()])
         url_pvcalc = f'{url_base}&{params}'
         temp = pd.DataFrame(requests.get(url_pvcalc).json()['outputs']['hourly'])
-        temp['time'] = pd.to_datetime(temp['time'], format="%Y%m%d:%H%M", utc=True)
+        temp['time'] = pd.to_datetime(temp['time'], format="%Y%m%d:%H%M", utc=False)
         temp = temp.set_index('time')
         return temp['P']
         # row_json = json.loads(response.text)   
@@ -125,7 +137,7 @@ class PVpanelFromIrradiation(PVpanel):
     PV panel model that calculates power output from solar irradiation.
     """
 
-    def __init__(self, name: str, tilt: float, azimuth: float, installed_power: float):
+    def __init__(self, name: str, tilt: float, azimuth: float, installed_power: float, latitude: float, longitude: float):
         """
         Parameters
         ----------
@@ -139,32 +151,32 @@ class PVpanelFromIrradiation(PVpanel):
             Installed nominal power of the panel at standard test conditions (kW)
         """
         super().__init__(name, ts=None)  # no external time series
-        self.tilt = tilt
-        self.azimuth = azimuth
+        self.tilt_deg = tilt
+        self.azimuth_deg = azimuth
+        self.tilt_rad = np.radians(tilt)
+        self.azimuth_rad = np.radians(azimuth)
         self.installed_power = installed_power
+        self.latitude = latitude
+        self.longitude = longitude
+
+    @property
+    def tilt(self, unit: str = 'deg') -> float:
+        match unit:
+            case 'deg':
+                return self.tilt_deg
+            case 'rad':
+                return self.tilt_rad
+            case _:
+                raise ValueError(f'The unit for the tilt should be either rad or deg. {unit} was provided.')
+            
 
     def step(self, state: SimulationState, action=None):
         env_data = state.environmental_data
-
-        # Convert angles to radians
-        tilt_rad = np.radians(self.tilt)
-        panel_az_rad = np.radians(self.azimuth)
-        sun_zenith_rad = np.radians(env_data.solar_zenith)
-        sun_az_rad = np.radians(env_data.solar_azimuth)
-
+        current_datetime = state.simulation_start_datetime + pd.Timedelta(seconds=state.time)
+        solar_zenith, solar_azimuth = calculate_solar_angles(self.latitude, self.longitude, current_datetime)
         # Incidence angle
-        cos_theta = (
-            np.cos(sun_zenith_rad) * np.cos(tilt_rad) +
-            np.sin(sun_zenith_rad) * np.sin(tilt_rad) * np.cos(sun_az_rad - panel_az_rad)
-        )
-        cos_theta = max(cos_theta, 0)
-
-        # POA irradiance
-        poa_irradiation = env_data.direct_irradiation * cos_theta + env_data.diffuse_irradiation * (1 + np.cos(tilt_rad)) / 2
-
-        # AC power
+        poa_irradiation = calculate_effective_irradiance(solar_zenith, solar_azimuth, self.tilt_rad, self.azimuth_rad, env_data.direct_irradiation, env_data.diffuse_irradiation)
+        # DC power
         power_output = poa_irradiation / 1000 * self.installed_power
-
         # Update PV port
         self.ports[self.port_name].flows['electricity'] = -power_output
-
