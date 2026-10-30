@@ -103,6 +103,7 @@ class LeadAcidBattery(Battery):
     def __init__(self, SOC_min: float = 0.3, SOC_derate: float = 0.6, **kwargs):
         """
         Model of a VRLA GEL Deep Cycle Lead-Acid Battery (e.g., Victron BAT412126101).
+        Source: https://www.victronenergy.com/upload/documents/Datasheet-GEL-and-AGM-Batteries-EN.pdf
         
         Parameters
         ----------
