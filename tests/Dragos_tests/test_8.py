@@ -23,7 +23,7 @@ def test_8():
         esc.LeadAcidBattery(name='battery', capacity=3.18, SOC_0=0.5, SOC_min=0.3, SOC_derate=0.6, crate = 0.2),
         esc.Inverter(name='inverter', number_of_ac_output_ports=2, number_of_pv_input_ports=2),
         esc.AnaerobicDigester(name='biogas_producer', biogas_rate=3, methane_fraction=0.65),
-        esc.BiogasStorage(name='biogas_storage', capacity=500.0, initial_ch4_mass=50.0, initial_co2_mass=60.0),
+        esc.BiogasStorage(name='biogas_storage', capacity=1.0, initial_soc = 0.5, initial_methane_fraction=0.55),
         esc.InternalCombustionEngine(name='backup_engine', P_el_design=30, fuel='biogas', polynomial_efficiency=True),
         esc.ElectricityDemand.from_csv(name='demand_rifugio', path=os.path.join(__TEST__, 'DATA', 'consumi_totali_rifugio_2026.csv'),
                                      var_unit='kWh', rescale_factor=0.001, column_name='Power', time_alignment='yearly', date_format='%d/%m/%Y %H:%M')

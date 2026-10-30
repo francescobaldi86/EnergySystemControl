@@ -5,149 +5,243 @@ from energy_system_control.constants import METHANE, CARBON_DIOXIDE
 from energy_system_control.sim.state import SimulationState
 
 class BiogasStorage(StorageUnit):
+    """
+    Biogas storage with CH4 and CO2 mass balances.
 
-    def __init__(self, name: str, capacity: float, initial_soc:float,initial_methane_fraction:float):
-        self.capacity = capacity
+    Parameters
+    ----------
+    name : str
+        Storage unit name.
+    capacity : float
+        Maximum storage volume [m3].
+    initial_soc : float
+        Initial state of charge, between 0 and 1.
+    initial_methane_fraction : float
+        Initial molar fraction of methane, between 0 and 1.
 
-        # Composizione molare iniziale
-        x_ch4 = initial_methane_fraction
-        x_co2 = 1.0 - x_ch4
+    Notes
+    -----
+    - Port mass flows are in kg/s.
+    - Port chemical energy flows are in kW, equivalent to kJ/s.
+    - time_step is in seconds.
+    - SOC is the occupied volume divided by the nominal capacity.
+    """
 
-        # Densità iniziale della miscela
-        density = (x_ch4 * METHANE.rho + x_co2 * CARBON_DIOXIDE.rho)
+    def __init__(self,name: str,capacity: float,initial_soc: float = 0.0,initial_methane_fraction: float = 0.5,):
+        super().__init__(name,{f"{name}_input": "biogas",f"{name}_output": "biogas",},)
 
-        # Massa totale corrispondente al SOC iniziale
-        total_mass = initial_soc * capacity * density
+        # 1. INPUT VALIDATION
+        if capacity <= 0:
+            raise ValueError("capacity must be positive.")
 
-        # Conversione da frazione molare a frazione massica
-        methane_mass_fraction = (x_ch4 * METHANE.rho / density if density > 0 else 0.0)
+        if not 0.0 <= initial_soc <= 1.0:
+            raise ValueError("initial_soc must be between 0 and 1.")
 
-        # Calcolo delle masse iniziali
-        self.ch4_mass = total_mass * methane_mass_fraction
-        self.co2_mass = total_mass - self.ch4_mass
+        if not 0.0 <= initial_methane_fraction <= 1.0:
+            raise ValueError("initial_methane_fraction must be between 0 and 1.")
 
-        # SOC iniziale
-        self.SOC_0 = initial_soc
-        self.SOC = initial_soc
-
+        self.capacity = float(capacity)
+        self.SOC_0 = float(initial_soc)
+        self.SOC = float(initial_soc)
         self.input_port_name = f"{name}_input"
         self.output_port_name = f"{name}_output"
 
-        super().__init__(name,{self.input_port_name: "biogas",self.output_port_name: "biogas",},)
+        # 2. INITIAL GAS COMPOSITION
+        # Methane fraction is MOLAR, not mass-based.
+        x_ch4 = float(initial_methane_fraction)
+        x_co2 = 1.0 - x_ch4
 
-    def create_ports(self):
-        ports = super().create_ports()
-        
-        # AGGIUNTO "volume" per intercettare la propagazione dal digestore
-        # custom_layers = ["mass", "volume", "chemical_energy"]
-        '''
-        for p_name in [self.input_port_name, self.output_port_name]:
-            port = self.ports[p_name]
-            
-            if hasattr(port, "layers"):
-                port.layers = list(set(port.layers) | {"mass", "volume", "chemical_energy"})
-                
-                new_layers = list(port.layers)
-                for layer in custom_layers:
-                    if layer not in new_layers:
-                        new_layers.append(layer)
-                port.layers = new_layers
-                
-            for layer in custom_layers:
-                port.flows[layer] = 0.0
-        '''
-        return ports
+        # Initial mixture density [kg/m3].
+        self._initial_density = ( x_ch4 * METHANE.rho + x_co2 * CARBON_DIOXIDE.rho)
+
+        # 3. INITIAL MASS CALCULATION
+        initial_volume = self.SOC_0 * self.capacity
+        initial_total_mass = ( initial_volume * self._initial_density)
+
+        # Convert molar fraction into mass fraction.
+        mean_molecular_weight = ( x_ch4 * METHANE.MW + x_co2 * CARBON_DIOXIDE.MW)
+
+        if mean_molecular_weight > 0:
+            initial_ch4_mass_fraction = ( x_ch4 * METHANE.MW / mean_molecular_weight)
+        else:
+            initial_ch4_mass_fraction = 0.0
+
+        self.ch4_mass = (initial_total_mass * initial_ch4_mass_fraction)
+        self.co2_mass = (initial_total_mass - self.ch4_mass)
+
+    # 4. MASS AND COMPOSITION PROPERTIES
 
     @property
     def total_mass(self) -> float:
+        """Total gas mass [kg]."""
         return self.ch4_mass + self.co2_mass
 
     @property
     def methane_mass_fraction(self) -> float:
+        """Methane mass fraction [-]."""
         if self.total_mass <= 0:
             return 0.0
         return self.ch4_mass / self.total_mass
 
     @property
     def methane_fraction(self) -> float:
-        if self.total_mass <= 0:
-            return 0.0
-        n_ch4 = (self.ch4_mass / METHANE.MW)
+        """Methane molar fraction [-]."""
+        n_ch4 = self.ch4_mass / METHANE.MW
         n_co2 = self.co2_mass / CARBON_DIOXIDE.MW
         total_moles = n_ch4 + n_co2
-        return n_ch4 / total_moles if total_moles > 0 else 0.0
+        if total_moles <= 0:
+            return 0.0
+        return n_ch4 / total_moles
 
     @property
     def biogas_density(self) -> float:
+        """Biogas mixture density [kg/m3]."""
+        if self.total_mass <= 0:
+            return (0.5 * METHANE.rho + 0.5 * CARBON_DIOXIDE.rho)
+
         x_ch4 = self.methane_fraction
         x_co2 = 1.0 - x_ch4
+
         return (x_ch4 * METHANE.rho + x_co2 * CARBON_DIOXIDE.rho)
 
     @property
     def biogas_LHV(self) -> float:
-        """ LHV in [kJ/kg]. """
-        return self.methane_mass_fraction * METHANE.LHV
+        """Biogas lower heating value [kJ/kg]."""
+        return (self.methane_mass_fraction * METHANE.LHV)
+
+    @property
+    def volume_m3(self) -> float:
+        """Occupied gas volume [m3]."""
+        density = self.biogas_density
+        if density <= 0:
+            return 0.0
+        return self.total_mass / density
+
+    @property
+    def volume_l(self) -> float:
+        """Occupied gas volume [L]."""
+        return self.volume_m3 * 1000.0
+
+    # 5. PORT INITIALIZATION
+
+    def _update_output_port(self):
+        """Update output gas properties."""
+        output_port = self.ports[self.output_port_name]
+
+        output_port.methane_fraction = self.methane_fraction
+        output_port.LHV = self.biogas_LHV
+        output_port.density = self.biogas_density
 
     def initialize(self, ctx: InitContext):
-        output_port = self.ports[self.output_port_name]
-        output_port.methane_fraction = self.methane_fraction
-        output_port.LHV = self.biogas_LHV
-        output_port.density = self.biogas_density
+        self._update_soc()
+        self._update_output_port()
+
         super().initialize(ctx)
 
-    def step(self, state, action=None):
+        # Update again in case initialize() changes port values.
+        self._update_output_port()
 
+    def set_inherited_port_values(self,state: SimulationState,):
+        self._update_output_port()
+        return [self.output_port_name]
+
+    # SOC UPDATE
+
+    def _update_soc(self):
+        """Recalculate SOC from the current occupied volume."""
+        if self.capacity <= 0:
+            self.SOC = 0.0
+            return
+
+        self.SOC = min(
+            1.0,
+            max(0.0, self.volume_m3 / self.capacity),
+        )
+
+    # SIMULATION STEP
+
+    def step(self, state, action=None):
         dt = state.time_step
+
+        if dt < 0:
+            raise ValueError("time_step cannot be negative.")
+
         input_port = self.ports[self.input_port_name]
         output_port = self.ports[self.output_port_name]
-        '''
-        # Helper per estrarre in modo sicuro i flussi, sostituendo i NoneType con 0.0
-        def get_flow(port, layer):
-            val = port.flows.get(layer)
-            return val if val is not None else 0.0
-        '''
-        # 1. INGRESSO
-        mass_flow_in = max(0.0, input_port.flows["mass"])  
-        methane_fraction_in = getattr(input_port, "methane_fraction", 0.0)
 
-        density_in = (methane_fraction_in * METHANE.rho + (1.0 - methane_fraction_in) * CARBON_DIOXIDE.rho)
-        methane_mass_frac_in = (methane_fraction_in * METHANE.rho) / density_in if density_in > 0 else 0.0 
-        
-        delta_mass_in = mass_flow_in * dt
-        ch4_in = delta_mass_in * methane_mass_frac_in
-        co2_in = delta_mass_in - ch4_in
+        # A. GAS INLET
+        mass_flow_in = max(0.0,input_port.flows.get("mass", 0.0) or 0.0,)
 
-        self.ch4_mass += ch4_in
-        self.co2_mass += co2_in
+        # Input methane fraction is assumed to be MOLAR.
+        x_ch4_in = getattr(input_port,"methane_fraction",0.0,)
 
-        # 2. USCITA
-        val_mass_out = output_port.flows["mass"]
-        mass_flow_out = abs(min(0.0, val_mass_out))
-        
-        if mass_flow_out == 0.0:
-            val_energy_out = output_port.flows["chemical_energy"]
-            energy_flow_out = abs(min(0.0, val_energy_out))
-            mass_flow_out = energy_flow_out / self.biogas_LHV if self.biogas_LHV > 0 else 0.0
+        x_ch4_in = min(1.0, max(0.0, x_ch4_in))
+        x_co2_in = 1.0 - x_ch4_in
 
-        delta_mass_out = mass_flow_out * dt  
+        # Mixture density at the inlet [kg/m3].
+        density_in = ( x_ch4_in * METHANE.rho + x_co2_in * CARBON_DIOXIDE.rho)
 
-        if delta_mass_out > self.total_mass:
-            delta_mass_out = self.total_mass
+        # Convert molar fraction to mass fraction.
+        mean_mw_in = (x_ch4_in * METHANE.MW + x_co2_in * CARBON_DIOXIDE.MW)
 
-        if delta_mass_out > 0:
-            w_ch4 = self.methane_mass_fraction
-            self.ch4_mass -= delta_mass_out * w_ch4
-            self.co2_mass -= delta_mass_out * (1.0 - w_ch4)
+        if mean_mw_in > 0:
+            w_ch4_in = (x_ch4_in * METHANE.MW/ mean_mw_in)
+        else:
+            w_ch4_in = 0.0
 
-        self.SOC = self.total_mass / self.biogas_density / self.capacity
+        # Incoming mass during the timestep [kg].
+        requested_mass_in = mass_flow_in * dt
+
+        # Available volume before accepting incoming gas.
+        current_volume = self.volume_m3
+        available_volume = max(0.0,self.capacity - current_volume,)
+
+        # Approximate mass that fits in the available volume.
+        max_mass_in = available_volume * density_in
+        accepted_mass_in = min(requested_mass_in,max_mass_in,)
+        self.ch4_mass += accepted_mass_in * w_ch4_in
+        self.co2_mass += (accepted_mass_in * (1.0 - w_ch4_in))
+
+        # Overflow is the incoming mass that was not accepted.
+        self.overflow_mass = (requested_mass_in - accepted_mass_in)
+        # GAS OUTLET
+        # Negative chemical energy flow means energy is leaving the storage, as in the original convention.
+        chemical_energy_out = (output_port.flows.get("chemical_energy", 0.0)or 0.0)
+
+        energy_flow_out = max(0.0,-chemical_energy_out,)
+
+        # Update mixture LHV after accepting inlet gas.
+        current_lhv = self.biogas_LHV
+
+        # Requested mass flow [kg/s].
+        if current_lhv > 0:
+            mass_flow_out = energy_flow_out / current_lhv
+        else:
+            mass_flow_out = 0.0
+
+        requested_mass_out = mass_flow_out * dt
+
+        # Cannot withdraw more gas than is stored.
+        accepted_mass_out = min(requested_mass_out,self.total_mass,)
+
+        if self.total_mass > 0 and accepted_mass_out > 0:
+            w_ch4_out = self.methane_mass_fraction
+            ch4_out = accepted_mass_out * w_ch4_out
+            co2_out = accepted_mass_out * (1.0 - w_ch4_out)
+            self.ch4_mass = max(0.0,self.ch4_mass - ch4_out,)
+            self.co2_mass = max(0.0,self.co2_mass - co2_out,)
 
     def set_inherited_port_values(self, state: SimulationState):
+        # First update values of the output port
         output_port = self.ports[self.output_port_name]
-        
-        # Aggiornamento dei valori interni della porta
         output_port.methane_fraction = self.methane_fraction
         output_port.LHV = self.biogas_LHV
         output_port.density = self.biogas_density
-        
-        # Restituzione nel nuovo formato dizionario
-        return {self.output_port_name: {'methane_fraction': self.methane_fraction,'LHV': self.biogas_LHV,'density': self.biogas_density}}
+        # Then create the output info object:
+        output = {}
+        output[self.output_port_name] = {
+            'methane_fraction': self.methane_fraction,
+            'LHV': self.biogas_LHV,
+            'density': self.biogas_density
+        }
+        return output

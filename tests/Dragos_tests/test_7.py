@@ -12,7 +12,7 @@ def test_7():
     components = [
         esc.ElectricityGrid(name='electric_grid'),
         esc.AnaerobicDigester(name='biogas_producer', biogas_rate=15, methane_fraction=0.65),
-        esc.BiogasStorage(name='biogas_storage', capacity=500.0, initial_ch4_mass=50.0, initial_co2_mass=60.0),
+        esc.BiogasStorage(name='biogas_storage', capacity=1.0, initial_soc = 0.5, initial_methane_fraction = 0.55),
         esc.InternalCombustionEngine(name='engine', P_el_design=50.0, efficiency_el=0.38, fuel='biogas'),
         esc.ElectricityDemand.from_csv(name='demand', 
                                        path=os.path.join(__TEST__, 'DATA', 'yearly_data_electricity_demand_15min.csv'), 
