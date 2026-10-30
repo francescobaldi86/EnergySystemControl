@@ -6,16 +6,34 @@ from energy_system_control.sim.state import SimulationState
 
 class BiogasStorage(StorageUnit):
 
-    def __init__(self, name: str, capacity: float, initial_ch4_mass: float = 0.0, initial_co2_mass: float = 0.0):
+    def __init__(self, name: str, capacity: float, initial_soc:float,initial_methane_fraction:float):
         self.capacity = capacity
-        self.ch4_mass = initial_ch4_mass
-        self.co2_mass = initial_co2_mass
-        self.SOC_0 = self.total_mass / self.biogas_density / self.capacity
+
+        # Composizione molare iniziale
+        x_ch4 = initial_methane_fraction
+        x_co2 = 1.0 - x_ch4
+
+        # Densità iniziale della miscela
+        density = (x_ch4 * METHANE.rho + x_co2 * CARBON_DIOXIDE.rho)
+
+        # Massa totale corrispondente al SOC iniziale
+        total_mass = initial_soc * capacity * density
+
+        # Conversione da frazione molare a frazione massica
+        methane_mass_fraction = (x_ch4 * METHANE.rho / density if density > 0 else 0.0)
+
+        # Calcolo delle masse iniziali
+        self.ch4_mass = total_mass * methane_mass_fraction
+        self.co2_mass = total_mass - self.ch4_mass
+
+        # SOC iniziale
+        self.SOC_0 = initial_soc
+        self.SOC = initial_soc
 
         self.input_port_name = f"{name}_input"
         self.output_port_name = f"{name}_output"
 
-        super().__init__(name, {self.input_port_name: "biogas", self.output_port_name: "biogas"})
+        super().__init__(name,{self.input_port_name: "biogas",self.output_port_name: "biogas",},)
 
     def create_ports(self):
         ports = super().create_ports()
@@ -132,10 +150,4 @@ class BiogasStorage(StorageUnit):
         output_port.density = self.biogas_density
         
         # Restituzione nel nuovo formato dizionario
-        return {
-            self.output_port_name: {
-                'methane_fraction': self.methane_fraction,
-                'LHV': self.biogas_LHV,
-                'density': self.biogas_density
-            }
-        }
+        return {self.output_port_name: {'methane_fraction': self.methane_fraction,'LHV': self.biogas_LHV,'density': self.biogas_density}}

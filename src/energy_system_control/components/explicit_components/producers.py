@@ -71,9 +71,19 @@ class AnaerobicDigester(Producer):
         return (self.methane_mass_fraction * Methane.LHV)
 
     @property
+    def volume_flow_l_h(self) -> float:
+     """Biogas volume flow [L/h]."""
+     return self.biogas_rate
+
+    @property
+    def volume_flow_m3_s(self) -> float:
+      """Biogas volume flow [m³/s]."""
+      return self.volume_flow_l_h / 3_600_000.0
+
+    @property
     def mass_flow(self) -> float:
-        volume_flow_m3_s = self.biogas_rate / 3600.0
-        return (volume_flow_m3_s * self.biogas_density)
+         volume_flow_m3_s = self.biogas_rate / 3600.0
+         return (volume_flow_m3_s * self.biogas_density)
 
     @property
     def chemical_power(self) -> float:
@@ -86,7 +96,7 @@ class AnaerobicDigester(Producer):
                 port.flows[layer] = 0.0
         '''
         mass_flow = self.mass_flow
-        volume_flow = self.biogas_rate / 3600.0
+        volume_flow = self.volume_flow_m3_s
         chemical_power = self.chemical_power
 
         port = self.ports[self.port_name]
@@ -128,13 +138,12 @@ class AnaerobicDigesterFromData(AnaerobicDigester):
                  name: str, 
                  data_path: str, 
                  filename: str,
-                 time_alignment: TimeAlignment = 'yearly',
+                 time_alignment: TimeAlignment = "yearly",
                  date_format: str = "%Y%m%d:%H%M", 
                  rescale_factor: float = 1.0, 
-                 mass_flow_column_name: str = 'mass_flow',
-                 methane_fraction_column_name: str = 'methane_fraction',
-                 mass_flow_unit: str = 'kg/s',
-                 methane_fraction_unit: str = 'adimensional'):
+                 volume_flow_column_name: str = "Produzione biogas[L/h]",
+                 methane_fraction_column_name: str = "contenuto metano in biogas prodotto",
+            ):
         # Inizializza il componente di accumulo
 
         # Legge il file CSV
@@ -144,46 +153,54 @@ class AnaerobicDigesterFromData(AnaerobicDigester):
         data["time"] = pd.to_datetime(data.index,format=date_format,utc=True,)
 
         data = data.set_index("time").sort_index()
-        data_mass_flow = data[mass_flow_column_name]
+        data_volume_flow = data[volume_flow_column_name]*rescale_factor
         data_methane_fraction = data[methane_fraction_column_name]
-        data_mass_flow *= rescale_factor
-        ts_mass_flow = TimeSeriesData(
-                                raw = data_mass_flow,
-                                var_type = 'mass_flow',
-                                var_unit = mass_flow_unit,
-                                time_alignment = time_alignment
-                            )
-        ts_methane_fraction = TimeSeriesData(
-                                raw = data_methane_fraction,
-                                var_type = 'adimensional',
-                                var_unit = methane_fraction_unit,
-                                time_alignment = time_alignment
-                            )
 
-        # Conserva le serie temporali
-        self.methane_fraction_data = ts_methane_fraction
-        self.mass_flow_data = ts_mass_flow
+        # Serie temporale della portata volumetrica in L/h
+        self.volume_flow_data = TimeSeriesData(
+            raw=data_volume_flow,
+            var_type="volume_flow",
+            var_unit="l/h",
+            time_alignment=time_alignment,
+        )
+
+        # Serie temporale della frazione molare di metano
+        self.methane_fraction_data = TimeSeriesData(
+            raw=data_methane_fraction,
+            var_type="adimensional",
+            var_unit="adimensional",
+            time_alignment=time_alignment,
+        )
 
         super().__init__(name=name,biogas_rate = 0.0, methane_fraction = 0.0)
 
     def resample_data(self, time_step_h: float, simulation_end_h: float, simulation_start_datetime: str):
         self.methane_fraction_data.resample(time_step_h=time_step_h, simulation_end_h=simulation_end_h, simulation_start_datetime = simulation_start_datetime)
-        self.mass_flow_data.resample(time_step_h=time_step_h, simulation_end_h=simulation_end_h, simulation_start_datetime = simulation_start_datetime)
+        self.volume_flow_data.resample(time_step_h=time_step_h, simulation_end_h=simulation_end_h, simulation_start_datetime = simulation_start_datetime)
 
     def step(self, state: SimulationState, action = None):
 
-        # recupero dai dati TimeSeries data la frazione di metano e la portata in massa di produzione di biogas
         methane_fraction = self.methane_fraction_data.data[state.time_id]
-        mass_flow = self.mass_flow_data.data[state.time_id]
-        # Calcolo gli altri valori utili
-        volume_flow = mass_flow / self.biogas_density
+        volume_flow_l_h = self.volume_flow_data.data[state.time_id]
+        # Aggiorna la frazione di metano
+        self.methane_fraction = methane_fraction
+
+        # Portata volumetrica: L/h -> m³/s
+        volume_flow_m3_s = volume_flow_l_h / 3_600_000.0
+
+        # Calcola la portata massica [kg/s]
+        mass_flow = volume_flow_m3_s * self.biogas_density
+
+        # Calcola la potenza chimica [kW]
         chemical_power = mass_flow * self.biogas_LHV
-        # Assegno i valori alla porta di output
+
+       # Assegna i valori alla porta di output
         port = self.ports[self.port_name]
         port.methane_fraction = methane_fraction
         port.LHV = self.biogas_LHV
+        port.density = self.biogas_density
 
         port.flows["mass"] = -mass_flow
-        port.flows["volume"] = -volume_flow
+        port.flows["volume"] = -volume_flow_m3_s
         port.flows["chemical_energy"] = -chemical_power
     
