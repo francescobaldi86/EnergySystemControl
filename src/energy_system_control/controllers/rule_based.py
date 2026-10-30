@@ -152,31 +152,61 @@ class ChargeControllerWithEngine(Controller):
                  net_power_activation: float,
                  engine_p_el_design: float,
                  min_soc_activation: float = 0.2,
-                 min_time_on_h: float = 1.0,
-                 min_time_off_h: float = 0.0): 
+                 min_time_on_h: float = 1.0): 
 
+        # Creiamo il nome del caricatore internamente
         self.battery_charger_name = f"{battery_name}_charger"
+        self.engine_name = engine_name
+        self.battery_name = battery_name
         
-        # Sostituzione dei vecchi nomi con minimum_time_off_h e minimum_time_on_h
         super().__init__(name=name,
-                         controlled_components=[self.battery_charger_name, engine_name],
+                         controlled_components=[self.battery_charger_name, self.engine_name],
                          sensors={'demand': electricity_demand_sensor,
                                   'PV_power': pv_power_sensor,
-                                  'battery_SOC': battery_soc_sensor},
-                         minimum_time_off_h={engine_name: min_time_on_h},
-                         minimum_time_on_h={engine_name: min_time_off_h})
-        
-        self.battery_name = battery_name
-        self.engine_name = engine_name
+                                  'battery_SOC': battery_soc_sensor})
         
         self.net_power_activation = net_power_activation
         self.min_soc_activation = min_soc_activation
-        self.min_time_on = min_time_on_h*3600
-        self.min_time_off = min_time_off_h*3600
+        self.min_time_on_h = min_time_on_h
         self.engine_p_el_design = engine_p_el_design
             
         self.last_activation_time = -float('inf')
-        self.engine_is_running = False
+        self.is_running = False
+
+    def _compute_action(self, state: SimulationState):
+        demand = abs(self.obs['demand'])      
+        pv_power = abs(self.obs['PV_power'])
+        soc = self.obs['battery_SOC']  
+        
+        net_deficit = demand - pv_power
+        
+        # 1. Logica di accensione del Motore
+        if net_deficit >= self.net_power_activation and soc <= self.min_soc_activation:
+            desired_engine_action = 1.0
+        else:
+            desired_engine_action = 0.0
+            
+        if self.is_running:
+            if (state.time - self.last_activation_time) < self.min_time_on_h:
+                engine_action = 1.0
+            else:
+                engine_action = desired_engine_action
+                if engine_action == 0.0:
+                    self.is_running = False
+        else:
+            engine_action = desired_engine_action
+            if engine_action == 1.0:
+                self.is_running = True
+                self.last_activation_time = state.time
+
+        # 2. Logica di carica/scarica della Batteria
+        engine_power = self.engine_p_el_design * engine_action
+        net_balance = pv_power + engine_power - demand
+        
+        return {
+            self.engine_name: engine_action,
+            self.battery_charger_name: net_balance
+        }
 
 
 class BatteryControllerAware(Controller):
