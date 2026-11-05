@@ -231,6 +231,7 @@ class Simulator:
         for controller_name in self.env.ordered_controllers:
             controller = self.env.controllers[controller_name]
             controller.get_obs(self.env, self.state)
+            self.state.control_actions = actions.copy()   # copy current actions to state before getting new actions
             ctrl_actions = controller.get_action(self.state)
             for comp, action in ctrl_actions.items():
                 if comp in actions:
@@ -299,6 +300,7 @@ class Simulator:
                     sim_data.controllers[time_id, col_td_error] = controller.agent.last_td_error
         # We also create a registry for each sensor
         for sensor_name, sensor in self.env.sensors.items():
+            sensor.measure(environment=self.env, state=self.state)
             col = self.env.signal_registry_sensors.col_index(sensor_name, "")
             sim_data.sensors[time_id, col] = self._normalize_measurement(sensor.current_measurement)
         return sim_data

@@ -5,8 +5,6 @@ from energy_system_control.helpers import *
 from energy_system_control.components.base import Bus
 from typing import Dict, List
 
-
-
 class Inverter(CompositeComponent):
     """
     The inverter is a component 
@@ -34,7 +32,6 @@ class Inverter(CompositeComponent):
         for pv_port in self.PV_port_names:
             dc_bus_ports_info[pv_port] = 'electricity'
 
-        
         self.dc_bus = Bus(name = f'{name}_dc_bus', 
                           ports_info=dc_bus_ports_info)
         
@@ -43,6 +40,7 @@ class Inverter(CompositeComponent):
             ac_bus_ports_info[port_name] = 'electricity'
         self.ac_bus = Bus(name = f'{name}_ac_bus', 
                           ports_info = ac_bus_ports_info)
+        
         if efficiency_type == 'fixed':
             self.converter = FixedEfficiencyInverterConverter(name = f'{name}_inverter', 
                                                      design_efficiency = design_efficiency)
@@ -96,5 +94,3 @@ class InverterConverter(ImplicitComponent):
 class FixedEfficiencyInverterConverter(InverterConverter):
     def get_efficiency(self):
         return self.design_efficiency
-
-    

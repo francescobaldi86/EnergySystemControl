@@ -38,7 +38,7 @@ class FlowTemperatureSensor(Sensor):
 class PowerSensor(Sensor):
     port_name: str
     flow_type: str
-    def __init__(self, name, port_name, flow_type):
+    def __init__(self, name, port_name, flow_type, scale_factor: float = 1.0):
         """
         Model of sensor that measures the power flow at a specific port
 
@@ -52,12 +52,13 @@ class PowerSensor(Sensor):
         super().__init__(name)
         self.port_name = port_name
         self.flow_type = flow_type
+        self.scale_factor = scale_factor
 
     def measure(self, environment, state):
         if state.time_id == 0:
             self.current_measurement = 0.0  # The first power measurement is always 0
         else:
-            self.current_measurement = environment.ports[self.port_name].flows[self.flow_type]
+            self.current_measurement = environment.ports[self.port_name].flows[self.flow_type] * self.scale_factor
         return self.current_measurement
 
 
@@ -256,3 +257,4 @@ class SensorWithMemory(Sensor):
         super().reset()
         self.memory.clear()
         self.current_measurement = np.array([])
+

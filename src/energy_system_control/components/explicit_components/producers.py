@@ -71,20 +71,21 @@ class AnaerobicDigester(Producer):
         return (self.methane_mass_fraction * Methane.LHV)
 
     @property
-    def volume_flow_l_h(self) -> float:
-     """Biogas volume flow [L/h]."""
-     return self.biogas_rate
-
-    @property
     def volume_flow_m3_s(self) -> float:
       """Biogas volume flow [m³/s]."""
-      return self.volume_flow_l_h / 3_600_000.0
+      # Conversione corretta: da m^3/h a m^3/s (diviso per 3600)
+      return self.biogas_rate / 3600.0
+
+    @property
+    def volume_flow_l_h(self) -> float:
+     """Biogas volume flow [L/h]."""
+     # Moltiplichiamo i m^3/h per 1000
+     return self.biogas_rate * 1000.0
 
     @property
     def mass_flow(self) -> float:
-         volume_flow_m3_s = self.biogas_rate / 3600.0
-         return (volume_flow_m3_s * self.biogas_density)
-
+         # Ora possiamo usare la proprietà corretta
+         return self.volume_flow_m3_s * self.biogas_density
     @property
     def chemical_power(self) -> float:
         return self.mass_flow * self.biogas_LHV

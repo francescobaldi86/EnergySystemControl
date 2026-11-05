@@ -68,4 +68,4 @@ class InternalCombustionEngine(ControlledComponent):
         # calcolo combustibile consumato (espresso come potenza chimica entrante)
         self.ports[self.fuel_port_name].flows['chemical_energy'] = fuel_consumed
         self.ports[self.fuel_port_name].flows['mass'] = fuel_consumed / self.ports[self.fuel_port_name].LHV
-        self.ports[self.fuel_port_name].flows['volume'] = self.ports[self.fuel_port_name].flows['mass'] * self.ports[self.fuel_port_name].density
+        self.ports[self.fuel_port_name].flows['volume'] = self.ports[self.fuel_port_name].flows['mass'] / self.ports[self.fuel_port_name].density

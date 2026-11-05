@@ -13,9 +13,10 @@ from .components.composite_components.inverters import Inverter
 from .components.controlled_components.other_heat_sources import ResistanceHeater
 from .components.controlled_components.heat_pumps import HeatPumpConstantEfficiency, HeatPumpLorentzEfficiency, HeatPump
 from .components.controlled_components.combustion_engine import InternalCombustionEngine
+from. components.controlled_components.emergency_flare import EmergencyFlare
 from .components.base import Bus
 from .controllers.base import HeaterControllerWithBandwidth, ChargeController
-from .controllers.rule_based import HeatPumpRuleBasedController, EngineRuleBasedController, ChargeControllerWithEngine, BatteryControllerAware, EngineOnOffController, BiogasEngineRuleBasedController
+from .controllers.rule_based import HeatPumpRuleBasedController, EngineRuleBasedController, ChargeControllerWithEngine, BatteryControllerAware, EngineOnOffController, BiogasEngineRuleBasedController, ModulatingFlareController
 from .sensors.sensors import Sensor, PowerSensor, ElectricPowerSensor, FlowTemperatureSensor, SOCSensor, TankTemperatureSensor, HotWaterDemandSensor, SensorWithMemory
 
 __all__ = [
@@ -27,7 +28,7 @@ __all__ = [
     "ResistanceHeater", "BalancingUtility", "ColdWaterGrid", "GenericUtility", "Inverter", "ElectricityGrid",
     "HeatPumpLorentzEfficiency", "HeatPumpConstantEfficiency", "HeatPump", "Bus",
     "HeaterControllerWithBandwidth", "ChargeController", "BiogasEngineRuleBasedController",
-    "HeatPumpRuleBasedController", 
+    "HeatPumpRuleBasedController", "EmergencyFlare", "ModulatingFlareController",
     "Sensor", "FlowTemperatureSensor", "PowerSensor", "TankTemperatureSensor", "SOCSensor", "ElectricPowerSensor", "HotWaterDemandSensor", "SensorWithMemory",
     "GasGrid", "InternalCombustionEngine", "EngineRuleBasedController", "ChargeControllerWithEngine", "BatteryControllerAware", "EngineOnOffController"
 ]

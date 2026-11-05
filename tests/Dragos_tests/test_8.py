@@ -25,6 +25,7 @@ def test_8():
         esc.AnaerobicDigester(name='biogas_producer', biogas_rate=3, methane_fraction=0.65),
         esc.BiogasStorage(name='biogas_storage', capacity=1.0, initial_soc = 0.5, initial_methane_fraction=0.55),
         esc.InternalCombustionEngine(name='backup_engine', P_el_design=30, fuel='biogas', polynomial_efficiency=True),
+        esc.EmergencyFlare(name='biogas_flare', max_biogas_consumption_kW=30.0),
         esc.ElectricityDemand.from_csv(name='demand_rifugio', path=os.path.join(__TEST__, 'DATA', 'consumi_totali_rifugio_2026.csv'),
                                      var_unit='kWh', rescale_factor=0.001, column_name='Power', time_alignment='yearly', date_format='%d/%m/%Y %H:%M')
     ]
@@ -38,15 +39,24 @@ def test_8():
             battery_soc_sensor='battery_SOC_sensor',
             biogas_soc_sensor='biogas_SOC_sensor',
             building_demand_sensor='building_demand_sensor',  # Dati CSV
-            hp_demand_sensor='hp_demand_sensor',              # Pompa Calore
+            #hp_demand_sensor='hp_demand_sensor',            
             pv_power_sensor_est='pv_power_sensor_est',
             pv_power_sensor_ovest='pv_power_sensor_ovest',
             net_power_activation=0.2,
             engine_p_el_design=30,
+            hp_component_name='heat_pump',
+            hp_p_el_design=(1.5/3.2),  
             min_battery_soc_activation=0.7,
             biogas_soc_on_threshold=0.8,
             biogas_soc_off_threshold=0.2,
             min_time_on_h=0.75
+        ),
+        esc.ModulatingFlareController(
+            name='flare_controller',
+            flare_name='biogas_flare',
+            biogas_soc_sensor='biogas_SOC_sensor',
+            soc_activation=0.98, 
+            Kp=50.0               
         )
     ]
 
@@ -62,7 +72,8 @@ def test_8():
         esc.ElectricPowerSensor('battery_power_sensor', 'battery_electricity_port'),
         esc.ElectricPowerSensor('grid_power_sensor', 'electric_grid_electricity_port'),
         esc.ElectricPowerSensor('engine_power_sensor', 'backup_engine_electricity_port'),
-        esc.PowerSensor('engine_fuel_sensor', 'backup_engine_biogas_port', flow_type='mass') 
+        esc.PowerSensor('engine_fuel_sensor', 'backup_engine_biogas_port', flow_type='mass'),
+        esc.PowerSensor('flare_volume_sensor', 'biogas_flare_biogas_port', flow_type='volume', scale_factor=3600),
     ]
 
     connections = [
@@ -77,7 +88,8 @@ def test_8():
         ('biogas_storage_input', 'biogas_producer_biogas_port'), 
         ('backup_engine_biogas_port', 'biogas_storage_output'),
         ('heat_pump_electricity_input_port', 'inverter_AC_output_port_0'),
-        ('demand_rifugio_electricity_port', 'inverter_AC_output_port_1')
+        ('demand_rifugio_electricity_port', 'inverter_AC_output_port_1'),
+        ('biogas_flare_biogas_port', 'biogas_storage_flare_output')
     ]
 
     env = esc.Environment(components=components, controllers=controllers, sensors=sensors, connections=connections)

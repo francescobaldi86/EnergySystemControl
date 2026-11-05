@@ -122,7 +122,7 @@ class EngineRuleBasedController(Controller):
             
         # 2. Logica tempo minimo di accensione (override)
         if self.engine_is_running:
-            time_elapsed = state.time - self.last_activation_time
+            time_elapsed = (state.time - self.last_activation_time)/3600
             if time_elapsed < self.min_time_on_h:
                 action = 1.0
             else:
@@ -328,11 +328,13 @@ class BiogasEngineRuleBasedController(Controller):
                  battery_soc_sensor: str, 
                  biogas_soc_sensor: str,
                  building_demand_sensor: str,
-                 hp_demand_sensor: str,
+                 #hp_demand_sensor: str,
                  pv_power_sensor_est: str,
                  pv_power_sensor_ovest: str,
                  net_power_activation: float,
                  engine_p_el_design: float,
+                 hp_component_name: str = 'heat_pump',
+                 hp_p_el_design: float = (1.5/3.2),  # default: 1.5 kW elettrici per 3.2 kW termici
                  min_battery_soc_activation: float = 0.2,
                  target_battery_soc: float = 0.95,          # SOC desiderato per la batteria in ricarica
                  max_battery_charge_power: float = 0.6,    # Potenza massima [kW] destinata alla ricarica
@@ -347,17 +349,19 @@ class BiogasEngineRuleBasedController(Controller):
         super().__init__(name=name,
                          controlled_components=[self.battery_charger_name, engine_name],
                          sensors={'building_demand': building_demand_sensor, 
-                                  'hp_demand': hp_demand_sensor,             
+                                  # 'hp_demand': hp_demand_sensor,             
                                   'PV_power_est': pv_power_sensor_est,
                                   'PV_power_ovest': pv_power_sensor_ovest,
                                   'battery_SOC': battery_soc_sensor,
                                   'biogas_SOC': biogas_soc_sensor},
-                         minimum_time_off_h={engine_name: min_time_on_h},
-                         minimum_time_on_h={engine_name: min_time_off_h},
+                         minimum_time_off_h={engine_name: min_time_off_h},
+                         minimum_time_on_h={engine_name: min_time_on_h},
                          minimum_load = {engine_name: min_engine_load_factor})
         
         self.battery_name = battery_name
         self.engine_name = engine_name
+        self.hp_component_name = hp_component_name
+        self.hp_p_el_design = hp_p_el_design
         
         self.net_power_activation = net_power_activation
         self.min_battery_soc_activation = min_battery_soc_activation
@@ -389,7 +393,8 @@ class BiogasEngineRuleBasedController(Controller):
     def _compute_action(self, state: SimulationState, **kwargs):
         # read sensors and calculate net_deficit
         building_demand = abs(self.obs.get('building_demand', 0.0))
-        hp_demand = abs(self.obs.get('hp_demand', 0.0))
+        hp_action = state.control_actions.get(self.hp_component_name, 0.0)
+        hp_demand = hp_action * self.hp_p_el_design
         total_demand = building_demand + hp_demand 
         
         pv_power_est = abs(self.obs['PV_power_est'])
@@ -442,7 +447,8 @@ class BiogasEngineRuleBasedController(Controller):
 
         # calculate the final battery output
         building_demand = abs(self.obs.get('building_demand', 0.0))
-        hp_demand = abs(self.obs.get('hp_demand', 0.0))
+        hp_action = state.control_actions.get(self.hp_component_name, 0.0)
+        hp_demand = hp_action * self.hp_p_el_design
         total_demand = building_demand + hp_demand 
         
         pv_power_est = abs(self.obs['PV_power_est'])
@@ -458,3 +464,51 @@ class BiogasEngineRuleBasedController(Controller):
         # save and return the final action
         self.previous_action = limited_action
         return limited_action
+
+class ModulatingFlareController(Controller):
+    """
+    Controller for an emergency flare that modulates its opening based on the SOC of a biogas storage unit.
+    The flare opens proportionally to the amount by which the SOC exceeds a defined activation threshold, 
+    using a proportional gain to determine the degree of opening. The flare remains closed when the SOC is 
+    below the activation threshold.
+    """
+    def __init__(self, name: str, flare_name: str, biogas_soc_sensor: str, 
+                 soc_activation: float = 0.98, Kp: float = 50.0):
+        """
+        Parameters
+        ----------
+        name : str
+            controller name.
+        flare_name : str
+            name of the emergency flare component controlled by this controller.
+        biogas_soc_sensor : str
+            name of the sensor that reads the SOC of the BiogasStorage.
+        soc_activation : float
+            SOC threshold above which the flare begins to open (default 0.98).
+        Kp : float
+            Proportional gain. With Kp=50, a +2% error (i.e., SOC=1.00) 
+            opens the valve to 100% (1.0).
+        """
+        super().__init__(name=name,
+                         controlled_components=[flare_name],
+                         sensors={'biogas_SOC': biogas_soc_sensor})
+        self.flare_name = flare_name
+        self.soc_activation = soc_activation
+        self.Kp = Kp
+
+    def _compute_action(self, state: SimulationState):
+        soc = self.obs['biogas_SOC']
+        
+        if soc <= self.soc_activation:
+            action = 0.0
+        else:
+            # calculate the error as the difference between current SOC and activation threshold
+            error = soc - self.soc_activation
+            
+            # calculate the action using proportional control
+            action = error * self.Kp
+            
+            # limit the action to the range [0.0, 1.0] for safety
+            action = min(1.0, max(0.0, action))
+                
+        return {self.flare_name: action}
