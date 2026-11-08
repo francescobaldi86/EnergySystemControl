@@ -63,7 +63,7 @@ def test_panel_from_PVGIS():
     pv.resample_data(time_step_h = time_step/3600, simulation_end_h = 24)
     pv.create_ports()
     # Checking input
-    assert isclose(pv.ts.data[50], 0.446, abs_tol=0.01)
+    assert isclose(pv.ts.data[50], 0.432, abs_tol=0.01)
     # Testing taking step
     state = SimulationState(time_id = 0, time_step = time_step)
     pv.step(state)

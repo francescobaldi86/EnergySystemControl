@@ -23,7 +23,7 @@ class BiogasStorage(StorageUnit):
         self.capacity = float(capacity)
         self.SOC_0 = float(initial_soc)
         self.SOC = float(initial_soc)
-        
+
         # 2. DEFINIZIONE DELLE PORTE
         self.input_port_name = f"{name}_input"
         self.output_port_name = f"{name}_output"
@@ -102,10 +102,11 @@ class BiogasStorage(StorageUnit):
     def _update_output_port(self):
         """Propaga le proprietà del gas su ENTRAMBE le porte di uscita."""
         for p_name in [self.output_port_name, self.flare_port_name]:
-            port = self.ports[p_name]
-            port.methane_fraction = self.methane_fraction
-            port.LHV = self.biogas_LHV
-            port.density = self.biogas_density
+            if p_name in self.ports:
+                port = self.ports[p_name]
+                port.methane_fraction = self.methane_fraction
+                port.LHV = self.biogas_LHV
+                port.density = self.biogas_density
 
     def initialize(self, ctx: InitContext):
         self._update_soc()
@@ -118,11 +119,12 @@ class BiogasStorage(StorageUnit):
         output = {}
         # Segnala all'ambiente le proprietà per entrambe le porte (Motore e Torcia)
         for p_name in [self.output_port_name, self.flare_port_name]:
-            output[p_name] = {
-                'methane_fraction': self.methane_fraction,
-                'LHV': self.biogas_LHV,
-                'density': self.biogas_density
-            }
+            if p_name in self.ports:
+                output[p_name] = {
+                    'methane_fraction': self.methane_fraction,
+                    'LHV': self.biogas_LHV,
+                    'density': self.biogas_density
+                }
         return output
 
     def _update_soc(self):
@@ -139,9 +141,9 @@ class BiogasStorage(StorageUnit):
         if dt < 0:
             raise ValueError("time_step cannot be negative.")
 
-        input_port = self.ports[self.input_port_name]
-        output_port = self.ports[self.output_port_name]
-        flare_port = self.ports[self.flare_port_name]
+        input_port = self.ports.get(self.input_port_name)
+        output_port = self.ports.get(self.output_port_name)
+        flare_port = self.ports.get(self.flare_port_name)
 
         w_ch4_current = self.methane_mass_fraction
         lhv_current = self.biogas_LHV
@@ -161,8 +163,8 @@ class BiogasStorage(StorageUnit):
         delta_mass_in = mass_flow_in * dt
 
         # B. GAS OUTLET (Somma prelievi: Motore + Torcia)
-        chem_energy_engine = output_port.flows.get("chemical_energy", 0.0) or 0.0
-        chem_energy_flare = flare_port.flows.get("chemical_energy", 0.0) or 0.0
+        chem_energy_engine = (output_port.flows.get("chemical_energy", 0.0) or 0.0) if output_port else 0.0
+        chem_energy_flare = (flare_port.flows.get("chemical_energy", 0.0) or 0.0) if flare_port else 0.0
         
         total_energy_flow_out = max(0.0, -chem_energy_engine) + max(0.0, -chem_energy_flare)
         
