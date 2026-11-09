@@ -30,7 +30,7 @@ class ResistanceHeater(HeatSource):
     def get_efficiency(self, state: SimulationState):
         return self.efficiency
 
-class GasBoiler(HeatSource):
+'''class GasBoiler(HeatSource):
 
     def __init__(self, name: str, efficiency: float, max_power: float, source_type: str = "biogas"):
         super().__init__(name, source_type)
@@ -43,5 +43,40 @@ class GasBoiler(HeatSource):
         else:
             return 0.0
 
+
     def get_efficiency(self, state=None) -> float:
+        return self.efficiency'''
+
+class GasBoiler(HeatSource):
+
+    def __init__(self, name: str, efficiency: float,
+                 max_power: float, source_type: str = "biogas"):
+
+        super().__init__(name, source_type)
+
+        self.efficiency = efficiency
+        self.max_power = max_power
+
+        self.soc_on = 0.10
+        self.soc_off = 0.01
+        self.boiler_on = False
+
+    def get_heat_output(self, state):
+
+     port = self.ports[self.power_input_port_name]
+
+     if port.LHV <= 0.0:
+        self.boiler_on = False
+        return 0.0
+
+     soc = getattr(port, "SOC", 0.0)
+
+     if soc >= self.soc_on:
+        self.boiler_on = True
+
+     elif soc <= self.soc_off:
+        self.boiler_on = False
+
+     return self.max_power if self.boiler_on else 0.0
+    def get_efficiency(self, state=None):
         return self.efficiency

@@ -36,7 +36,7 @@ class AnaerobicDigester(Producer):
         name : str
             Name of the component
         biogas_rate : float
-            Constant production rate of the digester, in [m3/h]
+            Constant production rate of the digester, in [liters/h]
         methane_fraction : float
             Constant methane fraction of the biogas produced, in [vol/vol]. Must be between 0 and 1
         """
@@ -47,7 +47,7 @@ class AnaerobicDigester(Producer):
         if biogas_rate < 0:
             raise ValueError("biogas_rate must be >= 0")
 
-        self.biogas_rate = biogas_rate
+        self.biogas_rate = biogas_rate 
         self.methane_fraction = methane_fraction
         # NON tocchiamo self.ports qui
 
@@ -78,12 +78,11 @@ class AnaerobicDigester(Producer):
     @property
     def volume_flow_m3_s(self) -> float:
       """Biogas volume flow [m³/s]."""
-      return self.volume_flow_l_h / 3_600_000.0
+      return self.biogas_rate / 3_600_000.0
 
     @property
     def mass_flow(self) -> float:
-         volume_flow_m3_s = self.biogas_rate / 3600.0
-         return (volume_flow_m3_s * self.biogas_density)
+         return (self.volume_flow_m3_s * self.biogas_density)
 
     @property
     def chemical_power(self) -> float:
@@ -139,10 +138,10 @@ class AnaerobicDigesterFromData(AnaerobicDigester):
                  data_path: str, 
                  filename: str,
                  time_alignment: TimeAlignment = "yearly",
-                 date_format: str = "%Y%m%d:%H%M", 
+                 date_format: str = "%Y-%m-%d %H:%M:%S", 
                  rescale_factor: float = 1.0, 
-                 volume_flow_column_name: str = "Produzione biogas[L/h]",
-                 methane_fraction_column_name: str = "contenuto metano in biogas prodotto",
+                 volume_flow_column_name: str = "Produzione biogas [l/h]",
+                 methane_fraction_column_name: str = "Contenuto metano in biogas prodotto [-]",
             ):
         # Inizializza il componente di accumulo
 

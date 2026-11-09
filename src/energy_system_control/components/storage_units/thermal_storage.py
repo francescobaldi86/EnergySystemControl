@@ -489,7 +489,7 @@ class BiogasStorage(StorageUnit):
     name : str
         Storage unit name.
     capacity : float
-        Maximum storage volume [m3].
+        Maximum storage volume [liters].
     initial_soc : float
         Initial state of charge, between 0 and 1.
     initial_methane_fraction : float
@@ -516,7 +516,7 @@ class BiogasStorage(StorageUnit):
         if not 0.0 <= initial_methane_fraction <= 1.0:
             raise ValueError("initial_methane_fraction must be between 0 and 1.")
 
-        self.capacity = float(capacity)
+        self.capacity = float(capacity) / 1000.0
         self.SOC_0 = float(initial_soc)
         self.SOC = float(initial_soc)
         self.input_port_name = f"{name}_input"
@@ -607,6 +607,7 @@ class BiogasStorage(StorageUnit):
         output_port.methane_fraction = self.methane_fraction
         output_port.LHV = self.biogas_LHV
         output_port.density = self.biogas_density
+        output_port.SOC = self.SOC
 
     def initialize(self, ctx: InitContext):
         self._update_soc()
@@ -617,10 +618,6 @@ class BiogasStorage(StorageUnit):
         # Update again in case initialize() changes port values.
         self._update_output_port()
 
-    def set_inherited_port_values(self,state: SimulationState,):
-        self._update_output_port()
-        return [self.output_port_name]
-
     # SOC UPDATE
 
     def _update_soc(self):
@@ -629,25 +626,20 @@ class BiogasStorage(StorageUnit):
             self.SOC = 0.0
             return
 
-        self.SOC = min(
-            1.0,
-            max(0.0, self.volume_m3 / self.capacity),
-        )
-
-    # SIMULATION STEP
+        self.SOC = min(1.0,max(0.0, self.volume_m3 / self.capacity),)
 
     def step(self, state, action=None):
+        mass_before = self.total_mass
         dt = state.time_step
-
+    
         if dt < 0:
             raise ValueError("time_step cannot be negative.")
-
+        
         input_port = self.ports[self.input_port_name]
         output_port = self.ports[self.output_port_name]
 
         # A. GAS INLET
-        mass_flow_in = max(0.0,input_port.flows.get("mass", 0.0) or 0.0,)
-
+        mass_flow_in = max(0.0,input_port.flows.get("mass", 0.0) or 0.0)
         # Input methane fraction is assumed to be MOLAR.
         x_ch4_in = getattr(input_port,"methane_fraction",0.0,)
 
@@ -660,26 +652,31 @@ class BiogasStorage(StorageUnit):
         # Convert molar fraction to mass fraction.
         mean_mw_in = (x_ch4_in * METHANE.MW + x_co2_in * CARBON_DIOXIDE.MW)
 
-        if mean_mw_in > 0:
-            w_ch4_in = (x_ch4_in * METHANE.MW/ mean_mw_in)
-        else:
-            w_ch4_in = 0.0
-
+        w_ch4_in = (x_ch4_in * METHANE.MW/ mean_mw_in
+        if mean_mw_in > 0 else 0.0)
         # Incoming mass during the timestep [kg].
         requested_mass_in = mass_flow_in * dt
-
+        # Requested outlet mass, calculated before modifying the storage.
+        chemical_energy_out = (output_port.flows.get("chemical_energy", 0.0) or 0.0)
+        energy_flow_out = max(0.0, -chemical_energy_out)
+        current_lhv = self.biogas_LHV
+        mass_flow_out = (energy_flow_out / current_lhv if current_lhv > 0 else 0.0)
+        requested_mass_out = mass_flow_out * dt
         # Available volume before accepting incoming gas.
         current_volume = self.volume_m3
         available_volume = max(0.0,self.capacity - current_volume,)
 
         # Approximate mass that fits in the available volume.
         max_mass_in = available_volume * density_in
-        accepted_mass_in = min(requested_mass_in,max_mass_in,)
+        accepted_mass_in = min(requested_mass_in,max_mass_in+requested_mass_out)
+        mass_in=accepted_mass_in
         self.ch4_mass += accepted_mass_in * w_ch4_in
         self.co2_mass += (accepted_mass_in * (1.0 - w_ch4_in))
 
         # Overflow is the incoming mass that was not accepted.
         self.overflow_mass = (requested_mass_in - accepted_mass_in)
+        mass_after_inlet = self.total_mass
+    
         # GAS OUTLET
         # Negative chemical energy flow means energy is leaving the storage, as in the original convention.
         chemical_energy_out = (output_port.flows.get("chemical_energy", 0.0)or 0.0)
@@ -691,21 +688,24 @@ class BiogasStorage(StorageUnit):
 
         # Requested mass flow [kg/s].
         if current_lhv > 0:
-            mass_flow_out = energy_flow_out / current_lhv
+            requested_mass_out = (energy_flow_out / current_lhv)*dt
         else:
-            mass_flow_out = 0.0
+            requested_mass_out = 0.0
 
-        requested_mass_out = mass_flow_out * dt
-
+        available_mass=self.total_mass
         # Cannot withdraw more gas than is stored.
-        accepted_mass_out = min(requested_mass_out,self.total_mass,)
-
-        if self.total_mass > 0 and accepted_mass_out > 0:
+        accepted_mass_out = min(requested_mass_out,available_mass)
+        if accepted_mass_out > 0:
             w_ch4_out = self.methane_mass_fraction
             ch4_out = accepted_mass_out * w_ch4_out
             co2_out = accepted_mass_out * (1.0 - w_ch4_out)
-            self.ch4_mass = max(0.0,self.ch4_mass - ch4_out,)
-            self.co2_mass = max(0.0,self.co2_mass - co2_out,)
+            self.ch4_mass -= ch4_out
+            self.co2_mass -= co2_out
+            
+        # Update SOC after mass balance
+        self._update_soc()
+        # Update output port properties
+        self._update_output_port()
 
     def set_inherited_port_values(self, state: SimulationState):
         # First update values of the output port
@@ -718,6 +718,7 @@ class BiogasStorage(StorageUnit):
         output[self.output_port_name] = {
             'methane_fraction': self.methane_fraction,
             'LHV': self.biogas_LHV,
-            'density': self.biogas_density
+            'density': self.biogas_density,
+            'SOC': self.SOC
         }
         return output

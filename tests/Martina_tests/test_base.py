@@ -108,18 +108,20 @@ def test_biogas_storage_empty_with_boiler():
 
     storage = env.components["biogas_storage"]
     boiler_mass_flow=df_ports["boiler_biogas_input_port:mass"]
+    boiler_heat_output = -df_ports['boiler_heat_output_port:heat']
 
     print("\n Risultati finali")
     print(f"Massa finale: {storage.total_mass:.4f} kg")
-    print(f"Volume finale : {storage.volume:.4f} m3")
+    print(f"Volume finale : {storage.volume_m3:.4f} m3")
     print(f"Flusso massimo caldaia : {boiler_mass_flow.abs().max():.4f} kg/s")
     print(f"Flusso finale caldaia{boiler_mass_flow.iloc[-1]:.4%} kg/s")
 
     # caldaia consuma biogas durante la simulazione
-    assert boiler_mass_flow.abs().max()>0.0 ("la caldaia non ha consumato biogas")
+    assert boiler_mass_flow.abs().max()>0.0, ("la caldaia non ha consumato biogas")
     # 2. Lo storage è completamente vuoto alla fine
     assert math.isclose(storage.total_mass, 0.0, abs_tol=1e-6), (f"La massa residua nello storage è {storage.total_mass:.6f} kg")
-    assert math.isclose(storage.volume, 0.0, abs_tol=1e-6), (f"Il volume residuo nello storage è {storage.volume:.6f} m3")
+    assert math.isclose(storage.volume_m3, 0.0, abs_tol=1e-6), (f"Il volume residuo nello storage è {storage.volume:.6f} m3")
+    assert math.isclose(boiler_heat_output.iloc[-1], 0.0, abs_tol=1e-6), ('La caldaia alla fine della simulazione ha output termico nullo')
 test_biogas_storage_empty_with_boiler()   
 
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
