@@ -153,10 +153,9 @@ class BiogasStorage(StorageUnit):
             self.SOC = 0.0
             return
 
-        self.SOC = min(
-            1.0,
-            max(0.0, self.volume_m3 / self.capacity),
-        )
+        self.SOC = self.volume_m3 / self.capacity
+        if self.SOC > 1.0 or self.SOC < 0.0:
+            raise ValueError (f'Error in the calculation of the SOC of the biogas storage. The SOC should be between 0.0 and 1.0, while a value of {self.SOC} was calculed.')
 
     # SIMULATION STEP
 
@@ -230,6 +229,15 @@ class BiogasStorage(StorageUnit):
             co2_out = accepted_mass_out * (1.0 - w_ch4_out)
             self.ch4_mass = max(0.0,self.ch4_mass - ch4_out,)
             self.co2_mass = max(0.0,self.co2_mass - co2_out,)
+
+        self._update_soc()
+
+
+    # 1. Calcolare flusso in volume in ingresso e in uscita desiderati (volume_flow_request_in, volume_flow_requested_out)
+    # 2. Calcolare differenza netta di flusso in volume
+    # 3. Agire diversamente a seconda del flusso netto:
+        # Se positivo, verificare quanto ce ne sta. Se il volume disponibile è inferiore al volume in ingresso NETTO, può entrare solo il volume disponibile
+        # Se negativo, può uscire solo quello effetivamente presente
 
     def set_inherited_port_values(self, state: SimulationState):
         # First update values of the output port

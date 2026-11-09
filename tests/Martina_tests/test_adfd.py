@@ -1,6 +1,6 @@
 import energy_system_control as esc
 from energy_system_control.components.explicit_components.producers import AnaerobicDigester, AnaerobicDigesterFromData
-from energy_system_control.components.storage_units.thermal_storage import BiogasStorage
+from energy_system_control.components.storage_units.biogas_storage import BiogasStorage
 from energy_system_control.components.controlled_components.other_heat_sources import GasBoiler
 from energy_system_control.controllers.base import Controller
 from energy_system_control.components.controlled_components.base import HeatSource
@@ -10,6 +10,10 @@ import math, os, pytest
 import pandas as pd
 import os
 from energy_system_control.constants.fluids import Methane, CarbonDioxide
+
+__HERE__ = os.path.dirname(os.path.realpath(__file__))
+__TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+__DATA__ = os.path.join(__TEST__, 'DATA')
 
 DATA_PATH = "DATA"
 FILENAME = "biogas_data_simulated_Lampedusa.csv"
@@ -33,7 +37,7 @@ class FakeHeatSink(ControlledComponent):
         pass
 
 def calculate_reference_power():
-    df = pd.read_csv(os.path.join(DATA_PATH, FILENAME),sep=";",decimal=".",index_col=0)
+    df = pd.read_csv(os.path.join(__DATA__, FILENAME),sep=";",decimal=".",index_col=0)
     volume_flow = df[VOLUME_COLUMN].mean()
     methane_fraction = df[METHANE_COLUMN].mean()
     density = (methane_fraction* Methane.rho + (1 - methane_fraction) * CarbonDioxide.rho)
@@ -45,7 +49,7 @@ def calculate_reference_power():
 
 def run_biogas_test(boiler_power):
     
-    components = [AnaerobicDigesterFromData(name="anaerobic_digester",data_path=DATA_PATH,filename=FILENAME,time_alignment="yearly",date_format="%Y-%m-%d %H:%M:%S",volume_flow_column_name=VOLUME_COLUMN,methane_fraction_column_name=METHANE_COLUMN,),
+    components = [AnaerobicDigesterFromData(name="anaerobic_digester",data_path=__DATA__,filename=FILENAME,time_alignment="yearly",date_format="%Y-%m-%d %H:%M:%S",volume_flow_column_name=VOLUME_COLUMN,methane_fraction_column_name=METHANE_COLUMN,),
         BiogasStorage(name="biogas_storage",capacity=STORAGE_CAPACITY,initial_soc=INITIAL_SOC,initial_methane_fraction=0.57,),
         GasBoiler(name="gas_boiler",efficiency=BOILER_EFFICIENCY,max_power=boiler_power,source_type="biogas",),
         FakeHeatSink(name="heat_sink"),]
@@ -77,7 +81,7 @@ def test_biogas_storage_slightly_increasing():
     assert boiler_mass_flow.abs().max() > 0.0
     assert storage.SOC > INITIAL_SOC
     assert storage.SOC < 1.0
-test_biogas_storage_slightly_increasing()
+
 
 def test_biogas_storage_filling_completely():
     reference_power = calculate_reference_power()
@@ -93,7 +97,7 @@ def test_biogas_storage_filling_completely():
 
     assert boiler_mass_flow.abs().max() > 0.0
     assert math.isclose(storage.SOC, 1.0, abs_tol=1e-6)
-test_biogas_storage_filling_completely()
+
 
 def test_biogas_storage_empty_with_boiler():
 
@@ -114,4 +118,10 @@ def test_biogas_storage_empty_with_boiler():
     assert math.isclose(storage.total_mass,0.0,abs_tol=1e-6)
     assert math.isclose(storage.volume_m3,0.0,abs_tol=1e-6)
     assert math.isclose(boiler_heat_output.iloc[-1],0.0,abs_tol=1e-6)
-test_biogas_storage_empty_with_boiler()
+
+
+
+if __name__ == "__main__":
+    test_biogas_storage_filling_completely()
+    test_biogas_storage_empty_with_boiler()
+    test_biogas_storage_slightly_increasing()

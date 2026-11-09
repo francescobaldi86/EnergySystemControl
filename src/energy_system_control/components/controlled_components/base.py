@@ -54,34 +54,34 @@ class HeatSource(ControlledComponent):
         return self.get_heat_output(state) / self.get_efficiency(state)
 
     def step(self, state: SimulationState, action):
-      # Potenza termica erogata dalla caldaia
-      heat_output = self.get_heat_output(state) * action
-      self.ports[self.heat_output_port_name].flows["heat"] = -heat_output
+        # Potenza termica erogata dalla caldaia
+        heat_output = self.get_heat_output(state) * action
+        self.ports[self.heat_output_port_name].flows["heat"] = -heat_output
 
-      power_input_port = self.ports[self.power_input_port_name]
+        power_input_port = self.ports[self.power_input_port_name]
 
-      if isinstance(power_input_port, BiogasPort):
-        # Potenza chimica richiesta al combustibile [kW]
-        chemical_energy = self.get_power_input(state) * action
+        if isinstance(power_input_port, BiogasPort):
+            # Potenza chimica richiesta al combustibile [kW]
+            chemical_energy = self.get_power_input(state) * action
 
-        power_input_port.flows["chemical_energy"] = chemical_energy
+            power_input_port.flows["chemical_energy"] = chemical_energy
 
-        LHV = power_input_port.LHV
-        density = power_input_port.density
+            LHV = power_input_port.LHV
+            density = power_input_port.density
 
-        # Portata massica del biogas [kg/s], se LHV è in kJ/kg
-        if LHV is not None and LHV > 0:
-            power_input_port.flows["mass"] = chemical_energy / LHV
+            # Portata massica del biogas [kg/s], se LHV è in kJ/kg
+            if LHV is not None and LHV > 0:
+                power_input_port.flows["mass"] = chemical_energy / LHV
+            else:
+                power_input_port.flows["mass"] = 0.0
+
+            # Portata volumetrica [m³/s]
+            if density is not None and density > 0:
+                power_input_port.flows["volume"] = (
+                    power_input_port.flows["mass"] / density
+                )
+            else:
+                power_input_port.flows["volume"] = 0.0
+
         else:
-            power_input_port.flows["mass"] = 0.0
-
-        # Portata volumetrica [m³/s]
-        if density is not None and density > 0:
-            power_input_port.flows["volume"] = (
-                power_input_port.flows["mass"] / density
-            )
-        else:
-            power_input_port.flows["volume"] = 0.0
-
-      else:
-        power_input_port.flows[self.source_type] = self.get_power_input(state) * action
+            power_input_port.flows[self.source_type] = self.get_power_input(state) * action
