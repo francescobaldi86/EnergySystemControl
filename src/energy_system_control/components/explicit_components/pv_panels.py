@@ -117,7 +117,7 @@ class PVpanelFromPVGIS(PVpanel):
             peakpower = self.installed_power,
             loss = self.loss,
             angle = self.tilt,
-            azimuth = self.azimuth,
+            aspect = self.azimuth,
             startyear = self.years[0],
             endyear = self.years[-1],
             pvcalculation = 1,

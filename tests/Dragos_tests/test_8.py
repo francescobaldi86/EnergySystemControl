@@ -18,13 +18,13 @@ def test_8():
         esc.HotWaterStorage(name='hot_water_storage', max_temperature=80, tank_volume=200, T_0=45, convection_coefficient_losses=0.0),
         esc.ElectricityGrid(name='electric_grid'),
         esc.ColdWaterGrid(name='water_grid', utility_type='fluid'),
-        esc.PVpanelFromData(name='pv_panels_est', data_path=os.path.join(__TEST__, 'DATA'), filename='pvgis_data.csv', column_name='P', skipfooter=11, rescale_factor=3.6, time_alignment='yearly'),
-        esc.PVpanelFromData(name='pv_panels_ovest', data_path=os.path.join(__TEST__, 'DATA'), filename='pvgis_data.csv', column_name='P', skipfooter=11, rescale_factor=3.6, time_alignment='yearly'),
-        esc.LithiumIonBattery(name='battery', capacity=2.0, SOC_0=0.5),
+        esc.PVpanelFromPVGIS(name='pv_panels_est', installed_power=3.6, latitude=46.216, longitude=12.215, tilt=30, azimuth = -90, years=[2023]), #pannelli fotovoltaici orientati a est
+        esc.PVpanelFromPVGIS(name='pv_panels_ovest', installed_power=3.6, latitude=46.216, longitude=12.215, tilt=30, azimuth = 90, years=[2023]), #pannelli fotovoltaici orientati a ovest
+        esc.LeadAcidBattery(name='battery', capacity=3.18, SOC_0=0.5, SOC_min=0.3, SOC_derate=0.6, crate = 0.2),
         esc.Inverter(name='inverter', number_of_ac_output_ports=2, number_of_pv_input_ports=2),
-        esc.AnaerobicDigester(name='biogas_producer', biogas_rate=15, methane_fraction=0.65),
-        esc.BiogasStorage(name='biogas_storage', capacity=500.0, initial_ch4_mass=50.0, initial_co2_mass=60.0),
-        esc.InternalCombustionEngine(name='backup_engine', P_el_design=30, efficiency_el=0.33, fuel='biogas'),
+        esc.AnaerobicDigester(name='biogas_producer', biogas_rate=3, methane_fraction=0.65),
+        esc.BiogasStorage(name='biogas_storage', capacity=1.0, initial_soc = 0.5, initial_methane_fraction=0.55),
+        esc.InternalCombustionEngine(name='backup_engine', P_el_design=30, fuel='biogas', polynomial_efficiency=True),
         esc.ElectricityDemand.from_csv(name='demand_rifugio', path=os.path.join(__TEST__, 'DATA', 'consumi_totali_rifugio_2026.csv'),
                                      var_unit='kWh', rescale_factor=0.001, column_name='Power', time_alignment='yearly', date_format='%d/%m/%Y %H:%M')
     ]
@@ -57,10 +57,8 @@ def test_8():
         esc.SOCSensor('biogas_SOC_sensor', 'biogas_storage'),
         esc.ElectricPowerSensor('pv_power_sensor_est', 'inverter_PV_input_port_0'),
         esc.ElectricPowerSensor('pv_power_sensor_ovest', 'inverter_PV_input_port_1'),
-        
         esc.ElectricPowerSensor('hp_demand_sensor', 'inverter_AC_output_port_0'), 
         esc.ElectricPowerSensor('building_demand_sensor', 'inverter_AC_output_port_1'),
-        
         esc.ElectricPowerSensor('battery_power_sensor', 'battery_electricity_port'),
         esc.ElectricPowerSensor('grid_power_sensor', 'electric_grid_electricity_port'),
         esc.ElectricPowerSensor('engine_power_sensor', 'backup_engine_electricity_port'),

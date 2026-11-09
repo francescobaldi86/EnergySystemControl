@@ -99,14 +99,30 @@ class TimeSeriesDemand(Demand):
         -------
         TimeSeriesDemand object
         """
-        csvread_kwargs = {}
-        if date_format:
-            csvread_kwargs["date_format"] = date_format
+        import warnings
+        
+        # reading the csv file in the pure text format, without any parsing of the index as datetime
+        raw_df = pd.read_csv(
+            path, 
+            sep=";", 
+            decimal='.', 
+            index_col=0, 
+            header=0
+        )
+        # we force the index to be a datetime object, ignoring any warnings about parsing dates
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            if date_format:
+                raw_df.index = pd.to_datetime(raw_df.index, format=date_format)
+            else:
+                raw_df.index = pd.to_datetime(raw_df.index)
+                
         ts_data = TimeSeriesData(
-                    raw = pd.read_csv(path, sep = ";", decimal = '.', index_col = 0, header = 0, parse_dates = True, **csvread_kwargs)[column_name],
+                    raw = raw_df[column_name],
                     time_alignment = time_alignment,
                     var_type = var_type,
                     var_unit = var_unit)
+                    
         return cls(name = name, 
                     ts_data = ts_data,
                     demand_type = demand_type, 
