@@ -1,11 +1,13 @@
 import pandas as pd
 import numpy as np
-import openpyxl
+import openpyxl, os
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.chart import BarChart, Reference
 from openpyxl.formatting.rule import ColorScaleRule
 import time
+
+__HERE__ = os.path.dirname(os.path.abspath(__file__))
 
 def main():
     t0 = time.time()
@@ -16,7 +18,7 @@ def main():
     # ---------------------------------------------------------
     # 1. DATA CLEANING & STATE MACHINE PIPELINE
     # ---------------------------------------------------------
-    df = pd.read_excel(input_filename, sheet_name='Sheet1')
+    df = pd.read_excel(os.path.join(__HERE__, input_filename), sheet_name='Sheet1')
     df.columns = ['time', 'T_out', 'T_exh']
     df['time'] = pd.to_datetime(df['time'])
     df = df.sort_values('time').reset_index(drop=True)
@@ -45,7 +47,8 @@ def main():
     # Interpolazione dei buchi da deadband
     is_na_exh = df['T_exh_clean'].isna()
     gap_sizes_exh = is_na_exh.groupby((~is_na_exh).cumsum()).transform('sum')
-    df['T_exh_clean'] = df['T_exh_clean'].interpolate(method='linear')
+    # df['T_exh_clean'] = df['T_exh_clean'].interpolate(method='linear')
+    df['T_exh_clean'] = df['T_exh_clean'].ffill()
     df.loc[gap_sizes_exh > 60, 'T_exh_clean'] = np.nan
 
     # Interpolazione T_out allineata ai blackout della termocoppia
@@ -122,6 +125,7 @@ def main():
     )
     df['Eh20_step_kWh'] = (df['Qh20_profile_kW'] / 60.0).round(6)
 
+    df['Biogas_Consumato_kg'] = (df['Boiler_ON'] * 60.0 * (10.0 / 0.9 / (11000.0 * 4.187))).round(3)   # min * s/min * kW / (KJ/kg) 
     # ---------------------------------------------------------
     # 3. PREPARAZIONE TABELLE AGGREGATE
     # ---------------------------------------------------------
@@ -143,7 +147,7 @@ def main():
     ).reset_index()
 
     daily_df['Ore_Boiler_ON'] = (daily_df['Minuti_Boiler_ON'] / 60.0).round(2)
-    daily_df['Biogas_Consumato_kg'] = (daily_df['Minuti_Boiler_ON'] * 60.0 * (10.0 / 30000.0)).round(3)
+    daily_df['Biogas_Consumato_kg'] = (daily_df['Minuti_Boiler_ON'] * 60.0 * (10.0 / 0.9 / (11000.0 * 4.187))).round(3)   # min * s/min * kW / (KJ/kg) 
     daily_df['Stato_Acquisizione'] = np.where(
         daily_df['Minuti_Validi'] == 0, 'BLACKOUT TOTALE',
         np.where(daily_df['Minuti_Blackout'] > 0, 'PARZIALE', 'COMPLETO')
@@ -188,8 +192,8 @@ def main():
                            'Minuti_Totali_ON', 'Duty_Cycle_Pct', 'Minuti_ON_Medi_Giorno', 'Energia_Totale_kWh', 
                            'Energia_Media_Giornaliera_kWh']].round(3)
 
-    df_export = df[['time', 'T_out_clean', 'T_exh_clean', 'dT_dt', 'Boiler_ON', 'Cycle_ID', 'Condensing_Regime', 'Qh20_profile_kW', 'Eh20_step_kWh']].copy()
-    df_export.columns = ['Time', 'Outdoor_Temp_C', 'Exhaust_Gas_Temp_C', 'dT_exh_dt_C_min', 'Boiler_ON', 'Cycle_ID', 'Condensing_Regime', 'Qh20_profile_kW', 'Eh20_step_kWh']
+    df_export = df[['time', 'T_out_clean', 'T_exh_clean', 'dT_dt', 'Boiler_ON', 'Cycle_ID', 'Condensing_Regime', 'Qh20_profile_kW', 'Eh20_step_kWh', 'Biogas_Consumato_kg']].copy()
+    df_export.columns = ['Time', 'Outdoor_Temp_C', 'Exhaust_Gas_Temp_C', 'dT_exh_dt_C_min', 'Boiler_ON', 'Cycle_ID', 'Condensing_Regime', 'Qh20_profile_kW', 'Eh20_step_kWh', 'Biogas_Consumato_kg']
     for col in ['Outdoor_Temp_C', 'Exhaust_Gas_Temp_C', 'dT_exh_dt_C_min']:
         df_export[col] = df_export[col].round(3)
 
@@ -197,7 +201,7 @@ def main():
     # 4. EXPORT BULK E FORMATTAZIONE EXCEL CON OPENPYXL
     # ---------------------------------------------------------
     print("Scrittura tabelle base su Excel...")
-    with pd.ExcelWriter(output_filename, engine='openpyxl') as writer:
+    with pd.ExcelWriter(os.path.join(__HERE__, output_filename), engine='openpyxl') as writer:
         pd.DataFrame().to_excel(writer, sheet_name='Sintesi_e_Modello', index=False)
         daily_df.to_excel(writer, sheet_name='Riepilogo_Giornaliero', index=False, startrow=3)
         cycles_df.to_excel(writer, sheet_name='Catalogo_Cicli_ON', index=False, startrow=3)
@@ -205,7 +209,7 @@ def main():
         df_export.to_excel(writer, sheet_name='Dataset_Pulito_1min', index=False)
 
     print("Applicazione stili e generazione grafici...")
-    wb = openpyxl.load_workbook(output_filename)
+    wb = openpyxl.load_workbook(os.path.join(__HERE__, output_filename))
 
     # Definizione Stili Costanti
     NAVY_HDR = PatternFill(start_color="1F3A52", end_color="1F3A52", fill_type="solid")
@@ -392,7 +396,7 @@ def main():
         ws_data.column_dimensions[get_column_letter(c_i)].width = 22
 
     print("Salvataggio file in corso...")
-    wb.save(output_filename)
+    wb.save(os.path.join(__HERE__, output_filename))
     # ---------------------------------------------------------
     # 5. ESPORTAZIONE AGGIUNTIVA DEL SOLO DATASET (CSV ed EXCEL)
     # ---------------------------------------------------------
@@ -400,8 +404,8 @@ def main():
     csv_output = 'dataset_acs_finale.csv'
     excel_output = 'dataset_acs_finale.xlsx'
     
-    df_export.to_csv(csv_output, index=False)
-    df_export.to_excel(excel_output, index=False)
+    df_export.to_csv(os.path.join(__HERE__, csv_output), index=False)
+    df_export.to_excel(os.path.join(__HERE__, excel_output), index=False)
     print(f"Completato in {time.time() - t0:.2f} s. File salvato: {output_filename}")
 
 if __name__ == "__main__":
