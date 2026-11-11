@@ -57,26 +57,8 @@ class GasBoiler(HeatSource):
         self.efficiency = efficiency
         self.max_power = max_power
 
-        self.soc_on = 0.10
-        self.soc_off = 0.01
-        self.boiler_on = False
-
     def get_heat_output(self, state):
-
-     port = self.ports[self.power_input_port_name]
-
-     if port.LHV <= 0.0:
-        self.boiler_on = False
-        return 0.0
-
-     soc = getattr(port, "SOC", 0.0)
-
-     if soc >= self.soc_on:
-        self.boiler_on = True
-
-     elif soc <= self.soc_off:
-        self.boiler_on = False
-
-     return self.max_power if self.boiler_on else 0.0
+        return self.max_power
+    
     def get_efficiency(self, state=None):
         return self.efficiency
