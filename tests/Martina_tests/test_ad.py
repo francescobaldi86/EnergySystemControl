@@ -2,7 +2,7 @@ import energy_system_control as esc
 import math
 import pytest
 from energy_system_control.components.explicit_components.producers import AnaerobicDigester
-from energy_system_control.components.storage_units.thermal_storage import BiogasStorage
+from energy_system_control.components.storage_units.biogas_storage import BiogasStorage
 from energy_system_control.components.controlled_components.other_heat_sources import GasBoiler
 from energy_system_control.controllers.base import Controller
 from energy_system_control.components.base import ControlledComponent
@@ -50,7 +50,25 @@ def test_biogas_storage_slightly_increasing():
     df_ports, df_controllers, df_sensors = results.to_dataframe()
     storage = env.components["biogas_storage"]
     digester = env.components["anaerobic_digester"]
-
+    print("\n--- VERIFICA BILANCIO ---")
+    print("Portate digestore:")
+    print(df_ports["anaerobic_digester_biogas_port:mass"])
+    print("\nPortate caldaia:")
+    print(df_ports["gas_boiler_biogas_input_port:mass"])
+    print("\nFlussi energetici caldaia:")
+    print(df_ports["gas_boiler_biogas_input_port:chemical_energy"])
+    print("\nSOC registrato durante la simulazione:")
+    print(df_sensors)
+    simulation_time_h = 3 / 60
+    produced_volume = biogas_rate * simulation_time_h
+    expected_boiler_volume = (calculate_biogas_rate(1.0) * simulation_time_h)
+    expected_net_volume = produced_volume - expected_boiler_volume
+    expected_soc = (storage.SOC_0 + expected_net_volume / (storage.capacity * 1000))
+    print(f"Volume prodotto: {produced_volume:.4f} L")
+    print(f"Volume richiesto caldaia: {expected_boiler_volume:.4f} L")
+    print(f"Volume netto atteso: {expected_net_volume:.4f} L")
+    print(f"SOC atteso: {expected_soc:.6%}")
+    print(f"SOC simulato: {storage.SOC:.6%}")
     print("\nTEST 1 - PRODUZIONE LEGGERMENTE SUPERIORE")
     print(f"Produzione digestore: {biogas_rate:.2f} L/h")
     print(f"SOC iniziale: {storage.SOC_0:.4%}")
@@ -64,7 +82,6 @@ def test_biogas_storage_slightly_increasing():
     assert boiler_mass_flow.abs().max() > 0.0
     # Lo storage deve aumentare leggermente ma non raggiunge la capacità massima
     assert 1.0>storage.SOC > 0.50   
-
 test_biogas_storage_slightly_increasing()
 
 def test_biogas_storage_filling_completely():

@@ -168,7 +168,32 @@ class BiogasStorage(StorageUnit):
 
         input_port = self.ports[self.input_port_name]
         output_port = self.ports[self.output_port_name]
+        # GAS OUTLET
+        # Negative chemical energy flow means energy is leaving the storage, as in the original convention.
+        chemical_energy_out = (output_port.flows.get("chemical_energy", 0.0)or 0.0)
 
+        energy_flow_out = max(0.0,-chemical_energy_out,)
+
+        # Update mixture LHV after accepting inlet gas.
+        current_lhv = self.biogas_LHV
+
+        # Requested mass flow [kg/s].
+        if current_lhv > 0:
+            mass_flow_out = energy_flow_out / current_lhv
+        else:
+            mass_flow_out = 0.0
+
+        requested_mass_out = mass_flow_out * dt
+
+        # Cannot withdraw more gas than is stored.
+        accepted_mass_out = min(requested_mass_out,self.total_mass,)
+        density_before_out = self.biogas_density
+        if density_before_out > 0:
+            released_volume=accepted_mass_out / density_before_out
+        else: 
+            released_volume = 0.0
+        
+                    
         # A. GAS INLET
         mass_flow_in = max(0.0,input_port.flows.get("mass", 0.0) or 0.0,)
 
@@ -194,42 +219,27 @@ class BiogasStorage(StorageUnit):
 
         # Available volume before accepting incoming gas.
         current_volume = self.volume_m3
-        available_volume = max(0.0,self.capacity - current_volume,)
+        available_volume = max(0.0,self.capacity - current_volume+released_volume,)
 
         # Approximate mass that fits in the available volume.
         max_mass_in = available_volume * density_in
         accepted_mass_in = min(requested_mass_in,max_mass_in,)
-        self.ch4_mass += accepted_mass_in * w_ch4_in
-        self.co2_mass += (accepted_mass_in * (1.0 - w_ch4_in))
 
         # Overflow is the incoming mass that was not accepted.
         self.overflow_mass = (requested_mass_in - accepted_mass_in)
-        # GAS OUTLET
-        # Negative chemical energy flow means energy is leaving the storage, as in the original convention.
-        chemical_energy_out = (output_port.flows.get("chemical_energy", 0.0)or 0.0)
-
-        energy_flow_out = max(0.0,-chemical_energy_out,)
-
-        # Update mixture LHV after accepting inlet gas.
-        current_lhv = self.biogas_LHV
-
-        # Requested mass flow [kg/s].
-        if current_lhv > 0:
-            mass_flow_out = energy_flow_out / current_lhv
-        else:
-            mass_flow_out = 0.0
-
-        requested_mass_out = mass_flow_out * dt
-
-        # Cannot withdraw more gas than is stored.
-        accepted_mass_out = min(requested_mass_out,self.total_mass,)
-
+  
         if self.total_mass > 0 and accepted_mass_out > 0:
             w_ch4_out = self.methane_mass_fraction
             ch4_out = accepted_mass_out * w_ch4_out
             co2_out = accepted_mass_out * (1.0 - w_ch4_out)
             self.ch4_mass = max(0.0,self.ch4_mass - ch4_out,)
             self.co2_mass = max(0.0,self.co2_mass - co2_out,)
+        # Poi aggiungo la massa in ingresso
+        self.ch4_mass += accepted_mass_in * w_ch4_in
+        self.co2_mass += accepted_mass_in * (1.0 - w_ch4_in)
+
+        self._update_soc()
+        self._update_output_port()
 
     def set_inherited_port_values(self, state: SimulationState):
         # First update values of the output port
