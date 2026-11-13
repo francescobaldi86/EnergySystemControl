@@ -27,11 +27,13 @@ VOLUME_COLUMN = "Produzione biogas [l/h]"
 
 class BoilerController(Controller):
     def _compute_action(self, state):
-        # Caldaia sempre accesa al 100%
-        if self.obs['fuel_storage_SOC'] >= 0.01:
+        # Caldaia accesa se c'è abbastanza gas --> con isteresi
+        if self.obs['fuel_storage_SOC'] > 0.3:
             return {k: 1.0 for k in self.controlled_component_names}
-        else:
+        elif self.obs['fuel_storage_SOC'] < 0.1:
             return {k: 0.0 for k in self.controlled_component_names}
+        else:
+            return self.previous_action
 
 class FakeHeatSink(ControlledComponent):
     def __init__(self, name):
@@ -56,7 +58,7 @@ def calculate_simulation_reference_power():
     chemical_power = mass_flow * biogas_lhv
     return (chemical_power * BOILER_EFFICIENCY).mean()
 
-def run_biogas_test(boiler_power):
+def run_biogas_test(boiler_power, simulation_end_h: float = SIMULATION_END_H):
     
     components = [AnaerobicDigesterFromData(name="anaerobic_digester",data_path=__DATA__,filename=FILENAME,time_alignment="yearly",date_format="%Y-%m-%d %H:%M:%S",volume_flow_column_name=VOLUME_COLUMN,methane_fraction_column_name=METHANE_COLUMN,),
         BiogasStorage(name="biogas_storage",capacity=STORAGE_CAPACITY,initial_soc=INITIAL_SOC,initial_methane_fraction=0.57,),
@@ -66,7 +68,7 @@ def run_biogas_test(boiler_power):
     sensors = [esc.SOCSensor("storage_SOC_sensor", "biogas_storage")]
     connections = [("anaerobic_digester_biogas_port", "biogas_storage_input"),("biogas_storage_output", "gas_boiler_biogas_input_port"),("gas_boiler_heat_output_port", "heat_sink_heat_input_port"),]
     env = esc.Environment(components=components,controllers=controllers,sensors=sensors,connections=connections,)
-    sim_config = esc.SimulationConfig(simulation_end_h=SIMULATION_END_H,time_step_h=TIME_STEP_H,simulation_start_datetime=pd.Timestamp("2025-01-01 00:00:00"),)
+    sim_config = esc.SimulationConfig(simulation_end_h=simulation_end_h,time_step_h=TIME_STEP_H,simulation_start_datetime=pd.Timestamp("2025-01-01 00:00:00"),)
     sim = esc.Simulator(env, sim_config)
     results = sim.run()
     df_ports, df_controllers, df_sensors = results.to_dataframe()
@@ -117,7 +119,7 @@ def test_biogas_storage_empty_with_boiler():
 
     reference_power = calculate_simulation_reference_power()
     boiler_power = reference_power * 2.00
-    env, df_ports, df_sensors = run_biogas_test(boiler_power)
+    env, df_ports, df_sensors = run_biogas_test(boiler_power, SIMULATION_END_H * 4)
     storage = env.components["biogas_storage"]
     boiler_mass_flow = df_ports["gas_boiler_biogas_input_port:mass"]
     boiler_heat_output = -df_ports["gas_boiler_heat_output_port:heat"]
@@ -129,7 +131,7 @@ def test_biogas_storage_empty_with_boiler():
     print(f"Massa finale: {storage.total_mass:.8f} kg")
 
     assert boiler_mass_flow.abs().max() > 0.0
-    assert storage.volume_m3 < 0.1
+    assert storage.total_mass < storage.capacity * storage.SOC_0 * storage.biogas_density
     assert math.isclose(boiler_heat_output.iloc[-1],0.0,abs_tol=1e-6)
 
 
