@@ -1,5 +1,7 @@
 from typing import Dict, List
 from collections import defaultdict
+from dataclasses import fields
+import numpy as np
 import pandas as pd
 from energy_system_control.core.base_classes import *
 from energy_system_control.core.port import *
@@ -18,6 +20,7 @@ from energy_system_control.controllers.RL.RLcontrollers import *
 from energy_system_control.helpers import *
 from energy_system_control.io.data_provider import EnvironmentalDataProvider
 from energy_system_control.sim.config import SimulationConfig
+from energy_system_control.sim.step_plan import StepPlan
 
 
 
@@ -134,6 +137,99 @@ class Environment:
         # We also create a registry for each sensor
         for sensor_name in self.sensors.keys():
             self.signal_registry_sensors.register(sensor_name, "")
+
+    def build_step_plan(self, state: SimulationState, cfg: SimulationConfig) -> StepPlan:
+        """Compile everything the per-timestep loop needs into plain lists.
+
+        Must be called after ``initialize`` (the signal registries are created
+        there). Registry column ``i`` always corresponds to the i-th entry of
+        ``_col_to_key``, so the save plans below are aligned with the columns
+        of the SimulationData arrays by construction.
+        """
+        reg_ports = self.signal_registry_ports
+        reg_controllers = self.signal_registry_controllers
+        reg_sensors = self.signal_registry_sensors
+
+        # (port, layer) for every recorded port signal; for FluidPort the extra
+        # 'temperature' registration reads port.T instead of port.flows.
+        port_save = [(self.ports[key.main_key], key.secondary_key)
+                     for key in reg_ports._col_to_key]
+
+        # Sensors in column order.
+        sensor_save = [self.sensors[key.main_key]
+                       for key in reg_sensors._col_to_key]
+
+        # Per controller: {controlled component name: column}, plus the RL
+        # reward/td_error columns when present.
+        controller_save = []
+        for controller_name, controller in self.controllers.items():
+            col_map: Dict[str, int] = {}
+            reward_col = None
+            td_error_col = None
+            for col, key in enumerate(reg_controllers._col_to_key):
+                if key.main_key != controller_name:
+                    continue
+                if key.secondary_key == "reward":
+                    reward_col = col
+                elif key.secondary_key == "td_error":
+                    td_error_col = col
+                else:
+                    col_map[key.secondary_key] = col
+            controller_save.append((controller, col_map, reward_col, td_error_col))
+
+        # One (port_a, port_b, layer) triple per connection x layer of port_a.
+        balance_checks = []
+        for port_name_a, port_name_b in self.connections:
+            port_a = self.ports[port_name_a]
+            port_b = self.ports[port_name_b]
+            for layer in port_a.layers:
+                balance_checks.append((port_a, port_b, layer))
+
+        # Per component: connected (port, connected_port, layers, copy_T) tuples
+        # for _take_component_step. copy_T mirrors the old behavior of copying
+        # the temperature onto FluidPort/HeatPort connections.
+        step_propagation: Dict[str, list] = {}
+        for component in self.components.values():
+            entries = []
+            for port in component.ports.values():
+                connected = port.connected_port
+                if connected is not None:
+                    copy_T = isinstance(connected, (FluidPort, HeatPort))
+                    entries.append((port, connected, list(port.layers), copy_T))
+            step_propagation[component.name] = entries
+
+        # One datetime per step (for the environmental data provider).
+        datetimes = state.simulation_start_datetime + pd.to_timedelta(state.time_vector, unit="s")
+
+        # Solar angles for the whole horizon, computed once (pvlib accepts a
+        # DatetimeIndex). Only when the location is set.
+        solar_zenith = None
+        solar_azimuth = None
+        if self.latitude and self.longitude:
+            zenith, azimuth = calculate_solar_angles(self.latitude, self.longitude, datetimes)
+            solar_zenith = np.asarray(zenith, dtype=float)
+            solar_azimuth = np.asarray(azimuth, dtype=float)
+
+        return StepPlan(
+            ports=list(self.ports.values()),
+            sensors=list(self.sensors.values()),
+            controllers=[self.controllers[name] for name in self.ordered_controllers],
+            inherit=list(self.components.values()),
+            explicit=list(self.components_classified["ExplicitComponent"]),
+            controlled=list(self.components_classified["ControlledComponent"]),
+            algebraic=list(self.components_classified["Bus"]) + list(self.components_classified["ImplicitComponent"]),
+            storage=list(self.components_classified["StorageUnit"]),
+            grid=list(self.components_classified["Grid"]),
+            step_propagation=step_propagation,
+            port_save=port_save,
+            controller_save=controller_save,
+            sensor_save=sensor_save,
+            balance_checks=balance_checks,
+            datetimes=datetimes,
+            env_field_names=[f.name for f in fields(EnvironmentalData)],
+            solar_zenith=solar_zenith,
+            solar_azimuth=solar_azimuth,
+        )
 
     def connect_ports(self):
         for connection in self.connections:
