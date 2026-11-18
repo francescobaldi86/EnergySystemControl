@@ -17,6 +17,7 @@ import pandas as pd
 class StepPlan:
     # Objects iterated every step, in the exact order the old code used.
     ports: List[Any] = field(default_factory=list)            # reset each step
+    unconnected_ports: List[Any] = field(default_factory=list)  # reset to zero flow each step
     sensors: List[Any] = field(default_factory=list)          # measured each step
     controllers: List[Any] = field(default_factory=list)      # in user-supplied order
     inherit: List[Any] = field(default_factory=list)          # components for set_inherited_fluid/heat_port_values

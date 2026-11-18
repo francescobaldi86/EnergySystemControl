@@ -133,9 +133,13 @@ class Simulator:
         for sensor in plan.sensors:
             sensor.measure(environment=self.env, state=state)
 
-        # 3. Reset port data
+        # 3. Reset port data (unconnected ports carry zero flow)
         for port in plan.ports:
             port.reset_flow_data()
+        # Unconnected ports' flows are set to 0
+        for port in plan.unconnected_ports:
+            for layer in port.layers:
+                port.flows[layer] = 0.0
 
         # 4. Initialize control actions
         state.control_actions = {}

@@ -46,11 +46,12 @@ class Controller(ABC):
             A dictionary of the predictors used by the controller
         """
         self.name = name
-        self.controlled_component_names = controlled_components
-        self.sensor_names = sensors
-        self.predictor_names = predictors
-        self.minimum_time_on_between_activations = {k: v*3600 for k, v in minimum_time_off_between_activations_h.items()}
-        self.minimum_time_off_between_deactivations = {k: v*3600 for k, v in minimum_time_on_between_deactivations_h.items()}
+        # Accept both names (str) and objects (Component/Sensor/Predictor) anywhere a name is expected
+        self.controlled_component_names = [name_of(c) for c in controlled_components]
+        self.sensor_names = {var: name_of(s) for var, s in sensors.items()}
+        self.predictor_names = {var: name_of(p) for var, p in predictors.items()}
+        self.minimum_time_on_between_activations = {name_of(k): v*3600 for k, v in minimum_time_off_between_activations_h.items()}
+        self.minimum_time_off_between_deactivations = {name_of(k): v*3600 for k, v in minimum_time_on_between_deactivations_h.items()}
         self.on_off_time_limitations = bool(len(self.minimum_time_off_between_deactivations) + len(self.minimum_time_on_between_activations))
 
     def initialize(self, ctx: InitContext):
@@ -65,14 +66,30 @@ class Controller(ABC):
         self.predictions = {var: predictor.predict(self.horizon, state) for var, predictor in self.predictors.items()}
         return self.obs
 
+    def _resolve_named(self, kind: str, names, pool: Dict[str, Any]) -> Dict[str, Any]:
+        resolved = {}
+        for name in names:
+            name = name_of(name)
+            if name not in pool:
+                suggestions = close_matches(name, pool.keys())
+                msg = (f"Controller '{self.name}': unknown {kind} '{name}'. "
+                       f"Available {kind}s: {sorted(pool)}")
+                if suggestions:
+                    msg += f". Did you mean: {suggestions}?"
+                raise KeyError(msg)
+            resolved[name] = pool[name]
+        return resolved
+
     def load_controlled_components(self, components: Dict[str, Any]):
-        self.controlled_components = {name: components[name] for name in self.controlled_component_names}
-    
+        self.controlled_components = self._resolve_named('component', self.controlled_component_names, components)
+
     def load_sensors(self, sensors: Dict[str, Any]):
-        self.sensors = {var: sensors[sensor_name] for var, sensor_name in self.sensor_names.items()}
-    
+        self.sensors = {var: self._resolve_named('sensor', [sensor_name], sensors)[name_of(sensor_name)]
+                        for var, sensor_name in self.sensor_names.items()}
+
     def load_predictors(self, predictors: Dict[str, Any]):
-        self.predictors = {var: predictors[predictor_name] for var, predictor_name in self.predictor_names.items()}
+        self.predictors = {var: self._resolve_named('predictor', [predictor_name], predictors)[name_of(predictor_name)]
+                           for var, predictor_name in self.predictor_names.items()}
 
     def get_action(self, state, **kwargs):
         action = self._compute_action(state, **kwargs)
@@ -131,23 +148,26 @@ class HeaterControllerWithBandwidth(Controller):
                  temperature_bandwidth: float,
                  minimum_time_off_between_activations_h: float | None = None,
                  minimum_time_on_between_deactivations_h: float | None = None):
+        # controlled_component / temperature_sensor may be names (str) or objects
+        component_name = name_of(controlled_component)
+        sensor_name = name_of(temperature_sensor)
         if minimum_time_off_between_activations_h is not None:
-            minimum_time_off_between_activations_h = {controlled_component: minimum_time_off_between_activations_h}
+            minimum_time_off_between_activations_h = {component_name: minimum_time_off_between_activations_h}
         else:
             minimum_time_off_between_activations_h = {}
         if minimum_time_on_between_deactivations_h is not None:
-            minimum_time_on_between_deactivations_h = {controlled_component: minimum_time_on_between_deactivations_h}
+            minimum_time_on_between_deactivations_h = {component_name: minimum_time_on_between_deactivations_h}
         else:
             minimum_time_on_between_deactivations_h = {}
-        super().__init__(name, 
-                         [controlled_component], 
-                         {'Storage temperature': temperature_sensor}, 
+        super().__init__(name,
+                         [component_name],
+                         {'Storage temperature': sensor_name},
                          minimum_time_off_between_activations_h=minimum_time_off_between_activations_h,
                          minimum_time_on_between_deactivations_h=minimum_time_on_between_deactivations_h)
         self.temperature_comfort = C2K(temperature_comfort)
         self.temperature_bandwidth = temperature_bandwidth
-        self.temperature_sensor_name = temperature_sensor
-        self.controlled_heater_name = controlled_component
+        self.temperature_sensor_name = sensor_name
+        self.controlled_heater_name = component_name
 
     def _compute_action(self, state: SimulationState, external_input: int | float = 0):
         temperature = self.obs["Storage temperature"]
@@ -181,6 +201,13 @@ class ChargeController(Controller):
                  SOC_max: float = 0.9, 
                  baseline_battery_efficiency: float = 0.9,
                  baseline_inverter_efficiency: float = 0.92):
+        # battery_name and the sensor arguments may be names (str) or objects
+        battery_name = name_of(battery_name)
+        battery_SOC_sensor_name = name_of(battery_SOC_sensor_name)
+        if AC_output_sensor_name is not None:
+            AC_output_sensor_name = name_of(AC_output_sensor_name)
+        if PV_power_sensor_name is not None:
+            PV_power_sensor_name = name_of(PV_power_sensor_name)
         self.battery_name = battery_name
         self.battery_charger_name = f'{battery_name}_charger'
         self.SOC_min = SOC_min

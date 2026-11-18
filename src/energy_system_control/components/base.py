@@ -6,7 +6,7 @@ from datetime import datetime
 from energy_system_control.core.port import Port
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.core.base_classes import InitContext
-from energy_system_control.helpers import resample_with_interpolation, TimeAlignment
+from energy_system_control.helpers import resample_with_interpolation, TimeAlignment, close_matches
 
 class Component:
     name: str
@@ -20,6 +20,7 @@ class Component:
         self.name = name
         self.ports_info = ports_info
         self.ports = {}
+        self.create_ports()  # ports exist from construction, so component.port(role) works immediately
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -29,11 +30,47 @@ class Component:
         self._environmental_data = get_environmental_data
 
     def create_ports(self):
+        if self.ports:
+            return self.ports  # idempotent: never recreate port objects (would drop connections)
         ports = {}
         for port_name, port_type in self.ports_info.items():
             self.ports[port_name] = Port.create_port_of_type(port_name, port_type)
             ports[port_name] = self.ports[port_name]
         return ports
+
+    @property
+    def port_roles(self) -> List[str]:
+        """Port roles: port names with the leading '<component name>_' prefix removed."""
+        prefix = f'{self.name}_'
+        return [name[len(prefix):] if name.startswith(prefix) else name
+                for name in self.ports]
+
+    def port(self, role) -> Port:
+        """Return a port handle by role, full port name, or Port object.
+
+        ``component.port('heat_output_port')`` resolves to the port named
+        ``'<component name>_heat_output_port'``; a full port name is matched
+        exactly. Raises KeyError listing the available ports otherwise.
+        """
+        # First, try to see if the input was already a Port object
+        if isinstance(role, Port):
+            if role in self.ports.values():
+                return role
+            raise KeyError(f"Port '{role.name}' does not belong to component '{self.name}'. "
+                           f"Its ports are: {list(self.ports.keys())}")
+        # Then, it checks if the input is a port "full name", including the component name
+        if role in self.ports:
+            return self.ports[role]
+        # Finally, it tries by assuming the input was the port's role
+        full_name = f'{self.name}_{role}'
+        if full_name in self.ports:
+            return self.ports[full_name]
+        suggestions = close_matches(str(role), self.ports.keys())
+        msg = (f"Component '{self.name}' has no port '{role}'. "
+               f"Available ports: {list(self.ports.keys())} (roles: {self.port_roles})")
+        if suggestions:
+            msg += f". Did you mean: {suggestions}?"
+        raise KeyError(msg)
 
     def set_inherited_fluid_port_values(self, state: SimulationState):
         return {}
@@ -78,7 +115,7 @@ class Bus(Component):
         all_layers = set()
         for port in self.ports.values():
             all_layers.update(port.layers)
-        
+
         # For each layer, find ports with missing values
         ports_with_missing_per_layer = {}
         for layer in all_layers:

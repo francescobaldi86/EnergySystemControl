@@ -1,6 +1,7 @@
 from typing import Dict, List
 from collections import defaultdict
 from dataclasses import fields
+import warnings
 import numpy as np
 import pandas as pd
 from energy_system_control.core.base_classes import *
@@ -26,25 +27,27 @@ from energy_system_control.sim.step_plan import StepPlan
 
 
 class Environment:
-    def __init__(self, 
-                 components: List[Component] = [], 
-                 controllers: List[Controller] = [], 
-                 sensors: List[Sensor] = [], 
-                 connections = [], 
+    def __init__(self,
+                 components: List[Component] = [],
+                 controllers: List[Controller] = [],
+                 sensors: List[Sensor] = [],
+                 connections = [],
                  predictors: List[Predictor] = [],
                  environmental_data_provider: EnvironmentalDataProvider | None = None,
                  latitude: float | None = None,
-                 longitude: float | None = None
+                 longitude: float | None = None,
+                 strict_unconnected_ports: bool = False
                  ):
         self.nodes: Dict[str, Node] = {}
         self.ports: Dict[str, Port] = {}
-        self.connections: List[tuple] = connections
-        self.components: Dict[str, Component] = {component.name: component for component in components}
+        self.connections: List[tuple] = list(connections)
+        self.strict_unconnected_ports = strict_unconnected_ports
+        self.components: Dict[str, Component] = self._dedup_named(components, 'component')
         self.components_classified = defaultdict(list)
-        self.controllers: Dict[str, Controller] = {controller.name: controller for controller in controllers}
-        self.ordered_controllers: List[str] = [controller.name for controller in controllers]
-        self.sensors: Dict[str, Sensor] = {sensor.name: sensor for sensor in sensors}
-        self.predictors: Dict[str, Predictor] = {predictor.name: predictor for predictor in predictors}
+        self.controllers: Dict[str, Controller] = self._dedup_named(controllers, 'controller')
+        self.ordered_controllers: List[str] = [name_of(controller) for controller in controllers]
+        self.sensors: Dict[str, Sensor] = self._dedup_named(sensors, 'sensor')
+        self.predictors: Dict[str, Predictor] = self._dedup_named(predictors, 'predictor')
         self.environmental_data_provider = environmental_data_provider
         self.latitude = latitude
         self.longitude = longitude
@@ -57,6 +60,108 @@ class Environment:
         self.create_ports()
         self.connect_ports()
         self.check_unconnected_ports()
+
+    @staticmethod
+    def _dedup_named(objects, kind: str) -> Dict[str, Any]:
+        """Build a name -> object dict, failing fast on duplicate names."""
+        result = {}
+        for obj in objects:
+            name = name_of(obj)
+            if name in result:
+                raise ValueError(f"Duplicate {kind} name '{name}'. Names must be unique.")
+            result[name] = obj
+        return result
+
+    def resolve_component(self, spec) -> Component:
+        """Resolve a component given as a name (str) or a Component object."""
+        if isinstance(spec, Component):
+            if spec.name in self.components:
+                return self.components[spec.name]
+            raise KeyError(f"Component '{spec.name}' is not part of this environment. "
+                           f"Available components: {sorted(self.components)}")
+        name = str(spec)
+        if name not in self.components:
+            suggestions = close_matches(name, self.components.keys())
+            msg = f"Unknown component '{name}'. Available components: {sorted(self.components)}"
+            if suggestions:
+                msg += f". Did you mean: {suggestions}?"
+            raise KeyError(msg)
+        return self.components[name]
+
+    def resolve_sensor(self, spec) -> Sensor:
+        """Resolve a sensor given as a name (str) or a Sensor object."""
+        if isinstance(spec, Sensor):
+            if spec.name in self.sensors:
+                return self.sensors[spec.name]
+            raise KeyError(f"Sensor '{spec.name}' is not part of this environment. "
+                           f"Available sensors: {sorted(self.sensors)}")
+        name = str(spec)
+        if name not in self.sensors:
+            suggestions = close_matches(name, self.sensors.keys())
+            msg = f"Unknown sensor '{name}'. Available sensors: {sorted(self.sensors)}"
+            if suggestions:
+                msg += f". Did you mean: {suggestions}?"
+            raise KeyError(msg)
+        return self.sensors[name]
+
+    def resolve_port(self, spec) -> Port:
+        """Resolve a port given as a Port object, a full port-name string, a
+        (component, role) tuple, or a single-port Component.
+
+        Examples: ``env.resolve_port('heat_pump_heat_output_port')``,
+        ``env.resolve_port((heat_pump, 'heat_output_port'))``,
+        ``env.resolve_port(heat_pump.port('heat_output_port'))``.
+        """
+        if isinstance(spec, Port):
+            if spec.name in self.ports and self.ports[spec.name] is spec:
+                return spec
+            raise KeyError(f"Port '{spec.name}' is not part of this environment. "
+                           f"Available ports: {sorted(self.ports)}")
+        if isinstance(spec, Component):
+            if len(spec.ports) == 1:
+                return next(iter(spec.ports.values()))
+            raise ValueError(f"Component '{spec.name}' has {len(spec.ports)} ports; specify one as "
+                             f"('{spec.name}', role). Its ports: {list(spec.ports.keys())}")
+        if isinstance(spec, tuple) and len(spec) == 2:
+            component = self.resolve_component(spec[0])
+            return component.port(spec[1])
+        name = str(spec)
+        if name not in self.ports:
+            suggestions = close_matches(name, self.ports.keys())
+            msg = f"Unknown port '{name}'. Available ports: {sorted(self.ports)}"
+            if suggestions:
+                msg += f". Did you mean: {suggestions}?"
+            raise KeyError(msg)
+        return self.ports[name]
+
+    def _normalize_connection(self, entry) -> tuple:
+        if not isinstance(entry, (tuple, list)) or len(entry) != 2:
+            raise ValueError(
+                f"Each connection must be a pair of two ports, got: {entry!r}. Accepted formats: "
+                f"('port_a_name', 'port_b_name'), (port_a, port_b), or "
+                f"(('component_a', 'role_a'), ('component_b', 'role_b')).")
+        port_a = self.resolve_port(entry[0])
+        port_b = self.resolve_port(entry[1])
+        if port_a is port_b:
+            raise ValueError(f"Cannot connect port '{port_a.name}' to itself.")
+        return port_a, port_b
+
+    def connect(self, port_a, port_b):
+        """Connect two ports of this environment.
+
+        Accepts Port objects, full port-name strings, (component, role) tuples,
+        or single-port components, e.g.::
+
+            env.connect(('heat_pump', 'heat_output_port'), ('hot_water_storage', 'main_heat_input_port'))
+            env.connect(heat_pump.port('heat_output_port'), tank.port('main_heat_input_port'))
+        """
+        a, b = self._normalize_connection((port_a, port_b))
+        pair = (a.name, b.name)
+        if pair in self.connections or (pair[1], pair[0]) in self.connections:
+            raise ValueError(f"Duplicate connection between '{a.name}' and '{b.name}'.")
+        a.connect_port(b)
+        b.connect_port(a)
+        self.connections.append(pair)
 
     def load_internal_components(self):
         new_components = {}
@@ -108,16 +213,23 @@ class Environment:
             self.ports.update(component.create_ports())
 
     def check_unconnected_ports(self):
-        # This function checks whether there are ports that are not connected to any other port, and in case removes them
+        # Checks whether there are ports that are not connected to any other port.
+        # They are kept in the environment (so they stay visible in the results
+        # and can still be connected later with env.connect(...)), but all of them
+        # are reported together in a single loud warning — or an error when
+        # strict_unconnected_ports=True.
+        unconnected = []
         for component in self.components.values():
-            ports_to_remove = []
             for port_name, port in component.ports.items():
                 if port.connected_port is None:
-                    ports_to_remove.append(port_name)
-            for port_to_remove in ports_to_remove:
-                self.ports.pop(port_to_remove)
-                component.ports.pop(port_to_remove)
-                print(f'WARNING: Port {port_to_remove} was removed since it was not connected to any other port. The simulation will attempt to continue')
+                    unconnected.append(port_name)
+        if not unconnected:
+            return
+        message = (f"{len(unconnected)} port(s) are not connected to any other port: {unconnected}. "
+                   f"Connect them via Environment(connections=[...]) or env.connect(port_a, port_b).")
+        if self.strict_unconnected_ports:
+            raise ValueError(message)
+        warnings.warn(message, stacklevel=2)
 
     
     def create_data_registry(self):
@@ -212,6 +324,7 @@ class Environment:
 
         return StepPlan(
             ports=list(self.ports.values()),
+            unconnected_ports=[port for port in self.ports.values() if port.connected_port is None],
             sensors=list(self.sensors.values()),
             controllers=[self.controllers[name] for name in self.ordered_controllers],
             inherit=list(self.components.values()),
@@ -232,9 +345,21 @@ class Environment:
         )
 
     def connect_ports(self):
-        for connection in self.connections:
-            self.ports[connection[0]].connect_port(self.ports[connection[1]])
-            self.ports[connection[1]].connect_port(self.ports[connection[0]])
+        # Normalize every connection entry (strings, Port objects, (component, role)
+        # tuples) to a pair of port names, validating as we go, then connect.
+        normalized = []
+        seen = set()
+        for entry in self.connections:
+            port_a, port_b = self._normalize_connection(entry)
+            pair = (port_a.name, port_b.name)
+            key = frozenset(pair)
+            if key in seen:
+                raise ValueError(f"Duplicate connection between '{port_a.name}' and '{port_b.name}'.")
+            seen.add(key)
+            port_a.connect_port(port_b)   # raises ValueError on type mismatch or conflicting connection
+            port_b.connect_port(port_a)
+            normalized.append(pair)
+        self.connections = normalized
 
     def read_timeseries_data(self):
         for _, component in self.components.items():
