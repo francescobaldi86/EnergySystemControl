@@ -198,9 +198,26 @@ class CompositeComponent(Component):
     """A composite component is a component that contains other components."""
     def get_internal_components(self):
         return {}
-    
+
     def get_internal_connections(self):
         return[]
+
+    def port(self, role) -> Port:
+        """Resolve a port role on a composite: composites usually have no ports of
+        their own, so the role (or '<composite name>_<role>') is searched among
+        the ports of the internal components."""
+        try:
+            return super().port(role)
+        except KeyError:
+            pass
+        wanted = {role, f'{self.name}_{role}'}
+        for internal in self.get_internal_components().values():
+            for port_name, port in internal.ports.items():
+                if port_name in wanted:
+                    return port
+        internal_ports = [p for c in self.get_internal_components().values() for p in c.ports]
+        raise KeyError(f"Composite component '{self.name}' has no port '{role}' (neither its own nor "
+                       f"internal). Internal ports: {internal_ports}")
 
 
 @dataclass()

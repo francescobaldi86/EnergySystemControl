@@ -22,6 +22,7 @@ from energy_system_control.helpers import *
 from energy_system_control.io.data_provider import EnvironmentalDataProvider
 from energy_system_control.sim.config import SimulationConfig
 from energy_system_control.sim.step_plan import StepPlan
+from energy_system_control.core.describe import build_graph, render as render_graph
 
 
 
@@ -54,6 +55,9 @@ class Environment:
         self.signal_registry_ports = SignalRegistry()
         self.signal_registry_controllers = SignalRegistry()
         self.signal_registry_sensors = SignalRegistry()
+        # Composite structure (filled by load_internal_components), used by describe()
+        self.composite_members: Dict[str, List[str]] = {}   # composite name -> internal component names
+        self.internal_connections: set = set()              # frozenset({port_a, port_b}) of internal connections
         # Ordering data
         self.load_internal_components()
         self.classify_components()
@@ -168,8 +172,13 @@ class Environment:
         new_connections = []
         for component in self.components.values():
             if isinstance(component, CompositeComponent):
-                new_components.update(component.get_internal_components())
-                new_connections += component.get_internal_connections()
+                internals = component.get_internal_components()
+                internal_conns = component.get_internal_connections()
+                new_components.update(internals)
+                new_connections += internal_conns
+                self.composite_members[component.name] = list(internals.keys())
+                for conn in internal_conns:
+                    self.internal_connections.add(frozenset(str(side) for side in conn))
         self.components.update(new_components)
         self.connections += new_connections
 
@@ -343,6 +352,23 @@ class Environment:
             solar_zenith=solar_zenith,
             solar_azimuth=solar_azimuth,
         )
+
+    def to_graph(self) -> Dict[str, Any]:
+        """Return a plain-dict description of the topology (components, ports,
+        connections, sensors, controllers, unconnected ports, issues)."""
+        return build_graph(self)
+
+    def describe(self, format: str = 'text', expand_composites: bool = True, print_output: bool = True) -> str:
+        """Print (and return) a human-readable description of the environment.
+
+        ``format`` is 'text' (default), 'mermaid' or 'dot'. With
+        ``expand_composites=True``, composite components (e.g. Inverter, Battery)
+        are shown with their internal components and internal connections.
+        """
+        text = render_graph(build_graph(self), format=format, expand_composites=expand_composites)
+        if print_output:
+            print(text)
+        return text
 
     def connect_ports(self):
         # Normalize every connection entry (strings, Port objects, (component, role)
