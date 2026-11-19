@@ -61,6 +61,9 @@ def resample_with_interpolation(
     np.ndarray
         Resampled time series as a one-dimensional NumPy array.
     """
+    if len(df) == 1:
+        output_index = pd.date_range(start=simulation_start_datetime, end=simulation_start_datetime+pd.Timedelta(seconds = simulation_end_s), freq=target_freq)
+        return np.ones(len(output_index)) * df.iloc[0]
 
     if not isinstance(df.index, pd.DatetimeIndex):
         raise ValueError("DataFrame must have a DatetimeIndex.")

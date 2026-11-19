@@ -172,6 +172,7 @@ class HeaterControllerWithBandwidth(Controller):
         self.temperature_bandwidth = temperature_bandwidth
         self.temperature_sensor_name = temperature_sensor
         self.controlled_heater_name = controlled_component
+        self.previous_action = {self.controlled_heater_name: 0}
 
     def _compute_action(self, state: SimulationState, external_input: int | float = 0):
         temperature = self.obs["Storage temperature"]

@@ -179,6 +179,27 @@ class TimeSeriesDemand(Demand):
                     demand_type = demand_type,  
                     rescale_factor = rescale_factor,
                     **kwargs)
+
+    @classmethod
+    def from_value(cls,
+                    name: str,
+                    value: float,
+                    demand_type: str | None = None,
+                    column_name: str | None = None,
+                    var_type: VariableType = "energy", 
+                    var_unit: VariableUnit = 'kWh',
+                    **kwargs
+                    ):
+        ts_data = TimeSeriesData(
+                            raw = pd.Series(data = value),
+                            time_alignment = None,
+                            var_type = var_type,
+                            var_unit = var_unit)
+        return cls(name = name, 
+                    ts_data = ts_data,
+                    demand_type = demand_type,  
+                    rescale_factor = 1.0,
+                    **kwargs)
     
 
     def resample_data(self, time_step_h: float, simulation_end_h: float, simulation_start_datetime: datetime):

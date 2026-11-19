@@ -78,3 +78,11 @@ class InductionStove(HeatSource):
     
     def get_efficiency(self, state=None):
         return self.efficiency
+
+    def step(self, state, action):
+        if action is None:
+            required_power = -self.ports[f'{self.name}_heat_output_port'].flows['heat']
+            if required_power <= self.max_power:
+                self.ports[self.power_input_port_name].flows["electricity"] = required_power / self.efficiency
+            else:
+                raise ValueError(f'Required power {required_power:.2f} is higher than the maximum power of the stove {self.max_power:.2f}')
