@@ -56,24 +56,28 @@ def test_biogas_production_and_storage():
     print(f"CO2 mass  : {storage.co2_mass:.4f} kg")
     print(f"Total mass: {storage.total_mass:.4f} kg")
     print(f"Density       : {storage.biogas_density:.4f} kg/m3")
-    print(f"Volume        : {storage.volume:.4f} m3")
+    print(f"Volume        : {storage.total_mass * storage.biogas_density:.4f} m3")
     print(f"Capacity      : {storage.capacity:.4f} m3")
-    print(f"Fill fraction : {storage.volume_l / storage.capacity:.4%}")
+    print(f"Fill fraction : {storage.total_mass * storage.biogas_density / storage.capacity:.4%}")
 
     assert storage.ch4_mass > 50.0
     assert storage.co2_mass > 30.0
     assert storage.total_mass > 80.0
 
-    assert storage.volume <= storage.capacity
+    assert storage.total_mass * storage.biogas_density <= storage.capacity
 
 #test_biogas_production_and_storage()
 
 
 class BoilerController(Controller):
-
     def _compute_action(self, state):
-        # Caldaia sempre accesa al 100%
-        return {k: 1.0 for k in self.controlled_component_names}
+        # Caldaia accesa se c'è abbastanza gas --> con isteresi
+        if self.obs['fuel_storage_SOC'] > 0.3:
+            return {k: 1.0 for k in self.controlled_component_names}
+        elif self.obs['fuel_storage_SOC'] <= 0.0:
+            return {k: 0.0 for k in self.controlled_component_names}
+        else:
+            return self.previous_action
 
 class FakeHeatSink(ControlledComponent):
 
@@ -89,19 +93,19 @@ class FakeHeatSink(ControlledComponent):
 def test_biogas_storage_empty_with_boiler():
 
     components = [AnaerobicDigester(name="anaerobic_digester",biogas_rate=0.0,methane_fraction=0.60),
-                  BiogasStorage(name="biogas_storage",capacity=300.0,initial_soc=0.50,initial_methane_fraction=0.60),
+                  BiogasStorage(name="biogas_storage",capacity=1.0,initial_soc=0.50,initial_methane_fraction=0.60),
                   GasBoiler(name="boiler",efficiency=0.90,max_power=100.0,source_type="biogas"),
                   FakeHeatSink(name="heat_sink")]
 
-    controllers = [BoilerController("boiler_controller",["boiler"],{})]
-    sensors = []
+    controllers = [BoilerController("boiler_controller",["boiler"], {'fuel_storage_SOC': 'storage_SOC_sensor'})]
+    sensors = [esc.SOCSensor("storage_SOC_sensor", "biogas_storage")]
     connections = [("anaerobic_digester_biogas_port","biogas_storage_input"),
                    ("boiler_biogas_input_port","biogas_storage_output"), 
                    ("boiler_heat_output_port","heat_sink_heat_input_port")]
 
     # ENVIRONMENT
     env = esc.Environment(components=components,controllers=controllers,sensors=sensors,connections=connections)
-    sim_config = esc.SimulationConfig(simulation_end_h=1.0,time_step_h=1 / 60)
+    sim_config = esc.SimulationConfig(simulation_end_h=1.0,time_step_h=1 / 3_600)
     sim = esc.Simulator(env, sim_config)
     results = sim.run()
     df_ports, df_controllers, df_sensors = results.to_dataframe()
@@ -112,7 +116,7 @@ def test_biogas_storage_empty_with_boiler():
 
     print("\n Risultati finali")
     print(f"Massa finale: {storage.total_mass:.4f} kg")
-    print(f"Volume finale : {storage.volume_m3:.4f} m3")
+    print(f"Volume finale : {storage.total_mass * storage.biogas_density:.4f} m3")
     print(f"Flusso massimo caldaia : {boiler_mass_flow.abs().max():.4f} kg/s")
     print(f"Flusso finale caldaia{boiler_mass_flow.iloc[-1]:.4%} kg/s")
 
@@ -120,7 +124,7 @@ def test_biogas_storage_empty_with_boiler():
     assert boiler_mass_flow.abs().max() > 0.0, ("la caldaia non ha consumato biogas")
     # 2. Lo storage è completamente vuoto alla fine
     assert math.isclose(storage.total_mass, 0.0, abs_tol=1e-6), (f"La massa residua nello storage è {storage.total_mass:.6f} kg")
-    assert math.isclose(storage.volume_m3, 0.0, abs_tol=1e-6), (f"Il volume residuo nello storage è {storage.volume:.6f} m3")
+    assert math.isclose(storage.total_mass * storage.biogas_density, 0.0, abs_tol=1e-6), (f"Il volume residuo nello storage è {storage.total_mass * storage.biogas_density:.6f} m3")
     assert math.isclose(boiler_heat_output.iloc[-1], 0.0, abs_tol=1e-6), ('La caldaia alla fine della simulazione ha output termico nullo')
 # test_biogas_storage_empty_with_boiler()
 
@@ -136,7 +140,7 @@ def test_uno():
         # Produzione di biogas
         AnaerobicDigesterFromData(name="anaerobic_digester", data_path=__DATA__, filename="biogas_data.csv", date_format = "%Y%m%d:%H%M", volume_flow_column_name='mass_flow', methane_fraction_column_name='methane_fraction'),
         # Accumulo di biogas con dati temporali
-        BiogasStorage(name="biogas_storage",capacity=100.0,initial_ch4_mass=0.0,initial_co2_mass=0.0),
+        BiogasStorage(name="biogas_storage",capacity=1.0,initial_soc=0.5, initial_methane_fraction=0.6),
         # Caldaia alimentata a biogas
         GasBoiler(name="gas_boiler",efficiency=0.90,max_power=10.0,),
         # Accumulo di acqua calda

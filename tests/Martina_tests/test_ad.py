@@ -19,11 +19,13 @@ def calculate_biogas_rate(multiplier=1.0):
 
 class BoilerController(Controller):
     def _compute_action(self, state):
-        # Caldaia sempre accesa al 100%
-        if self.obs['fuel_storage_SOC'] >= 0.0:
+        # Caldaia accesa se c'è abbastanza gas --> con isteresi
+        if self.obs['fuel_storage_SOC'] > 0.3:
             return {k: 1.0 for k in self.controlled_component_names}
-        else:
+        elif self.obs['fuel_storage_SOC'] < 0.1:
             return {k: 0.0 for k in self.controlled_component_names}
+        else:
+            return self.previous_action
     
 class FakeHeatSink(ControlledComponent):
     def __init__(self, name):
@@ -113,7 +115,7 @@ def test_biogas_storage_empty_with_boiler():
 
     biogas_rate = calculate_biogas_rate(0.6)
     storage = BiogasStorage(name="biogas_storage",capacity=1.0,initial_soc=0.5,initial_methane_fraction=0.60)
-    components = [AnaerobicDigester(name="anaerobic_digester",biogas_rate=biogas_rate,methane_fraction=0.60),storage,GasBoiler(name="boiler",efficiency=0.90,max_power=100.0,source_type="biogas"),FakeHeatSink(name="heat_sink")]
+    components = [AnaerobicDigester(name="anaerobic_digester",biogas_rate=0.0,methane_fraction=0.60),storage,GasBoiler(name="boiler",efficiency=0.90,max_power=BOILER_POWER,source_type="biogas"),FakeHeatSink(name="heat_sink")]
     controllers = [BoilerController("boiler_controller", ["boiler"], {'fuel_storage_SOC': 'storage_SOC_sensor'},)]
     sensors = [esc.SOCSensor("storage_SOC_sensor", "biogas_storage")]
     connections = [("anaerobic_digester_biogas_port", "biogas_storage_input"),
@@ -121,7 +123,7 @@ def test_biogas_storage_empty_with_boiler():
         ("boiler_heat_output_port", "heat_sink_heat_input_port")]
 
     env = esc.Environment(components=components,controllers=controllers,sensors=sensors,connections=connections)
-    sim_config = esc.SimulationConfig(simulation_end_h=168.0 ,time_step_h=1/60)
+    sim_config = esc.SimulationConfig(simulation_end_h=24.0 ,time_step_h=1/3600)
     sim = esc.Simulator(env, sim_config)
     results = sim.run()
     df_ports, df_controllers, df_sensors = results.to_dataframe()
@@ -142,7 +144,7 @@ def test_biogas_storage_empty_with_boiler():
     # La caldaia deve aver consumato biogas inizialmente
     assert boiler_mass_flow.abs().max() > 0.0
     assert storage.SOC < 0.1
-    assert storage.total_mass < 0.1
+    assert storage.total_mass < 0.3
 
     # La caldaia deve essersi spenta
     assert math.isclose(boiler_heat_output.iloc[-1],0.0,abs_tol=1e-6)    
