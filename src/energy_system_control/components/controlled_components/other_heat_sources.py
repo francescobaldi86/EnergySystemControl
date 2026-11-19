@@ -62,3 +62,19 @@ class GasBoiler(HeatSource):
     
     def get_efficiency(self, state=None):
         return self.efficiency
+
+class InductionStove(HeatSource):
+
+    def __init__(self, name: str, efficiency: float,
+                 max_power: float, source_type: str = "electricity"):
+
+        super().__init__(name, source_type)
+
+        self.efficiency = efficiency
+        self.max_power = max_power
+
+    def get_heat_output(self, state):
+        return self.max_power
+    
+    def get_efficiency(self, state=None):
+        return self.efficiency

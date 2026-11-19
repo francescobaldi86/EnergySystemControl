@@ -1,0 +1,71 @@
+import energy_system_control as esc
+import pytest
+from energy_system_control.components.explicit_components.demands import HotWaterDemand, ElectricityDemand, CookingDemand
+from energy_system_control.components.explicit_components.pv_panels import PVpanelFromPVGIS
+from energy_system_control.components.controlled_components.heat_pumps import HeatPump
+from energy_system_control.components.controlled_components.other_heat_sources import InductionStove
+from energy_system_control.components.base import Component
+from energy_system_control.components.grids.grids import ElectricityGrid
+
+class HeatExchanger(Component):
+    """
+    Scambiatore di calore semplificato:
+    riceve calore da una HeatPort e lo trasferisce
+    a una FluidPort, assegnando una temperatura.
+    """
+    def __init__(self, name: str, outlet_temperature: float = 45):
+
+        self.heat_input_port_name = f"{name}_heat_input_port"
+        self.fluid_output_port_name = f"{name}_fluid_output_port"
+
+        self.outlet_temperature = outlet_temperature + 273.15
+
+        super().__init__(name,{self.heat_input_port_name: "heat",self.fluid_output_port_name: "fluid"})
+
+    def step(self, state, action=None):
+
+        heat = self.ports[self.heat_input_port_name].flows["heat"]
+
+        if heat is not None:
+            fluid_port = self.ports[self.fluid_output_port_name]
+
+            fluid_port.flows["heat"] = -heat
+            fluid_port.T = self.outlet_temperature
+
+
+def test_caso_tutto_elettrico():
+
+    components = [PVpanelFromPVGIS(name="pv_panel", installed_power=5.0, latitude=35.50, longitude=12.60, tilt=30, azimuth=0, loss=14, years=[2023], time_alignment="yearly"),
+        HeatPump( name="heat_pump", Qdot_design=8, COP_design=4.0),
+        InductionStove(name="induction_stove",efficiency=0.9,max_power=2.0,source_type="electricity"),
+        HeatExchanger(name="heat_exchanger",outlet_temperature=45),
+        HotWaterDemand(name="hot_water_demand",ts_data=1700/8760, reference_temperature=40),
+        CookingDemand(name="cooking_demand",ts_data=500/8760),
+        ElectricityDemand(name="electricity_demand",ts_data=2000/8760),
+        ElectricityGrid(name="electricity_grid",cost_of_electricity_purchased=0.25,value_of_electricity_sold=0.10)]
+
+    controllers = []
+    sensors = []
+
+    connections = [("pv_panel_electricity_port","electricity_demand_electricity_port"),
+        ("pv_panel_electricity_port","heat_pump_electricity_input_port"),
+        ("pv_panel_electricity_port","induction_stove_electricity_input_port"),
+        ("heat_pump_heat_output_port","heat_exchanger_heat_input_port"),
+        ("heat_exchanger_fluid_output_port","hot_water_demand_fluid_port"),
+        ("induction_stove_heat_output_port","cooking_demand_heat_port"),
+        ( "pv_panel_electricity_port","electricity_grid_electricity_port")]
+
+    env = esc.Environment(components=components,controllers=controllers,sensors=sensors,connections=connections)
+
+    sim_config = esc.SimulationConfig(simulation_end_h=8760,time_step_h=1)
+
+    sim = esc.Simulator(env, sim_config)
+
+    results = sim.run()
+
+    df_ports, df_controllers, df_sensors = results.to_dataframe()
+  
+    assert df_ports is not None
+
+if __name__ == "__main__":
+    test_caso_tutto_elettrico()

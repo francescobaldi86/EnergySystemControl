@@ -308,3 +308,25 @@ class HotWaterDemand(TimeSeriesDemand):
             rescale_factor=rescale_factor,
             **kwargs,
         )
+class CookingDemand(TimeSeriesDemand):
+
+    demand_type = "heat"
+
+    def __init__(
+        self,
+        name: str,
+        ts_data: TimeSeriesData,
+        rescale_factor: float = 1.0,
+        **kwargs,
+    ):
+        super().__init__(
+            name=name,
+            ts_data=ts_data,
+            rescale_factor=rescale_factor,
+            **kwargs,
+        )
+
+    def step(self, state: SimulationState, action = None):
+        temp_kW = self.ts.data[state.time_id]  # This calculates the required power in kW (note: time step is in [s], read value in [kWh], hence the 3600)
+        self.ports[self.port_name].flows['heat'] = temp_kW  # Value in kJ
+
