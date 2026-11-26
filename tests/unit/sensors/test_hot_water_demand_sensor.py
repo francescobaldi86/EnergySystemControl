@@ -58,7 +58,7 @@ class TestHotWaterDemandSensor:
         
         sim_config = esc.SimulationConfig(
             time_start_h=0.0,
-            time_end_h=6.0,
+            simulation_end_h=6.0,
             time_step_h=1.0
         )
         
@@ -113,7 +113,7 @@ class TestHotWaterDemandSensor:
         
         sim_config = esc.SimulationConfig(
             time_start_h=0.0,
-            time_end_h=24.0,
+            simulation_end_h=24.0,
             time_step_h=1.0
         )
         
@@ -169,7 +169,7 @@ class TestHotWaterDemandSensor:
         
         sim_config = esc.SimulationConfig(
             time_start_h=0.0,
-            time_end_h=6.0,
+            simulation_end_h=6.0,
             time_step_h=1.0
         )
         

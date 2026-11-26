@@ -59,8 +59,8 @@ def test_sensors():
 
 @pytest.fixture
 def test_predictors():
-    test_predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
-                       PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
+    test_predictors = [PerfectTimeSeriesPredictor(name='pv_power_predictor', data_source='component data', read_component='pv_panels'), 
+                       PerfectTimeSeriesPredictor(name='dhw_demand_predictor', data_source='component data', read_component='demand_DHW')]
     return test_predictors
 
 
@@ -745,12 +745,12 @@ class TestRLControllerFull:
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port')
         ]
-        predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
-                    PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
+        predictors = [PerfectTimeSeriesPredictor(name='pv_power_predictor', data_source='component data', read_component='pv_panels'), 
+                    PerfectTimeSeriesPredictor(name='dhw_demand_predictor', data_source='component data', read_component='demand_DHW')]
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 5/60)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*14, time_step_h = 5/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -789,12 +789,12 @@ class TestRLControllerFull:
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port')
         ]
-        predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
-                    PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
+        predictors = [PerfectTimeSeriesPredictor(name='pv_power_predictor', data_source='component data', read_component='pv_panels'), 
+                    PerfectTimeSeriesPredictor(name='dhw_demand_predictor', data_source='component data', read_component='demand_DHW')]
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 5/60)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*14, time_step_h = 5/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -833,12 +833,12 @@ class TestRLControllerFull:
             ('inverter_grid_input_port', 'electric_grid_electricity_port'),
             ('inverter_ESS_port', 'battery_electricity_port')
         ]
-        predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
-                    PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
+        predictors = [PerfectTimeSeriesPredictor(name='pv_power_predictor', data_source='component data', read_component='pv_panels'), 
+                    PerfectTimeSeriesPredictor(name='dhw_demand_predictor', data_source='component data', read_component='demand_DHW')]
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 5/60)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*14, time_step_h = 5/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -883,7 +883,7 @@ class TestRLControllerFull:
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*30, time_step_h = 1/60)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*30, time_step_h = 1/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -928,7 +928,7 @@ class TestRLControllerFull:
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*14, time_step_h = 1/60)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*14, time_step_h = 1/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -980,7 +980,7 @@ class TestRLControllerFull:
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*180, time_step_h = 1/60)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*180, time_step_h = 1/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -991,6 +991,7 @@ class TestRLControllerFull:
         assert (df_sensors['storage_tank_temperature_sensor'] > C2K(80)).sum() < 100
         assert True
 
+    @pytest.mark.slow
     def test_RL_HybridDHW_application_TandP_with_minimum_switch_time_hour(self, test_components, test_sensors):
     # Test of a standard hybrid system, where the only signals read by the RL controller are:
     # - The storage tank temperature
@@ -1030,7 +1031,7 @@ class TestRLControllerFull:
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*180, time_step_h = 1/60)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*180, time_step_h = 1/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()
@@ -1079,7 +1080,7 @@ class TestRLControllerFull:
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*180, time_step_h = 1/60)
+        sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*180, time_step_h = 1/60)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results = sim.run()

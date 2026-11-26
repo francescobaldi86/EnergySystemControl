@@ -73,7 +73,7 @@ class TestCSVEnvironmentalProvider:
         return SimulationConfig(
             time_step_h=0.08333,  # ~5 minutes in hours (300 seconds)
             time_start_h=0,
-            time_end_h=24,
+            simulation_end_h=24,
         )
 
     def test_initialization(self, sample_csv_temp_file):
@@ -108,7 +108,7 @@ class TestCSVEnvironmentalProvider:
 
         # Check that all arrays have reasonable length (approximately 24h / 0.08333h = ~288 timesteps)
         # Allow some tolerance due to resampling behavior
-        expected_length = int((simulation_config.time_end_h - simulation_config.time_start_h) / simulation_config.time_step_h)
+        expected_length = int((simulation_config.simulation_end_h - simulation_config.time_start_h) / simulation_config.time_step_h)
         for key, array in provider.data.items():
             # Allow ±15 timesteps tolerance due to resampling
             assert abs(len(array) - expected_length) <= 15
@@ -163,7 +163,7 @@ class TestCSVEnvironmentalProvider:
     def test_missing_csv_file(self):
         """Test that missing CSV file raises appropriate error."""
         provider = CSVEnvironmentalProvider("/nonexistent/path/data.csv")
-        cfg = SimulationConfig(time_step_h=0.08333, time_start_h=0, time_end_h=24)
+        cfg = SimulationConfig(time_step_h=0.08333, time_start_h=0, simulation_end_h=24)
         
         with pytest.raises(FileNotFoundError):
             provider.initialize(cfg)
@@ -350,7 +350,7 @@ class TestProviderComparison:
             df.to_csv(f, index=False)
 
         provider = CSVEnvironmentalProvider(temp_path)
-        cfg = SimulationConfig(time_step_h=300/3600, time_start_h=0, time_end_h=24)
+        cfg = SimulationConfig(time_step_h=300/3600, time_start_h=0, simulation_end_h=24)
         provider.initialize(cfg)
         
         yield provider

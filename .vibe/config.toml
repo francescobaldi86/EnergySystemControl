@@ -1,0 +1,36 @@
+# Project-local Vibe config for EnergySystemControl
+# Lets the test-fixer skill run without approval prompts.
+
+# Skip all tool approval prompts in this project
+bypass_tool_permissions = true
+
+# Allow shell commands that don't match the user-level read-only allowlist
+[tools.bash]
+allowlist = [
+    "python",
+    "pytest",
+    "git",
+    "grep",
+    "rg",
+    "sed",
+    "cat",
+    "ls",
+    "find",
+    "tail",
+    "head",
+    "wc",
+    "sort",
+    "uniq",
+    "diff",
+    "tree",
+]
+
+# File tools: always allow inside the project
+[tools.read_file]
+permission = "always"
+
+[tools.write_file]
+permission = "always"
+
+[tools.edit]
+permission = "always"

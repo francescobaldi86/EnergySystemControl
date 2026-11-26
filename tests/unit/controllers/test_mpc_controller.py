@@ -15,7 +15,7 @@ class MockMPCController(MPCController):
     def __init__(self, name, controlled_components, sensors, predictors, horizon, solver):
         super().__init__(name, controlled_components, sensors, predictors, horizon, solver)
 
-    def get_action(self, state):
+    def _compute_action(self, state):
         # Implement the get_action method
         pass
 
@@ -72,6 +72,7 @@ def test_MPC_HybridDHW_application(test_components, test_sensors):
                                 battery_SOC_sensor = 'battery_SOC_sensor',
                                 PV_power_predictor_name = 'pv_power_predictor',
                                 heat_demand_predictor_name = 'dhw_demand_predictor',
+                                time_step_h = 1.0,
                                 horizon = 24),
         esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'AC_power_sensor', 'PV_power_sensor')
                 ]
@@ -84,12 +85,12 @@ def test_MPC_HybridDHW_application(test_components, test_sensors):
         ('inverter_grid_input_port', 'electric_grid_electricity_port'),
         ('inverter_ESS_port', 'battery_electricity_port')
     ]
-    predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
-                  PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
+    predictors = [PerfectTimeSeriesPredictor(name = 'pv_power_predictor', data_source = 'component data', read_component = 'pv_panels'), 
+                  PerfectTimeSeriesPredictor(name = 'dhw_demand_predictor', data_source = 'component data', read_component = 'demand_DHW')]
     # Create environment
     env = esc.Environment(components=test_components, controllers = controllers, sensors=test_sensors, connections=connections, predictors=predictors)  # dt = 60 s
     # Create simulator object
-    sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*7, time_step_h = 1.0)
+    sim_config = esc.SimulationConfig(simulation_end_h = 24.0*7, time_step_h = 1.0)
     sim = esc.Simulator(env, sim_config)
     # Run simulation
     results = sim.run()
@@ -104,7 +105,7 @@ def test_MPC_HybridDHW_application(test_components, test_sensors):
     assert math.isclose(net_electricity_demand, 12, abs_tol = 2)
     assert math.isclose(electricity_from_grid, 4.8, abs_tol = 2)
     assert math.isclose(electricity_to_grid, 18, abs_tol = 2)
-    assert math.isclose(df_sensors.loc[10.0, 'storage_tank_temperature_sensor'], 315, abs_tol = 1)
+    assert math.isclose(df_sensors.loc[pd.Timestamp('2025-01-01 10:00:00'), 'storage_tank_temperature_sensor'], 321, abs_tol = 1)
 
 
 def test_MPC_with_hybrid_AR_predictors(test_components, test_sensors):
@@ -133,6 +134,7 @@ def test_MPC_with_hybrid_AR_predictors(test_components, test_sensors):
                                 battery_SOC_sensor='battery_SOC_sensor',
                                 PV_power_predictor_name='pv_power_predictor',
                                 heat_demand_predictor_name='dhw_demand_predictor',
+                                time_step_h = 1.0,
                                 horizon=24),
         esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'AC_power_sensor', 'PV_power_sensor')
     ]
@@ -160,7 +162,7 @@ def test_MPC_with_hybrid_AR_predictors(test_components, test_sensors):
     )
     
     # Create simulator object
-    sim_config = esc.SimulationConfig(time_start_h=0.0, time_end_h=24.0*7, time_step_h=1.0)
+    sim_config = esc.SimulationConfig(simulation_end_h = 24.0*7, time_step_h = 1.0)
     sim = esc.Simulator(env, sim_config)
     
     # Run simulation
@@ -205,7 +207,7 @@ def test_MPC_perfect_vs_HybridAR_predictors(test_components, test_sensors):
     ]
     
     # Simulation parameters
-    sim_config = esc.SimulationConfig(time_start_h=0.0, time_end_h=24.0*7, time_step_h=1.0)
+    sim_config = esc.SimulationConfig(simulation_end_h = 24.0*7, time_step_h = 1.0)
     
     # --- Run with Perfect Time Series Predictors ---
     controllers_perfect = [
@@ -215,14 +217,14 @@ def test_MPC_perfect_vs_HybridAR_predictors(test_components, test_sensors):
                                 battery_SOC_sensor='battery_SOC_sensor',
                                 PV_power_predictor_name='pv_power_predictor',
                                 heat_demand_predictor_name='dhw_demand_predictor',
+                                time_step_h = 1.0,
                                 horizon=24),
         esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'AC_power_sensor', 'PV_power_sensor')
     ]
     
     predictors_perfect = [
-        PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'),
-        PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')
-    ]
+        PerfectTimeSeriesPredictor(name = 'pv_power_predictor', data_source = 'component data', read_component = 'pv_panels'), 
+        PerfectTimeSeriesPredictor(name = 'dhw_demand_predictor', data_source = 'component data', read_component = 'demand_DHW')]
     components_perfect = copy.deepcopy(test_components)
     sensors_perfect = copy.deepcopy(test_sensors)
     env_perfect = esc.Environment(
@@ -252,6 +254,7 @@ def test_MPC_perfect_vs_HybridAR_predictors(test_components, test_sensors):
                                 battery_SOC_sensor='battery_SOC_sensor',
                                 PV_power_predictor_name='pv_power_predictor',
                                 heat_demand_predictor_name='dhw_demand_predictor',
+                                time_step_h = 1.0,
                                 horizon=24),
         esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'AC_power_sensor', 'PV_power_sensor')
     ]
@@ -335,6 +338,7 @@ def test_compare_mpc_to_other_controllers(test_components, test_sensors, test_pr
                                     battery_SOC_sensor = 'battery_SOC_sensor',
                                     PV_power_predictor_name = 'pv_power_predictor',
                                     heat_demand_predictor_name = 'dhw_demand_predictor',
+                                    time_step_h = 1.0,
                                     horizon = 24),
             esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'AC_power_sensor', 'PV_power_sensor')
                 ]
@@ -344,7 +348,7 @@ def test_compare_mpc_to_other_controllers(test_components, test_sensors, test_pr
         # Create environment
         env = esc.Environment(components=test_components, controllers = controllers_dict[control_type], sensors=test_sensors, connections=connections, predictors=test_predictors)  # dt = 60 s
         # Create simulator object
-        sim_config = esc.SimulationConfig(time_start_h = 0.0, time_end_h = 24.0*3, time_step_h = 0.5)
+        sim_config = esc.SimulationConfig(simulation_end_h = 24.0*3, time_step_h = 1.0)
         sim = esc.Simulator(env, sim_config)
         # Run simulation
         results[control_type] = sim.run()
@@ -359,12 +363,12 @@ def test_compare_mpc_to_other_controllers(test_components, test_sensors, test_pr
 @pytest.fixture
 def test_components():
     test_components = [
-        esc.IEAHotWaterDemand(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
+        esc.HotWaterDemand.from_iea(name= "demand_DHW", reference_temperature = 40, profile_name='M'),
         esc.HeatPumpConstantEfficiency(name = 'heat_pump', Qdot_design = 1.5, COP_design= 3.2),
         esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
         esc.ElectricityGrid(name = 'electric_grid', cost_of_electricity_purchased=0.24, value_of_electricity_sold=0.06),
         esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
-        esc.PVpanelFromPVGISData(name = 'pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename = 'pvgis_data.csv', rescale_factor = 3.0),
+        esc.PVpanelFromPVGISData(name = 'pv_panels', data_path=os.path.join(__TEST__, 'DATA'), filename = 'pvgis_data.csv', rescale_factor = 3.0, time_alignment='yearly'),
         esc.LithiumIonBattery(name = 'battery', capacity = 2.0, SOC_0 = 0.5),
         esc.Inverter(name = 'inverter')
     ]
@@ -385,6 +389,7 @@ def test_sensors():
 
 @pytest.fixture
 def test_predictors():
-    test_predictors = [PerfectTimeSeriesPredictor('pv_power_predictor', 'pv_panels'), 
-                       PerfectTimeSeriesPredictor('dhw_demand_predictor', 'demand_DHW')]
+    test_predictors = [
+            PerfectTimeSeriesPredictor(name = 'pv_power_predictor', data_source = 'component data', read_component = 'pv_panels'), 
+            PerfectTimeSeriesPredictor(name = 'dhw_demand_predictor', data_source = 'component data', read_component = 'demand_DHW')]
     return test_predictors

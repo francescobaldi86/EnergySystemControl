@@ -6,7 +6,7 @@ from .components.explicit_components.producers import ConstantPowerProducer
 from .components.explicit_components.pv_panels import PVpanel, PVpanelFromPVGISData, PVpanelFromData, PVpanelFromPVGIS
 from .components.storage_units.thermal_storage import HotWaterStorage, MultiNodeHotWaterTank
 from .components.composite_components.batteries import LithiumIonBattery, Battery
-from .components.explicit_components.demands import ConstantPowerDemand, ElectricityDemand, HotWaterDemand
+from .components.explicit_components.demands import ConstantPowerDemand, ElectricityDemand, HotWaterDemand, IEAHotWaterDemand
 from .components.grids.grids import ElectricityGrid, ColdWaterGrid
 from .components.composite_components.inverters import Inverter
 from .components.controlled_components.other_heat_sources import ResistanceHeater
@@ -20,7 +20,7 @@ __all__ = [
     "SimulationConfig", "Simulator",
     "PVpanel", "PVpanelFromPVGISData", "PVpanelFromData", "PVpanelFromPVGIS", "ConstantPowerProducer",
     "HotWaterStorage", "LithiumIonBattery", "MultiNodeHotWaterTank", "Battery",
-    "HotWaterDemand", "ThermalLoss", "ConstantPowerDemand", "ElectricityDemand",
+    "HotWaterDemand", "IEAHotWaterDemand", "ThermalLoss", "ConstantPowerDemand", "ElectricityDemand",
     "ResistanceHeater", "BalancingUtility", "ColdWaterGrid", "GenericUtility", "Inverter", "ElectricityGrid",
     "HeatPumpLorentzEfficiency", "HeatPumpConstantEfficiency", "HeatPump",
     "HeaterControllerWithBandwidth", "ChargeController",

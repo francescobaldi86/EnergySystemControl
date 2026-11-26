@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from dataclasses import dataclass
 from energy_system_control.sim.state import SimulationState
+from energy_system_control.sim.config import SimulationConfig
 from energy_system_control.core.base_classes import InitContext
 from tests.utils import MockSensor, MockEnvironment
 
@@ -109,11 +110,14 @@ def forecast_df():
 
 @pytest.fixture
 def simulation_state():
-    return SimulationState(
+    cfg = SimulationConfig(
         simulation_start_datetime=pd.Timestamp("2026-01-01 00:00:00"),
-        time=0,
-        time_step=900  # 15 minutes
+        simulation_end_h = 96,  # 4 days
+        time_step_h=0.25  # 15 minutes
     )
+    state = SimulationState()
+    state.initialize(cfg)
+    return state
 
 @pytest.fixture
 def init_context_autocorr(simulation_state):
@@ -125,6 +129,7 @@ def init_context_autocorr(simulation_state):
     mock_env = MockEnvironment(sensors={'test_sensor': mock_sensor})
     mock_sensor.measure(environment=mock_env, state=simulation_state)
     return InitContext(environment=mock_env, state=simulation_state)
+
 
 @pytest.fixture
 def init_context_ml(simulation_state):

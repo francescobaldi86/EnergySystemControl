@@ -112,13 +112,14 @@ class HotWaterStorage(StorageUnit):
             T_cold_water = C2K(20)
         return (self.temperature - T_cold_water) / (self.max_temperature - T_cold_water)
 
-    def initialize(self, state: SimulationState):
+    def initialize(self, ctx: SimulationState):
+        state = ctx.state
         self.temperature = self.T_0
         self.SOC_0 = self.temperature_to_SOC(state)
         for port_name in self.heat_input_port_names:
             if port_name in self.ports.keys():
                 self.ports[port_name].T = self.T_0
-        super().initialize(state)
+        super().initialize(ctx)
 
 
 class MultiNodeHotWaterTank(HotWaterStorage):

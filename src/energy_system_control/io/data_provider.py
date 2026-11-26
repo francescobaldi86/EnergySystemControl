@@ -75,7 +75,7 @@ class CustomEnvironmentalProvider(EnvironmentalDataProvider):
     --------
     >>> csv_file = "weather_data.csv"
     >>> provider = CSVEnvironmentalProvider(csv_file)
-    >>> cfg = SimulationConfig(time_step_s=300, time_start_h=0, time_end_h=24)
+    >>> cfg = SimulationConfig(time_step_s=300, time_start_h=0, simulation_end_h=24)
     >>> provider.initialize(cfg)
     >>> env_data = provider.get_environmental_data(time_id=0, current_time=pd.Timestamp('2024-01-01'))
 

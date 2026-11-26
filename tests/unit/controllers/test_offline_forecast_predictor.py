@@ -476,7 +476,7 @@ class TestOfflineForecastPredictorIntegration:
             
             sim_config = esc.SimulationConfig(
                 time_start_h=0.0,
-                time_end_h=simulation_hours,
+                simulation_end_h=simulation_hours,
                 time_step_h=1.0  # 1-hour timesteps
             )
             
