@@ -46,7 +46,7 @@ class BatteryPack(StorageUnit):
         # Just considering charging/discharging losses
         self.check_storage_state()
         self.SOC += self.ports[self.port_name].flows['electricity'] * state.time_step / self.max_capacity
-        self.SOC -= self.SOC * self.self_discharge_rate / 3600 * self.max_capacity * state.time_step # The self discharge is input in fraction of current capacity per hour
+        self.SOC -= self.SOC * self.self_discharge_rate * state.time_step  # self_discharge_rate is stored in [1/s] (input in fraction of the current charge per hour, divided by 3600 in __init__)
         
     def get_maximum_charge_power(self):
         return self.max_charging_power

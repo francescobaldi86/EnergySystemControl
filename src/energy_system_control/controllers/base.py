@@ -60,8 +60,11 @@ class Controller(ABC):
         self.controlled_component_names = controlled_components
         self.sensor_names = sensors
         self.predictor_names = predictors
-        self.minimum_time_on = {k: v*3600 for k, v in minimum_time_off_h.items()}
-        self.minimum_time_off = {k: v*3600 for k, v in minimum_time_on_h.items()}
+        # CORREZIONE (test_9): in origine i due dizionari erano invertiti (minimum_time_on veniva letto da
+        # minimum_time_off_h e viceversa), per cui minimum_time_on_h agiva come tempo minimo di SPEGNIMENTO.
+        # Ora minimum_time_on_h e' il tempo minimo di accensione e minimum_time_off_h quello di spegnimento.
+        self.minimum_time_on = {k: v*3600 for k, v in minimum_time_on_h.items()}
+        self.minimum_time_off = {k: v*3600 for k, v in minimum_time_off_h.items()}
         self.on_off_time_limitations = bool(len(self.minimum_time_off) + len(self.minimum_time_on))
         self.minimum_load = minimum_load
 
