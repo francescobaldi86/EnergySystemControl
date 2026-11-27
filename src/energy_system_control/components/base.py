@@ -72,70 +72,142 @@ class ImplicitComponent(Component):
     def balance(self, state: SimulationState):
         pass
 
+#class Bus(Component):
+#    def balance(self, state: SimulationState):
+#        
+#        In the case of a bus, we assume that the sum of the flows into the bus is equal to the sum of the flows out of the bus.
+#        The balance function checks how many ports still haven't been assigned a value and calculates the missing one(s).
+#        
+#        Returns:
+#            tuple: (is_solved, updated_ports)
+#                - is_solved (bool): True if balance is complete, False if more than one port is missing
+#                - updated_ports (list): Names of ports whose flow was updated by this method
+#        
+#        # Identify all unique layers across all ports
+#        all_layers = set()
+#        for port in self.ports.values():
+#            all_layers.update(port.layers)
+#        
+#        # For each layer, find ports with missing values
+#        ports_with_missing_per_layer = {}
+#        for layer in all_layers:
+#            ports_with_missing_per_layer[layer] = []
+#            for port_name, port in self.ports.items():
+#                if layer in port.layers and port.flows[layer] is None:
+#                    ports_with_missing_per_layer[layer].append(port_name)
+#        
+#        # Check if there are any layers with 2 or more missing ports
+#        for layer, missing_ports in ports_with_missing_per_layer.items():
+#            if len(missing_ports) >= 2:
+#                return False, []
+#
+#        # If no ports are missing, raise an error (already fully simulated)
+#        if len(ports_to_update) == 0:
+#            balance = {lay: 0.0 for lay in all_layers}
+#            for port in self.ports:
+#                for layer in port.layers:
+#                    balance[layer] += port.flows[layer]
+#            for layer_name, layer_balance in balance:
+#                if abs(layer_balance) > 1e-6: 
+#                    raise ValueError(f"Component '{self.name}' (Bus) is already fully simulated and should not be simulated again. Layer {layer_name} is not balanced")
+#
+#       # At this point, each layer has at most 1 missing port
+#        # Check if all layers have exactly 1 missing port pointing to the same port(s)
+#        ports_to_update = set()
+#        for layer, missing_ports in ports_with_missing_per_layer.items():
+#           ports_to_update.update(missing_ports)
+# 
+#        
+#        # Calculate the missing flow value(s) for each port
+#        updated_port_names = []
+#        for port_name in ports_to_update:
+#            port = self.ports[port_name]
+#            for layer in port.layers:
+#                if port.flows[layer] is None:
+#                    # Calculate the sum of all other flows for this layer
+#                    sum_of_known_flows = 0.0
+#                    for other_port_name, other_port in self.ports.items():
+#                        if other_port_name != port_name and layer in other_port.layers:
+#                            if other_port.flows[layer] is not None:
+#                                sum_of_known_flows += other_port.flows[layer]
+#                    
+#                    # The missing flow is the negative of the sum
+#                    port.flows[layer] = -sum_of_known_flows
+#            
+#            updated_port_names.append(port_name)
+#        
+#        return True, updated_port_names
+#
+
 class Bus(Component):
     def balance(self, state: SimulationState):
-        """
-        In the case of a bus, we assume that the sum of the flows into the bus is equal to the sum of the flows out of the bus.
-        The balance function checks how many ports still haven't been assigned a value and calculates the missing one(s).
-        
-        Returns:
-            tuple: (is_solved, updated_ports)
-                - is_solved (bool): True if balance is complete, False if more than one port is missing
-                - updated_ports (list): Names of ports whose flow was updated by this method
-        """
+
         # Identify all unique layers across all ports
         all_layers = set()
         for port in self.ports.values():
             all_layers.update(port.layers)
-        
-        # For each layer, find ports with missing values
+
+        # Identify ports with missing values for each layer
         ports_with_missing_per_layer = {}
+
         for layer in all_layers:
             ports_with_missing_per_layer[layer] = []
+
             for port_name, port in self.ports.items():
                 if layer in port.layers and port.flows[layer] is None:
                     ports_with_missing_per_layer[layer].append(port_name)
-        
-        # Check if there are any layers with 2 or more missing ports
+
+        # If at least two ports are missing in a layer,
+        # the bus cannot calculate the missing flows
         for layer, missing_ports in ports_with_missing_per_layer.items():
             if len(missing_ports) >= 2:
                 return False, []
 
-        # If no ports are missing, raise an error (already fully simulated)
-        if len(ports_to_update) == 0:
-            balance = {lay: 0.0 for lay in all_layers}
-            for port in self.ports:
-                for layer in port.layers:
-                    balance[layer] += port.flows[layer]
-            for layer_name, layer_balance in balance:
-                if abs(layer_balance) > 1e-6: 
-                    raise ValueError(f"Component '{self.name}' (Bus) is already fully simulated and should not be simulated again. Layer {layer_name} is not balanced")
-
-        # At this point, each layer has at most 1 missing port
-        # Check if all layers have exactly 1 missing port pointing to the same port(s)
+        # Identify all ports that need updating
         ports_to_update = set()
-        for layer, missing_ports in ports_with_missing_per_layer.items():
+
+        for missing_ports in ports_with_missing_per_layer.values():
             ports_to_update.update(missing_ports)
-        
-        
-        # Calculate the missing flow value(s) for each port
+
+        # If no ports are missing, check the balance
+        if len(ports_to_update) == 0:
+
+            layer_balance = {layer: 0.0 for layer in all_layers}
+
+            for port in self.ports.values():
+                for layer in port.layers:
+                    layer_balance[layer] += port.flows[layer]
+
+            for layer_name, value in layer_balance.items():
+                if abs(value) > 1e-6:
+                    raise ValueError(
+                        f"Component '{self.name}' (Bus) is already fully "
+                        f"simulated and should not be simulated again. "
+                        f"Layer {layer_name} is not balanced"
+                    )
+
+            return True, []
+
+        # Calculate missing flow values
         updated_port_names = []
+
         for port_name in ports_to_update:
             port = self.ports[port_name]
+
             for layer in port.layers:
                 if port.flows[layer] is None:
-                    # Calculate the sum of all other flows for this layer
+
                     sum_of_known_flows = 0.0
+
                     for other_port_name, other_port in self.ports.items():
                         if other_port_name != port_name and layer in other_port.layers:
                             if other_port.flows[layer] is not None:
                                 sum_of_known_flows += other_port.flows[layer]
-                    
-                    # The missing flow is the negative of the sum
+
                     port.flows[layer] = -sum_of_known_flows
-            
+
             updated_port_names.append(port_name)
-        
+
         return True, updated_port_names
 
 

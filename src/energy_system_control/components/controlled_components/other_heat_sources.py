@@ -86,3 +86,37 @@ class InductionStove(HeatSource):
                 self.ports[self.power_input_port_name].flows["electricity"] = required_power / self.efficiency
             else:
                 raise ValueError(f'Required power {required_power:.2f} is higher than the maximum power of the stove {self.max_power:.2f}')
+
+
+class BiogasStove(HeatSource):
+
+    def __init__(self, name: str, efficiency: float,
+                 max_power: float, source_type: str = "biogas"):
+
+        super().__init__(name, source_type)
+
+        self.efficiency = efficiency
+        self.max_power = max_power
+
+    def get_heat_output(self, state):
+        return self.max_power
+
+    def get_efficiency(self, state=None):
+        return self.efficiency
+
+class GasStove(HeatSource):
+
+    def __init__(self, name: str, efficiency: float,
+                 max_power: float, source_type: str = "fuel"):
+
+        super().__init__(name, source_type)
+
+        self.efficiency = efficiency
+        self.max_power = max_power
+
+    def get_heat_output(self, state):
+        return self.max_power
+
+    def get_efficiency(self, state=None):
+        return self.efficiency
+
