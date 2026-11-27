@@ -183,7 +183,7 @@ def test_3_fornelli():
 
     env = esc.Environment(components=components,controllers=controllers,sensors=sensors,connections=connections)
 
-    sim_config = esc.SimulationConfig(simulation_end_h=500,time_step_h=1/60)
+    sim_config = esc.SimulationConfig(simulation_end_h=8760,time_step_h=1/60)
 
     sim = esc.Simulator(env, sim_config)
 
