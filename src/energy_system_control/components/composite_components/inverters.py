@@ -21,7 +21,9 @@ class Inverter(CompositeComponent):
                  number_of_ac_output_ports: int = 1, 
                  number_of_pv_input_ports: int = 1):
         super().__init__(name, {})
+        
         self.PV_port_name = f'{name}_PV_input_port'
+        self.PV_port_names = [f'{name}_PV_input_port_{i}' for i in range(number_of_pv_input_ports)] if number_of_pv_input_ports > 1 else [f'{name}_PV_input_port']
         self.AC_output_port_names = [f'{name}_AC_output_port_{i}' for i in range(number_of_ac_output_ports)] if number_of_ac_output_ports > 1 else [f'{name}_AC_output_port']
         self.grid_port_name = f'{name}_grid_input_port'
         self.ESS_port_name = f'{name}_ESS_port'

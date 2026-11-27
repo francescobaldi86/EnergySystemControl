@@ -63,7 +63,7 @@ class Controller(ABC):
         self.predictor_names = {var: name_of(p) for var, p in predictors.items()}
         self.minimum_time_off = {name_of(k): v*3600 for k, v in minimum_time_off_h.items()}
         self.minimum_time_on = {name_of(k): v*3600 for k, v in minimum_time_on_h.items()}
-        self.on_off_time_limitations = bool(len(self.minimum_time_off_between_deactivations) + len(self.minimum_time_on_between_activations))
+        self.on_off_time_limitations = bool(len(self.minimum_time_off) + len(self.minimum_time_on))
 
     def initialize(self, ctx: InitContext):
         self.load_controlled_components(ctx.environment.components)
