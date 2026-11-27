@@ -40,7 +40,7 @@ def test_opti_controller():
     env = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
     time_step = 1/60  # One minute time step
     time_end = 24.0*7  # One week simulation
-    sim_config = esc.SimulationConfig(simulation_end_h = time_end, time_step_h = time_step)
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = time_end, time_step_h = time_step)
     for control_pv_setpoint in [4.0, 0.4]:
         env.controllers['heat_pump_controller'].power_PV_activation = control_pv_setpoint
         sim = esc.Simulator(env, sim_config)

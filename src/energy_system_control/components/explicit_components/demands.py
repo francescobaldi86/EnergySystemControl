@@ -308,3 +308,16 @@ class HotWaterDemand(TimeSeriesDemand):
             rescale_factor=rescale_factor,
             **kwargs,
         )
+
+
+class IEAHotWaterDemand(HotWaterDemand):
+    """Backwards-compatible alias for HotWaterDemand.from_iea()."""
+
+    def __init__(self, name: str, reference_temperature: float = 40, profile_name: str = 'M', **kwargs):
+        obj = HotWaterDemand.from_iea(
+            name=name,
+            profile_name=profile_name,
+            reference_temperature=reference_temperature,
+            **kwargs,
+        )
+        self.__dict__.update(obj.__dict__)

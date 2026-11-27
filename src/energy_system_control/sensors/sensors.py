@@ -1,5 +1,6 @@
 from energy_system_control.components.storage_units.thermal_storage import HotWaterStorage, MultiNodeHotWaterTank
 from energy_system_control.core.base_classes import InitContext
+from energy_system_control.core.port import Port
 from abc import ABC, abstractmethod
 from collections import deque
 import numpy as np
@@ -17,26 +18,74 @@ class Sensor(ABC):
     def measure(self, environment, state):
         pass
     
+    def _resolve_refs(self, environment):
+        """Hook called once at initialization: resolve object references
+        (ports, components, sensors) against the environment. Default: no-op."""
+        pass
+
     def initialize(self, ctx: InitContext):
+        self._resolve_refs(ctx.environment)
         self.measure(ctx.environment, ctx.state)
 
     def reset(self):
         self.current_measurement = None
 
 
-class FlowTemperatureSensor(Sensor):
+class PortSensor(Sensor):
+    """
+    Used to unify functions related to sensors that operate on ports
+    """
     port_name: str
-    def __init__(self, name: str, port_name: str):
+    def __init__(self, name: str, port_name):
         super().__init__(name)
-        self.port_name = port_name
+        self.port_spec = port_name
+        self.port_name = port_name if isinstance(port_name, str) else getattr(port_name, 'name', None)
+        self._port = port_name if isinstance(port_name, Port) else None
+
+    def _resolve_refs(self, environment):
+        resolver = getattr(environment, 'resolve_port', None)
+        if resolver is not None:
+            self._port = resolver(self.port_spec)
+            self.port_name = self._port.name
+    
+    def _get_port(self, environment):
+        return self._port if self._port is not None else environment.ports[self.port_name]
+
+
+class ComponentSensor(Sensor):
+    """
+    Used to unify functions related to sensors that operate on components
+    """
+    component_name: str
+    def __init__(self, name, component_name):
+        # ``component_name`` may be a component name (str) or a Component object.
+        super().__init__(name)
+        self.component_spec = component_name
+        self.component_name = component_name if isinstance(component_name, str) else component_name.name
+        self._component = None if isinstance(component_name, str) else component_name
+
+    def _resolve_refs(self, environment):
+        resolver = getattr(environment, 'resolve_component', None)
+        if resolver is not None:
+            self._component = resolver(self.component_spec)
+            self.component_name = self._component.name
+
+    def _get_component(self, environment):
+        if self._component is not None:
+            return self._component
+        if self.component_name not in environment.components:
+            raise KeyError(f"Sensor '{self.name}': unknown component '{self.component_name}'. "
+                            f"Available components: {sorted(environment.components)}")
+        return environment.components[self.component_name]
+
+class FlowTemperatureSensor(PortSensor):
 
     def measure(self, environment, state):
-        self.current_measurement = environment.ports[self.port_name].T
+        self.current_measurement = self._get_port(environment).T
         return self.current_measurement
 
 
-class PowerSensor(Sensor):
-    port_name: str
+class PowerSensor(PortSensor):
     flow_type: str
     def __init__(self, name, port_name, flow_type, scale_factor: float = 1.0):
         """
@@ -46,11 +95,13 @@ class PowerSensor(Sensor):
         ----------
         name : str
             Name of the sensor
-        port_name : str
-            Name of the port it measures power from
-    """
-        super().__init__(name)
-        self.port_name = port_name
+        port_name : Port | str | tuple | Component
+            The port it measures power from: a Port object, a full port-name
+            string, a (component, role) tuple, or a single-port component.
+        flow_type : str
+            The flow layer to measure (e.g. 'electricity', 'heat').
+        """
+        super().__init__(name, port_name)
         self.flow_type = flow_type
         self.scale_factor = scale_factor
 
@@ -58,51 +109,50 @@ class PowerSensor(Sensor):
         if state.time_id == 0:
             self.current_measurement = 0.0  # The first power measurement is always 0
         else:
-            self.current_measurement = environment.ports[self.port_name].flows[self.flow_type] * self.scale_factor
+            self.current_measurement = self._get_port(environment).flows[self.flow_type]
         return self.current_measurement
 
 
 class ElectricPowerSensor(PowerSensor):
-    def __init__(self, name: str, port_name: str):
+    def __init__(self, name: str, port_name):
         super().__init__(name, port_name, 'electricity')
 
-
+class HeatPowerSensor(PowerSensor):
+    def __init__(self, name: str, port_name):
+        super().__init__(name, port_name, 'heat')
     
-class SOCSensor(Sensor):
-    component_name: str
-    def __init__(self, name, component_name):
-        super().__init__(name)
-        self.component_name = component_name
+class SOCSensor(ComponentSensor):
+    
 
     def measure(self, environment, state):
-        self.current_measurement = environment.components[self.component_name].SOC
+        self.current_measurement = self._get_component(environment).SOC
         return self.current_measurement
 
 
-class TankTemperatureSensor(Sensor):
-    component_name: str
+class TankTemperatureSensor(ComponentSensor):
     sensor_height: float
     sensor_height_id: int
-    def __init__(self, name: str, component_name: str, sensor_height: float | None = None):
-        super().__init__(name)
-        self.component_name = component_name
+    def __init__(self, name: str, component_name, sensor_height: float | None = None):
+        # ``component_name`` may be a component name (str) or a Component object.
+        super().__init__(name, component_name)
         self.sensor_height = sensor_height
         self.sensor_height_id = None
 
     def measure(self, environment, state):
-        if isinstance(environment.components[self.component_name], MultiNodeHotWaterTank):
+        component = self._get_component(environment)
+        if isinstance(component, MultiNodeHotWaterTank):
             if not self.sensor_height_id:
-                self.sensor_height_id = environment.components[self.component_name].identify_layer_by_height(
-                    height = self.sensor_height, 
-                    default = environment.components[self.component_name].number_of_layers // 2 - 1, 
+                self.sensor_height_id = component.identify_layer_by_height(
+                    height = self.sensor_height,
+                    default = component.number_of_layers // 2 - 1,
                     output_type = 'layer_id')
-            self.current_measurement = environment.components[self.component_name].T_layer[self.sensor_height_id]
-        elif isinstance(environment.components[self.component_name], HotWaterStorage):
-            self.current_measurement = environment.components[self.component_name].temperature
+            self.current_measurement = component.T_layer[self.sensor_height_id]
+        elif isinstance(component, HotWaterStorage):
+            self.current_measurement = component.temperature
         return self.current_measurement
 
 
-class HotWaterDemandSensor(Sensor):
+class HotWaterDemandSensor(ComponentSensor):
     """
     Sensor that measures the net heat flow from a hot water demand component.
     
@@ -114,27 +164,44 @@ class HotWaterDemandSensor(Sensor):
     ----------
     name : str
         Name of the sensor
-    component_name : str
-        Name of the hot water demand component to measure
+    component_name : str | Component
+        The hot water demand component to measure (name or object).
+    port_role : str
+        The role of the demand's fluid port, default 'fluid_port'.
     """
     component_name: str
     port_name: str
-    
-    def __init__(self, name: str, component_name: str):
-        super().__init__(name)
-        self.component_name = component_name
-        # The port name follows the pattern: {component_name}_fluid_port
-        self.port_name = f'{component_name}_fluid_port'
+
+    def __init__(self, name: str, component_name, port_role: str = 'fluid_port'):
+        super().__init__(name, component_name)
+        self.port_role = port_role
+        # Legacy fallback name (pattern: {component_name}_fluid_port)
+        self.port_name = f'{self.component_name}_fluid_port'
+        self._port = None
+
+    def _resolve_refs(self, environment):
+        super()._resolve_refs(environment)
+        resolve_port = getattr(environment, 'resolve_port', None)
+        if resolve_port is not None:
+            try:
+                self._port = self._component.port(self.port_role)
+            except (KeyError, AttributeError):
+                self._port = resolve_port(f'{self.component_name}_fluid_port')
+            self.port_name = self._port.name
+
+    def _get_port(self, environment):
+        return self._port if self._port is not None else environment.ports[self.port_name]
 
     def measure(self, environment, state):
         from energy_system_control.constants import WATER
-        
+
+        port = self._get_port(environment)
         # Get the mass flow and heat flow from the port
-        mass_flow_kg = environment.ports[self.port_name].flows['mass']  # in kg
-        # heat_flow_kJ = environment.ports[self.port_name].flows['heat']  # in kJ
-        
+        mass_flow_kg = port.flows['mass']  # in kg
+        # heat_flow_kJ = port.flows['heat']  # in kJ
+
         # Get temperatures
-        T_hot_water = environment.ports[self.port_name].T  # Hot water temperature in K
+        T_hot_water = port.T  # Hot water temperature in K
         T_cold_water = state.environmental_data.temperature_cold_water  # Cold water temperature in K
         
         # Handle case where temperature might not be set yet
@@ -181,9 +248,12 @@ class SensorWithMemory(Sensor):
     lookback_time: float
     n_samples: int
     
-    def __init__(self, name: str, source_sensor_name: str, lookback_time: float, n_samples: int):
+    def __init__(self, name: str, source_sensor_name, lookback_time: float, n_samples: int):
+        # ``source_sensor_name`` may be a sensor name (str) or a Sensor object.
         super().__init__(name)
-        self.source_sensor_name = source_sensor_name
+        self.source_sensor_spec = source_sensor_name
+        self.source_sensor_name = source_sensor_name if isinstance(source_sensor_name, str) else source_sensor_name.name
+        self._source_sensor = None if isinstance(source_sensor_name, str) else source_sensor_name
         self.lookback_time = lookback_time  # in hours
         self.n_samples = n_samples
         
@@ -195,7 +265,13 @@ class SensorWithMemory(Sensor):
         # Store measurements as (timestamp, value) tuples
         self.memory = deque()
         self.current_measurement = np.array([])
-    
+
+    def _resolve_refs(self, environment):
+        resolver = getattr(environment, 'resolve_sensor', None)
+        if resolver is not None:
+            self._source_sensor = resolver(self.source_sensor_spec)
+            self.source_sensor_name = self._source_sensor.name
+
     def measure(self, environment, state):
         """
         Read the latest measurement from the source sensor, add it to memory,
@@ -205,9 +281,13 @@ class SensorWithMemory(Sensor):
         current_time = state.time
         
         # Get the measurement from the source sensor
-        source_sensor = environment.sensors.get(self.source_sensor_name)
+        if self._source_sensor is not None:
+            source_sensor = self._source_sensor
+        else:
+            source_sensor = environment.sensors.get(self.source_sensor_name)
         if source_sensor is None:
-            raise ValueError(f"Source sensor '{self.source_sensor_name}' not found in environment")
+            raise ValueError(f"Sensor '{self.name}': source sensor '{self.source_sensor_name}' not found "
+                             f"in environment. Available sensors: {sorted(environment.sensors)}")
         
         source_value = source_sensor.get_measurement()
         

@@ -145,7 +145,7 @@ class TestMLPredictorBase:
         assert Y.shape[1] == ann_predictor.prediction_horizon
 
 class TestMLPredictorPerformance:
-
+    @pytest.mark.slow
     def test_ML_predictor_dhw_demand_increasing_dataset_size(self, dhw_demand_data):
         """
         Test comparing tree and ANN ML predictors on DHW demand data.

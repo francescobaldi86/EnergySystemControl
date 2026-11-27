@@ -38,7 +38,7 @@ def test_base_controller():
         ('inverter_ESS_port', 'battery_electricity_port')
     ]
     env_base = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
-    sim_config = esc.SimulationConfig(simulation_end_h = 24.0*7, time_step_h = 0.25)
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*7, time_step_h = 0.25)
     sim = esc.Simulator(env_base, sim_config)
     results = sim.run()
     electricity_to_grid_base = results.get_cumulated_electricity('electric_grid_electricity_port', unit = "kWh", sign = "only positive")
@@ -52,7 +52,7 @@ def test_base_controller():
         esc.ChargeController('charge_controller', 'battery', 'battery_SOC_sensor', 'inverter_AC_power_sensor', 'PV_power_sensor')
     ]
     env_opti = esc.Environment(components=components, controllers = controllers, sensors=sensors, connections=connections)  # dt = 60 s
-    sim_config = esc.SimulationConfig(simulation_end_h = 24.0*7, time_step_h = 0.25)
+    sim_config = esc.SimulationConfig(time_start_h = 0.0, simulation_end_h = 24.0*7, time_step_h = 0.25)
     sim = esc.Simulator(env_opti, sim_config)
     results = sim.run()
     electricity_to_grid_opti = results.get_cumulated_electricity('electric_grid_electricity_port', unit = "kWh", sign = "only positive")

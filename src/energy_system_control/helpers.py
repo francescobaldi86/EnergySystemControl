@@ -1,3 +1,4 @@
+import difflib
 import pandas as pd
 import numpy as np
 import pvlib
@@ -428,6 +429,22 @@ def safe_to_list(x):
         return x
     else:
         return [x]
+
+
+def name_of(obj) -> str:
+    """
+    Return the registry name of an object. Components, sensors, controllers and
+    predictors all expose a ``name`` attribute; plain strings are returned unchanged.
+    Use this to accept either a name or the object itself in public APIs.
+    """
+    if isinstance(obj, str):
+        return obj
+    return obj.name
+
+
+def close_matches(name: str, available, n: int = 3, cutoff: float = 0.6) -> list:
+    """Return up to ``n`` close matches of ``name`` among ``available`` (for error messages)."""
+    return difflib.get_close_matches(str(name), [str(a) for a in available], n=n, cutoff=cutoff)
 
 class NodeImbalanceError(Exception):
     pass

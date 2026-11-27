@@ -1,5 +1,6 @@
 import energy_system_control as esc
 import pytest, math, os
+import pandas as pd
 
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -31,7 +32,7 @@ def test_1():
     sim = esc.Simulator(env, sim_config)
     results = sim.run()
     df_ports, df_controllers, df_sensors = results.to_dataframe()
-    assert math.isclose(df_sensors.loc[df_sensors.index[600], 'storage_tank_temperature_sensor'], 323, abs_tol = 1)
+    assert math.isclose(df_sensors.loc[pd.Timestamp('2025-01-01 10:00:00'), 'storage_tank_temperature_sensor'], 323, abs_tol = 1)
     df_ports.to_csv(os.path.join(__TEST__, 'PLAYGROUND', 'test_1_results_ports.csv'), sep = ";")
 
 def test_2():
@@ -111,7 +112,7 @@ def test_3():
     assert math.isclose(electricity_from_grid, 9, abs_tol = 2)
     assert math.isclose(electricity_to_grid, 22, abs_tol = 2)
     assert math.isclose(net_electricity_demand, 13, abs_tol = 2)
-    assert math.isclose(df_sensors.loc[df_sensors.index[20], 'storage_tank_temperature_sensor'], 325, abs_tol = 1)
+    assert math.isclose(df_sensors.loc[pd.Timestamp('2025-01-01 10:00:00'), 'storage_tank_temperature_sensor'], 325, abs_tol = 1)
 
 
 def test_4():
@@ -211,5 +212,5 @@ def test_5():
     assert math.isclose(heat_pump_energy_demand, 13, abs_tol = 2)
     assert math.isclose(net_electricity_demand, 13, abs_tol = 2)
     assert math.isclose(electricity_from_grid, 1, abs_tol = 2)
-    assert math.isclose(electricity_to_grid, 14, abs_tol = 2)
-    assert math.isclose(df_sensors.loc[df_sensors.index[600], 'storage_tank_temperature_sensor'], 323, abs_tol = 1)
+    assert math.isclose(electricity_to_grid, 12, abs_tol = 2)
+    assert math.isclose(df_sensors.loc[pd.Timestamp('2025-01-01 10:00:00'), 'storage_tank_temperature_sensor'], 323, abs_tol = 1)

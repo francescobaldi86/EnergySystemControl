@@ -494,6 +494,7 @@ class TestOfflineForecastPredictorIntegration:
             simulation_hours = min(24.0, (end_time - start_time).total_seconds() / 3600)
             
             sim_config = esc.SimulationConfig(
+                time_start_h=0.0,
                 simulation_end_h=simulation_hours,
                 time_step_h=1.0  # 1-hour timesteps
             )

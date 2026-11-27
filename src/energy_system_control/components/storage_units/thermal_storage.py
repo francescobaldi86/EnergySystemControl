@@ -141,7 +141,7 @@ class HotWaterStorage(StorageUnit):
         for port_name in self.heat_input_port_names:
             if port_name in self.ports.keys():
                 self.ports[port_name].T = self.T_0
-        super().initialize(state)
+        super().initialize(ctx)
 
 
 class MultiNodeHotWaterTank(HotWaterStorage):

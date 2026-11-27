@@ -6,7 +6,7 @@ from datetime import datetime
 from energy_system_control.core.port import Port
 from energy_system_control.sim.state import SimulationState
 from energy_system_control.core.base_classes import InitContext
-from energy_system_control.helpers import resample_with_interpolation, TimeAlignment
+from energy_system_control.helpers import resample_with_interpolation, TimeAlignment, close_matches
 
 class Component:
     name: str
@@ -21,6 +21,7 @@ class Component:
         self.name = name
         self.ports_info = ports_info
         self.ports = {}
+        self.create_ports()  # ports exist from construction, so component.port(role) works immediately
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -30,20 +31,52 @@ class Component:
         self._environmental_data = get_environmental_data
 
     def create_ports(self):
+        if self.ports:
+            return self.ports  # idempotent: never recreate port objects (would drop connections)
         ports = {}
         for port_name, port_type in self.ports_info.items():
             self.ports[port_name] = Port.create_port_of_type(port_name, port_type)
             ports[port_name] = self.ports[port_name]
         return ports
 
-    def set_inherited_port_values(self, state: SimulationState):
+    @property
+    def port_roles(self) -> List[str]:
+        """Port roles: port names with the leading '<component name>_' prefix removed."""
+        prefix = f'{self.name}_'
+        return [name[len(prefix):] if name.startswith(prefix) else name
+                for name in self.ports]
+
+    def port(self, role) -> Port:
+        """Return a port handle by role, full port name, or Port object.
+
+        ``component.port('heat_output_port')`` resolves to the port named
+        ``'<component name>_heat_output_port'``; a full port name is matched
+        exactly. Raises KeyError listing the available ports otherwise.
         """
-        Metodo unificato per la propagazione degli attributi fisici alle porte connesse.
-        Sovrascrivere nelle sottoclassi per propagare valori.
-        
-        Returns:
-            Dict: Dizionario annidato nel formato {'port_name': {'attribute_1': val1, ...}}
-        """
+        # First, try to see if the input was already a Port object
+        if isinstance(role, Port):
+            if role in self.ports.values():
+                return role
+            raise KeyError(f"Port '{role.name}' does not belong to component '{self.name}'. "
+                           f"Its ports are: {list(self.ports.keys())}")
+        # Then, it checks if the input is a port "full name", including the component name
+        if role in self.ports:
+            return self.ports[role]
+        # Finally, it tries by assuming the input was the port's role
+        full_name = f'{self.name}_{role}'
+        if full_name in self.ports:
+            return self.ports[full_name]
+        suggestions = close_matches(str(role), self.ports.keys())
+        msg = (f"Component '{self.name}' has no port '{role}'. "
+               f"Available ports: {list(self.ports.keys())} (roles: {self.port_roles})")
+        if suggestions:
+            msg += f". Did you mean: {suggestions}?"
+        raise KeyError(msg)
+
+    def set_inherited_fluid_port_values(self, state: SimulationState):
+        return {}
+    
+    def set_inherited_heat_port_values(self, state: SimulationState):
         return {}
     
     def step(self):
@@ -87,7 +120,7 @@ class Bus(Component):
         all_layers = set()
         for port in self.ports.values():
             all_layers.update(port.layers)
-        
+
         # For each layer, find ports with missing values
         ports_with_missing_per_layer = {}
         for layer in all_layers:
@@ -170,6 +203,76 @@ class CompositeComponent(Component):
     """A composite component is a component that contains other components."""
     def get_internal_components(self):
         return {}
-    
+
     def get_internal_connections(self):
         return[]
+
+    def port(self, role) -> Port:
+        """Resolve a port role on a composite: composites usually have no ports of
+        their own, so the role (or '<composite name>_<role>') is searched among
+        the ports of the internal components."""
+        try:
+            return super().port(role)
+        except KeyError:
+            pass
+        wanted = {role, f'{self.name}_{role}'}
+        for internal in self.get_internal_components().values():
+            for port_name, port in internal.ports.items():
+                if port_name in wanted:
+                    return port
+        internal_ports = [p for c in self.get_internal_components().values() for p in c.ports]
+        raise KeyError(f"Composite component '{self.name}' has no port '{role}' (neither its own nor "
+                       f"internal). Internal ports: {internal_ports}")
+
+
+@dataclass()
+class TimeSeriesData:
+    raw: pd.Series
+    var_type: Literal['energy', 'power', 'volume', 'mass', 'temperature']
+    var_unit: Literal['Wh', 'kWh', 'MWh', 'W', 'kW', 'MW', 'l', 'm3', 'kg', 'C', 'K']
+    time_alignment: TimeAlignment
+    data: np.ndarray | None = None
+    energy_to_power_converter = {'Wh': 1e-3, 'kWh': 1.0, 'J': 1.0/3_600_000, 'kJ': 1.0/3600}
+
+    def resample(self, 
+                 time_step_h: float, 
+                 simulation_end_h: float, 
+                 simulation_start_datetime: datetime | None = None):
+        # Resamples the raw data to the format required 
+        if self.raw is not None:
+            target_freq = f"{int(time_step_h*3600)}s"
+            if self.var_type == 'temperature':
+                self.data = resample_with_interpolation(df = self.raw, 
+                                                        target_freq = target_freq,
+                                                        simulation_end_s = simulation_end_h*3600.0,
+                                                        simulation_start_datetime = simulation_start_datetime,
+                                                        time_alignment = self.time_alignment,
+                                                        var_type="intensive")
+            if self.var_type == 'power':
+                self.data = resample_with_interpolation(df = self.raw, 
+                                                        target_freq = target_freq,
+                                                        simulation_end_s = simulation_end_h*3600.0,
+                                                        simulation_start_datetime = simulation_start_datetime,
+                                                        time_alignment = self.time_alignment,
+                                                        var_type="intensive")
+                if self.var_unit[0] != 'k':
+                    self.data = self.data * 1.0e-3
+            elif self.var_type == 'energy':
+                self.data = resample_with_interpolation(df = self.raw, 
+                                                        target_freq = target_freq,
+                                                        simulation_end_s = simulation_end_h*3600.0,
+                                                        simulation_start_datetime = simulation_start_datetime,
+                                                        time_alignment = self.time_alignment,
+                                                        var_type="extensive")
+                self.data = self.data * (1.0 / time_step_h) * self.energy_to_power_converter[self.var_unit]
+            elif self.var_type in {'volume', 'mass'}:
+                self.data = resample_with_interpolation(df = self.raw, 
+                                                        target_freq = target_freq,
+                                                        simulation_end_s = simulation_end_h*3600.0,
+                                                        simulation_start_datetime = simulation_start_datetime,
+                                                        time_alignment = self.time_alignment,
+                                                        var_type="extensive")
+            else:
+                raise(ValueError, f'Unknown variable type {self.var_type}')
+        else:
+            raise(ValueError, 'No raw data available to resample for TimeSeriesDemand object')

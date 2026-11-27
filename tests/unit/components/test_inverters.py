@@ -41,8 +41,8 @@ class TestInverterInitialization:
     def test_inverter_port_names_defined(self):
         """Test that port name attributes are correctly set."""
         inverter = Inverter(name="test_inverter")
-        assert inverter.PV_port_names == ["test_inverter_PV_input_port_0"]
-        assert inverter.AC_output_port_names == ["test_inverter_AC_output_port_0"]
+        assert inverter.PV_port_name == "test_inverter_PV_input_port"
+        assert inverter.AC_output_port_names == ["test_inverter_AC_output_port"]
         assert inverter.grid_port_name == "test_inverter_grid_input_port"
         assert inverter.ESS_port_name == "test_inverter_ESS_port"
 
@@ -392,8 +392,8 @@ class TestInverterIntegration:
         inv2 = Inverter(name="inverter_2")
         
         # Verify port names are independent
-        assert inv1.PV_port_names[0] != inv2.PV_port_names[0]
-        assert inv1.AC_output_port_names[0] != inv2.AC_output_port_names[0]
+        assert inv1.PV_port_name != inv2.PV_port_name
+        assert inv1.AC_output_port_names != inv2.AC_output_port_names
         assert inv1.grid_port_name != inv2.grid_port_name
         assert inv1.ESS_port_name != inv2.ESS_port_name
 

@@ -57,14 +57,13 @@ class Controller(ABC):
             minimum_load = {k: 0.0 for k in controlled_components}
 
         self.name = name
-        self.controlled_component_names = controlled_components
-        self.sensor_names = sensors
-        self.predictor_names = predictors
-        self.minimum_time_on = {k: v*3600 for k, v in minimum_time_off_h.items()}
-        self.minimum_time_off = {k: v*3600 for k, v in minimum_time_on_h.items()}
-        self.on_off_time_limitations = bool(len(self.minimum_time_off) + len(self.minimum_time_on))
-        self.minimum_load = minimum_load
-
+        # Accept both names (str) and objects (Component/Sensor/Predictor) anywhere a name is expected
+        self.controlled_component_names = [name_of(c) for c in controlled_components]
+        self.sensor_names = {var: name_of(s) for var, s in sensors.items()}
+        self.predictor_names = {var: name_of(p) for var, p in predictors.items()}
+        self.minimum_time_off = {name_of(k): v*3600 for k, v in minimum_time_off_h.items()}
+        self.minimum_time_on = {name_of(k): v*3600 for k, v in minimum_time_on_h.items()}
+        self.on_off_time_limitations = bool(len(self.minimum_time_off_between_deactivations) + len(self.minimum_time_on_between_activations))
 
     def initialize(self, ctx: InitContext):
         self.load_controlled_components(ctx.environment.components)
@@ -78,14 +77,30 @@ class Controller(ABC):
         self.predictions = {var: predictor.predict(self.horizon, state) for var, predictor in self.predictors.items()}
         return self.obs
 
+    def _resolve_named(self, kind: str, names, pool: Dict[str, Any]) -> Dict[str, Any]:
+        resolved = {}
+        for name in names:
+            name = name_of(name)
+            if name not in pool:
+                suggestions = close_matches(name, pool.keys())
+                msg = (f"Controller '{self.name}': unknown {kind} '{name}'. "
+                       f"Available {kind}s: {sorted(pool)}")
+                if suggestions:
+                    msg += f". Did you mean: {suggestions}?"
+                raise KeyError(msg)
+            resolved[name] = pool[name]
+        return resolved
+
     def load_controlled_components(self, components: Dict[str, Any]):
-        self.controlled_components = {name: components[name] for name in self.controlled_component_names}
-    
+        self.controlled_components = self._resolve_named('component', self.controlled_component_names, components)
+
     def load_sensors(self, sensors: Dict[str, Any]):
-        self.sensors = {var: sensors[sensor_name] for var, sensor_name in self.sensor_names.items()}
-    
+        self.sensors = {var: self._resolve_named('sensor', [sensor_name], sensors)[name_of(sensor_name)]
+                        for var, sensor_name in self.sensor_names.items()}
+
     def load_predictors(self, predictors: Dict[str, Any]):
-        self.predictors = {var: predictors[predictor_name] for var, predictor_name in self.predictor_names.items()}
+        self.predictors = {var: self._resolve_named('predictor', [predictor_name], predictors)[name_of(predictor_name)]
+                           for var, predictor_name in self.predictor_names.items()}
 
     def get_action(self, state, **kwargs):
         action = self._compute_action(state, **kwargs)
@@ -205,6 +220,13 @@ class ChargeController(Controller):
                  SOC_max: float = 0.9, 
                  baseline_battery_efficiency: float = 0.9,
                  baseline_inverter_efficiency: float = 0.92):
+        # battery_name and the sensor arguments may be names (str) or objects
+        battery_name = name_of(battery_name)
+        battery_SOC_sensor_name = name_of(battery_SOC_sensor_name)
+        if AC_output_sensor_name is not None:
+            AC_output_sensor_name = name_of(AC_output_sensor_name)
+        if PV_power_sensor_name is not None:
+            PV_power_sensor_name = name_of(PV_power_sensor_name)
         self.battery_name = battery_name
         self.battery_charger_name = f'{battery_name}_charger'
         self.SOC_min = SOC_min

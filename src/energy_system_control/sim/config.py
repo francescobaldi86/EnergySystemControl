@@ -31,6 +31,6 @@ class SimulationConfig:
 
     def simulation_end_s(self) -> float:
         return self.simulation_end_h * 3600.0
-    
+
     def time_start_s(self) -> float:
         return self.time_start_h * 3600.0

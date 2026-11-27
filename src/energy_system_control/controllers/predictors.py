@@ -26,7 +26,7 @@ class Predictor(ABC):
         self.variable_to_predict = variable_to_predict
 
     def initialize(self, ctx):
-        self.time_step_simulation = float(np.diff(ctx.state.time_vector[:2])[0])
+        self.time_step_simulation = float(ctx.state.time_step)
         return None
     
     def update(self):
@@ -223,6 +223,8 @@ class OfflineForecastPredictor(Predictor):
                 raise KeyError(f"Missing variables in forecast_df: {var}")
 
         pred = out.loc[target_index, self.variable_to_predict]
+        if time_step_prediction_h is None:
+            return pred
         pred = self.adjust_prediction_to_timestep(pred.values, time_step_prediction_h)
 
         return pred
@@ -765,6 +767,8 @@ class AutocorrPredictor(Predictor):
             Prediction horizon in hours.
         state : SimulationState
             Current simulation state (provides current time).
+        time_step_prediction_h : float | None, optional
+           Time step for prediction in hours. If None, uses the time step from the simulation state.
 
         Returns
         -------
@@ -980,5 +984,6 @@ class ProfileARPredictor(Predictor):
             pred.append(max(y_pred, 0))  # enforce non-negative
 
         pred = self.adjust_prediction_to_timestep(np.array(pred), time_step_prediction_h)
+        return pred
 
         return 

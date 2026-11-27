@@ -1,5 +1,5 @@
 # energy_system_control/sim/simulator.py
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from typing import Any
 from numbers import Number
 import numpy as np
@@ -9,8 +9,7 @@ from energy_system_control.core.base_environment import Environment  # or move E
 from energy_system_control.core.base_classes import InitContext, EnvironmentalData
 from .config import SimulationConfig
 from .state import SimulationState
-from energy_system_control.helpers import C2K, calculate_solar_angles
-from energy_system_control.core.port import FluidPort, HeatPort
+from energy_system_control.helpers import C2K
 from energy_system_control.sim.simulation_data import SimulationData  # wherever it lives
 from energy_system_control.sim.results import SimulationResults
 from energy_system_control.controllers.RL.RLcontrollers import RLController
@@ -24,6 +23,9 @@ class Simulator:
         self.state = SimulationState()
         self.state.initialize(self.cfg)
         self.env.initialize(self.state, self.cfg)  # This allows the environment to initialize the provider if needed
+        # Compile the step plan once: all per-step lookups (port->column maps,
+        # propagation pairs, balance checks, solar angles) are precomputed here.
+        self.plan = self.env.build_step_plan(self.state, self.cfg)
 
         # Prepare simulation data storage
         sim_data = SimulationData()
@@ -119,22 +121,29 @@ class Simulator:
             return np.nan
 
     def _step(self, sim_data: SimulationData) -> None:
-        env = self.env  # just a shorthand
-        
+        plan = self.plan
+        state = self.state
+
         # 1. Update environmental data (this is time-varying state)
-        self.state.environmental_data = self._update_environmental_data()
+        state.environmental_data = self._update_environmental_data()
 
         # 2. Measure all sensors at time t
-        for _, sensor in env.sensors.items():
-            sensor.measure(environment=env, state=self.state)  # We measure all sensors at the beginning of the step to make sure that controllers have access to the most recent measurements when they calculate their actions. This also ensures that we have sensor data for the initial state of the simulation.
-        
-        # 3. Reset port data
-        for _, port in env.ports.items():
+        # Measured at the beginning of the step so that controllers have access to the most
+        # recent measurements when they calculate their actions, and so that sensor data
+        # also exists for the initial state of the simulation.
+        for sensor in plan.sensors:
+            sensor.measure(environment=self.env, state=state)
+
+        # 3. Reset port data (unconnected ports carry zero flow)
+        for port in plan.ports:
             port.reset_flow_data()
-            # port.reset_state_value()
-        
+        # Unconnected ports' flows are set to 0
+        for port in plan.unconnected_ports:
+            for layer in port.layers:
+                port.flows[layer] = 0.0
+
         # 4. Initialize control actions
-        self.state.control_actions = {}
+        state.control_actions = {}
 
         # 5. Assign fluid port values
         self._propagate_port_values()
@@ -149,87 +158,80 @@ class Simulator:
         self._check_connection_balance()  # This will raise an error if the balance is not correct
 
         # Save results for this step
-        sim_data = self._save_simulation_data(sim_data)
+        self._save_simulation_data(sim_data)
 
     def _update_environmental_data(self):
         env_data = self.state.environmental_data
+        plan = self.plan
 
-        # Example: overwrite with forecast / time series if available
+        # Overwrite with forecast / time series if available
         if self.env.environmental_data_provider:
-            env_data = self.env.environmental_data_provider.get_environmental_data(self.state.time_id, self.state.simulation_start_datetime + pd.to_timedelta(self.state.time, unit='s'))
+            time_id = self.state.time_id
+            env_data = self.env.environmental_data_provider.get_environmental_data(time_id, plan.datetimes[time_id])
             # Check for None values and substitute them with defaults
-            for field in fields(env_data):
-                if getattr(env_data, field.name) is None:
-                    setattr(env_data, field.name, getattr(self.cfg.environmental_defaults, field.name))
+            defaults = self.cfg.environmental_defaults
+            for field_name in plan.env_field_names:
+                if getattr(env_data, field_name) is None:
+                    setattr(env_data, field_name, getattr(defaults, field_name))
 
-        # Automatically compute solar angles if not available
-        if env_data.solar_zenith is None or env_data.solar_azimuth is None:
-            if self.env.latitude and self.env.longitude:
-                dt = self.state.simulation_start_datetime + pd.to_timedelta(self.state.time, unit='s')
-                env_data.solar_zenith, env_data.solar_azimuth = calculate_solar_angles(self.env.latitude, self.env.longitude, dt)
+        # Solar angles were precomputed for the whole horizon in the step plan
+        if plan.solar_zenith is not None:
+            time_id = self.state.time_id
+            if env_data.solar_zenith is None:
+                env_data.solar_zenith = plan.solar_zenith[time_id]
+            if env_data.solar_azimuth is None:
+                env_data.solar_azimuth = plan.solar_azimuth[time_id]
 
         return env_data
 
     def _propagate_port_values(self):
-        ### DA AGGIORNARE PER DRAGOS ###
-        env = self.env
-        for _, component in env.components.items():
-            # Ottenere il dizionario delle porte e degli attributi dal componente
-            inherited_ports_info = component.set_inherited_port_values(self.state)
-            # Iterazione in modo sicuro sulle coppie porta-attributi usando .items()
-            for port_name, attributes in inherited_ports_info.items():
-                if port_name and env.ports[port_name].connected_port is not None:
-                    # Iterazione sulle singole grandezze (es. 'LHV': 22000, 'density': 1.2)
-                    for attr_name, attr_value in attributes.items():
-                        setattr(env.ports[port_name].connected_port, attr_name, attr_value)
-                # Example of inherited_ports_info:
-            # {'port_name': {'attribute_name_1': 10, 'attribute_name_2': 22}}
-            # inherited_ports_info = {'engine_biogas_port': {'LHV': 22000, 'density': 1.2, 'methane_faction': 0.58}}
-            """
-            inherited_fluid_ports_info = component.set_inherited_fluid_port_values(self.state)
+        env_ports = self.env.ports
+        state = self.state
+        for component in self.plan.inherit:
+            inherited_fluid_ports_info = component.set_inherited_fluid_port_values(state)
             for port_name, temperature in inherited_fluid_ports_info.items():
-                if port_name and env.ports[port_name].connected_port is not None:
-                    env.ports[port_name].connected_port.T = temperature
-            inherited_heat_ports_info = component.set_inherited_heat_port_values(self.state)
+                if port_name and env_ports[port_name].connected_port is not None:
+                    env_ports[port_name].connected_port.T = temperature
+            inherited_heat_ports_info = component.set_inherited_heat_port_values(state)
             for port_name, temperature in inherited_heat_ports_info.items():
-                if port_name and env.ports[port_name].connected_port is not None:
-                    env.ports[port_name].connected_port.T = temperature
-            """
-    def _simulate_all_components(self):
-        self.components_to_simulate = list(self.env.components.keys())
-        self._simulate_components_of_type("ExplicitComponent")
-        self._simulate_components_of_type("ControlledComponent")
-        self._solve_algebric_networks()
-        self._simulate_components_of_type("StorageUnit")
-        self._simulate_components_of_type("Grid")
+                if port_name and env_ports[port_name].connected_port is not None:
+                    env_ports[port_name].connected_port.T = temperature
 
-    def _simulate_components_of_type(self, type: str):
-        components = self.env.components_classified[type]
-        for component in components:
-            if component.name in self.components_to_simulate:
-                action = self.state.control_actions.get(component.name)
-                self._take_component_step(component, action)           
-                # self.components_to_simulate.remove(component.name)
+    def _simulate_all_components(self):
+        plan = self.plan
+        actions = self.state.control_actions
+        for component in plan.explicit:
+            self._take_component_step(component, actions.get(component.name))
+        for component in plan.controlled:
+            self._take_component_step(component, actions.get(component.name))
+        self._solve_algebric_networks()
+        for component in plan.storage:
+            self._take_component_step(component, actions.get(component.name))
+        for component in plan.grid:
+            self._take_component_step(component, actions.get(component.name))
 
     def _solve_algebric_networks(self):
-        components_to_simulate = self.env.components_classified['Bus'] + self.env.components_classified['ImplicitComponent']
-        while len(components_to_simulate) > 0:
+        # Iterate over a copy of the remaining components (no mutation during
+        # iteration); each updated port is propagated immediately.
+        remaining = list(self.plan.algebraic)
+        ports = self.env.ports
+        while remaining:
             number_of_updated_ports = 0
-            for component in components_to_simulate:
+            next_remaining = []
+            for component in remaining:
                 solved, updated_ports = component.balance(self.state)
-                if solved is True:
-                    components_to_simulate.remove(component)
-                    # self.components_to_simulate.remove(component)
                 for port in updated_ports:
-                    self.env.ports[port].propagate_port_values()
+                    ports[port].propagate_port_values()
                     number_of_updated_ports += 1
+                if solved is not True:
+                    next_remaining.append(component)
             if number_of_updated_ports == 0:
-                raise RuntimeError(f"Could not solve the network at time {self.state.time}. Remaining components: {[comp.name for comp in components_to_simulate]}")
+                raise RuntimeError(f"Could not solve the network at time {self.state.time}. Remaining components: {[comp.name for comp in next_remaining]}")
+            remaining = next_remaining
 
     def _get_controller_actions(self):
         actions = {}
-        for controller_name in self.env.ordered_controllers:
-            controller = self.env.controllers[controller_name]
+        for controller in self.plan.controllers:
             controller.get_obs(self.env, self.state)
             self.state.control_actions = actions.copy()   # copy current actions to state before getting new actions
             ctrl_actions = controller.get_action(self.state)
@@ -241,66 +243,42 @@ class Simulator:
 
     def _take_component_step(self, component, action):
         component.step(self.state, action)
-        # Update values of connected ports
-        for _, port in component.ports.items():
-            for layer, value in port.flows.items():
-                """
-                # Se il componente non ha toccato questo layer, assumiamo che il flusso sia nullo
-                if value is None:
-                    value = 0.0
-                    port.flows[layer] = 0.0
-                """
-                if port.connected_port:
-                    port.connected_port.flows[layer] = -value
-            if port.connected_port:
-                for attribute in port.attribute_names:
-                    setattr(port.connected_port, attribute, getattr(port, attribute))
-
+        # Update values of connected ports (precompiled port pairs from the step plan)
+        for port, connected_port, layers, copy_T in self.plan.step_propagation[component.name]:
+            flows = port.flows
+            connected_flows = connected_port.flows
+            for layer in layers:
+                connected_flows[layer] = -flows[layer]
+            if copy_T:
+                connected_port.T = port.T
 
     def _check_connection_balance(self):
-    # Checks that all connections have the same flow on both sides
-        env = self.env
-
-        for connection in env.connections:
-            for layer, value in env.ports[connection[0]].flows.items():
-
-                # Verifichiamo che entrambi i valori siano numerici prima della somma
-                val0 = value if value is not None else 0.0
-                val1 = env.ports[connection[1]].flows.get(layer)
-                val1 = val1 if val1 is not None else 0.0
-
-                if abs(val0 + val1) > 1e-5:
-                    raise ValueError(f"Connection {connection} has unbalanced flows: {env.ports[connection[0]].flows[layer]:.2f} != {env.ports[connection[1]].flows[layer]:.2f}")
+        # Checks that all connections have the same flow on both sides
+        for port_a, port_b, layer in self.plan.balance_checks:
+            value_a = port_a.flows[layer]
+            value_b = port_b.flows[layer]
+            if abs(value_a + value_b) > 1e-5:
+                raise ValueError(f"Connection ({port_a.name}, {port_b.name}) has unbalanced flows: {value_a:.2f} != {value_b:.2f}")
 
     def _save_simulation_data(self, sim_data):
-        # Ports
         time_id = self.state.time_id
-        for port_name, port in self.env.ports.items():
-            # Iteriamo esclusivamente sui layer ufficiali, non sulle chiavi iniettate dinamicamente
-            for layer in getattr(port, 'layers', []):
-                # Il .get() restituisce None se la chiave è assente, attivando il default np.nan nella riga sotto
-                flow = port.flows.get(layer) 
-                col = self.env.signal_registry_ports.col_index(port_name, layer)
-                try:
-                    sim_data.ports[time_id, col] = flow if flow is not None else np.nan
-                except ValueError as e:
-                    print(f"Error saving flow for port {port_name} and layer {layer}: {e}")
-            if isinstance(port, FluidPort):
-                col = self.env.signal_registry_ports.col_index(port_name, 'temperature')
-                sim_data.ports[time_id, col] = port.T
+        # Ports: one row write; the plan is aligned with the array columns by
+        # construction. 'temperature' is the extra FluidPort registration and
+        # reads port.T instead of port.flows.
+        ports_row = []
+        for port, layer in self.plan.port_save:
+            value = port.T if layer == 'temperature' else port.flows[layer]
+            ports_row.append(np.nan if value is None else value)
+        sim_data.ports[time_id, :] = ports_row
         # Controllers
-        for controller_name, controller in self.env.controllers.items():
-            for controlled_component_name, action_value in controller.previous_action.items():
-                col = self.env.signal_registry_controllers.col_index(controller_name, controlled_component_name)
-                sim_data.controllers[time_id, col] = action_value
-                if isinstance(controller, RLController):
-                    col_reward = self.env.signal_registry_controllers.col_index(controller_name, 'reward')
-                    col_td_error = self.env.signal_registry_controllers.col_index(controller_name, 'td_error')
-                    sim_data.controllers[time_id, col_reward] = controller.agent.last_reward
-                    sim_data.controllers[time_id, col_td_error] = controller.agent.last_td_error
-        # We also create a registry for each sensor
-        for sensor_name, sensor in self.env.sensors.items():
-            sensor.measure(environment=self.env, state=self.state)
-            col = self.env.signal_registry_sensors.col_index(sensor_name, "")
-            sim_data.sensors[time_id, col] = self._normalize_measurement(sensor.current_measurement)
+        controllers_arr = sim_data.controllers
+        for controller, col_map, reward_col, td_error_col in self.plan.controller_save:
+            for component_name, action_value in controller.previous_action.items():
+                controllers_arr[time_id, col_map[component_name]] = action_value
+            if reward_col is not None:
+                controllers_arr[time_id, reward_col] = controller.agent.last_reward
+                controllers_arr[time_id, td_error_col] = controller.agent.last_td_error
+        # Sensors
+        sim_data.sensors[time_id, :] = [self._normalize_measurement(sensor.current_measurement)
+                                        for sensor in self.plan.sensor_save]
         return sim_data

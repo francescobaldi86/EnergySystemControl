@@ -70,7 +70,7 @@ class PVpanelFromData(PVpanel):
 
 
 class PVpanelFromPVGISData(PVpanelFromData):
-    def __init__(self, name: str, time_alignment: TimeAlignment, data_path: str, filename: str, rescale_factor: float | None = None):
+    def __init__(self, name: str, data_path: str, filename: str, rescale_factor: float | None = None, time_alignment: TimeAlignment = 'yearly'):
         super().__init__(name, time_alignment = time_alignment, data_path=data_path, filename=filename, column_name = 'P', date_format = '%Y%m%d:%H%M', skipfooter=11, var_unit = 'W', rescale_factor=rescale_factor)
 
 
