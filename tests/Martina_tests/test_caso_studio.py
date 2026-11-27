@@ -4,10 +4,10 @@ import pytest
 from energy_system_control.components.explicit_components.demands import HotWaterDemand, ElectricityDemand, CookingDemand
 from energy_system_control.components.explicit_components.pv_panels import PVpanelFromPVGIS
 from energy_system_control.components.controlled_components.heat_pumps import HeatPump
-from energy_system_control.components.controlled_components.other_heat_sources import InductionStove, BiogasStove, GasStove
+from energy_system_control.components.controlled_components.other_heat_sources import InductionStove, GasStove
 from energy_system_control.components.composite_components.inverters import Inverter
 from energy_system_control.components.base import ImplicitComponent
-from energy_system_control.components.grids.grids import ElectricityGrid, GasGrid
+from energy_system_control.components.grids.grids import ElectricityGrid, GasGrid, Grid
 from energy_system_control.components.explicit_components.producers import AnaerobicDigesterFromData
 from energy_system_control.components.storage_units.biogas_storage import BiogasStorage
 from energy_system_control.components.base import Bus
@@ -119,18 +119,19 @@ class CookingStoveController(Controller):
 
         pv_power = self.obs['PV_power']
         biogas_soc = self.obs['biogas_SOC']
+        cooking_demand = abs(self.obs['cooking_demand'])
 
         # Priorità 1: fornello a induzione
         if pv_power >= self.pv_min_power:
-            return {'induction_stove': 1.0,'biogas_stove': 0.0,'gas_stove': 0.0}
+            return {'induction_stove': cooking_demand,'biogas_stove': 0.0,'gas_stove': 0.0}
 
         # Priorità 2: fornello a biogas
         elif biogas_soc > self.biogas_min_soc:
-            return {'induction_stove': 0.0,'biogas_stove': 1.0,'gas_stove': 0.0}
+            return {'induction_stove': 0.0,'biogas_stove': cooking_demand,'gas_stove': 0.0}
 
         # Priorità 3: fornello a gas naturale
         else:
-            return {'induction_stove': 0.0,'biogas_stove': 0.0,'gas_stove': 1.0}
+            return {'induction_stove': 0.0,'biogas_stove': 0.0,'gas_stove': cooking_demand}
         
 def test_3_fornelli():
 
@@ -140,7 +141,7 @@ def test_3_fornelli():
                   esc.HeatPumpConstantEfficiency(name="heat_pump", Qdot_design=8, COP_design=4.0),
                   esc.HotWaterStorage(name = 'hot_water_storage', max_temperature = 80, tank_volume = 200, T_0 = 45, convection_coefficient_losses = 0.0),
                   InductionStove(name="induction_stove",efficiency=0.9,max_power=2.0,source_type="electricity"),
-                  BiogasStove(name="biogas_stove",efficiency=0.9,max_power=2.0),
+                  GasStove(name="biogas_stove",efficiency=0.9,max_power=2.0, source_type='biogas'),
                   GasStove(name="gas_stove",efficiency=0.9,max_power=2.0),
                   GasGrid(name="gas_grid",utility_type="fuel"),
                   HotWaterDemand.from_dataframe(name="hot_water_demand",df=df,column_name="dhw", time_alignment="datetime",var_type="power",var_unit="kW",reference_temperature=40),
@@ -150,14 +151,17 @@ def test_3_fornelli():
                   esc.ColdWaterGrid(name = 'water_grid', utility_type = 'fluid'),
                   ElectricityGrid(name="electricity_grid",cost_of_electricity_purchased=0.25,value_of_electricity_sold=0.10),
                   Bus(name="heat_bus",ports_info={"heat_bus_heat_input_port_0": "heat","heat_bus_heat_input_port_1": "heat",
-                                                  "heat_bus_heat_input_port_2": "heat","heat_bus_heat_output_port": "heat"}),]
+                                                  "heat_bus_heat_input_port_2": "heat","heat_bus_heat_output_port": "heat", "heat_bus_mock_grid_port": "heat"}),
+                  Grid(name='mock_heat_grid', utility_type='heat')]
+                
 
     controllers = [esc.HeaterControllerWithBandwidth('heat_pump_controller', 'heat_pump', 'hot_water_storage_sensor', 40.0, 5.0),
                    CookingStoveController(name='cooking_stove_controller',controlled_components=['induction_stove','biogas_stove','gas_stove'],
-                                          sensors={'PV_power': 'PV_power_sensor','biogas_SOC': 'biogas_storage_SOC_sensor'})]
+                                          sensors={'PV_power': 'PV_power_sensor','biogas_SOC': 'biogas_storage_SOC_sensor', 'cooking_demand': 'cooking_demand_sensor'})]
     sensors = [esc.TankTemperatureSensor('hot_water_storage_sensor', 'hot_water_storage'),
                esc.PowerSensor('PV_power_sensor', 'inverter_PV_input_port_0', 'electricity'),
                esc.PowerSensor('grid_power_sensor', 'inverter_grid_input_port', 'electricity'),
+               esc.PowerSensor('cooking_demand_sensor', 'cooking_demand_heat_port', 'heat'),
                esc.SOCSensor('biogas_storage_SOC_sensor','biogas_storage')]
 
     connections = [("pv_panel_electricity_port","inverter_PV_input_port_0"),
@@ -174,11 +178,12 @@ def test_3_fornelli():
         ("induction_stove_heat_output_port","heat_bus_heat_input_port_2"),
         ("hot_water_storage_cold_water_input_port","water_grid_fluid_port"),
         ("inverter_grid_input_port","electricity_grid_electricity_port"),
-        ("heat_bus_heat_output_port","cooking_demand_heat_port"),]
+        ("heat_bus_heat_output_port","cooking_demand_heat_port"),
+        ('mock_heat_grid_heat_port', "heat_bus_mock_grid_port")]
 
     env = esc.Environment(components=components,controllers=controllers,sensors=sensors,connections=connections)
 
-    sim_config = esc.SimulationConfig(simulation_end_h=8760,time_step_h=1/60)
+    sim_config = esc.SimulationConfig(simulation_end_h=500,time_step_h=1/60)
 
     sim = esc.Simulator(env, sim_config)
 

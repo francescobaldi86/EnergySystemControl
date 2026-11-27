@@ -177,7 +177,7 @@ class SimulationResults:
         """Add one sensor signal to an existing Matplotlib axes."""
         col = self.signal_registry_sensors.col_index(sensor_name, "")
         label = label if label else sensor_name
-        ax.plot(self.time_vector/3600, self.data.sensors[:,col], label=label)
+        ax.plot(self.time_vector, self.data.sensors[:,col], label=label)
         
     def plot_temperature_sensors(self, sensors: str | List[str] | None= None, labels: str | List[str] | None = None, ylabel: str | None= None, filename: str | None = None, comfort_temperature: float | None = None):
         """Plot temperature sensor signals with an optional comfort boundary.

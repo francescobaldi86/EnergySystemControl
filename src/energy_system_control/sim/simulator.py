@@ -212,10 +212,11 @@ class Simulator:
                 # self.components_to_simulate.remove(component.name)
 
     def _solve_algebric_networks(self):
-        components_to_simulate = self.env.components_classified['Bus'] + self.env.components_classified['ImplicitComponent']
+        components_to_simulate_old = self.env.components_classified['Bus'] + self.env.components_classified['ImplicitComponent']
+        components_to_simulate = components_to_simulate_old.copy()
         while len(components_to_simulate) > 0:
             number_of_updated_ports = 0
-            for component in components_to_simulate:
+            for component in components_to_simulate_old:
                 solved, updated_ports = component.balance(self.state)
                 if solved is True:
                     components_to_simulate.remove(component)
@@ -225,6 +226,7 @@ class Simulator:
                     number_of_updated_ports += 1
             if number_of_updated_ports == 0:
                 raise RuntimeError(f"Could not solve the network at time {self.state.time}. Remaining components: {[comp.name for comp in components_to_simulate]}")
+            components_to_simulate_old = components_to_simulate.copy()
 
     def _get_controller_actions(self):
         actions = {}
