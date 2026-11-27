@@ -2,13 +2,66 @@ import energy_system_control as esc
 import pandas as pd
 import matplotlib.pyplot as plt 
 import numpy as np 
-import os
+import os, math
+from datetime import datetime
 
 __HERE__ = os.path.dirname(os.path.realpath(__file__))
 __TEST__ = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 __PLAYGROUND__ = os.path.join(__TEST__, 'PLAYGROUND', 'Dragos')
+__DATA__ = os.path.join(__TEST__, 'DATA')
+
 
 def test_biogas_1():
+    components = [
+        # Domanda di acqua calda sanitaria
+        esc.HotWaterDemand.from_iea(name="demand_DHW",reference_temperature=40,profile_name="M",),
+        # Produzione di biogas
+        esc.AnaerobicDigesterFromData(name="anaerobic_digester", data_path=__DATA__, filename="biogas_data.csv"),
+        # Accumulo di biogas con dati temporali
+        esc.BiogasStorage(name="biogas_storage",capacity=100.0,initial_ch4_mass=0.0,initial_co2_mass=0.0),
+        # Caldaia alimentata a biogas
+        esc.BiogasBoiler(name="gas_boiler",efficiency=0.90,max_power=10.0,),
+        # Accumulo di acqua calda
+        esc.HotWaterStorage(name="hot_water_storage",max_temperature=80,tank_volume=200,T_0=45,convection_coefficient_losses=0.0,),
+        # Rete di acqua fredda
+        esc.ColdWaterGrid(name="water_grid",utility_type="fluid",),]
+
+    controllers = [esc.HeaterControllerWithBandwidth("gas_boiler_controller","gas_boiler","storage_tank_temperature_sensor",40,10,)]
+
+    sensors = [esc.TankTemperatureSensor("storage_tank_temperature_sensor","hot_water_storage",),
+               esc.SOCSensor('biogas_storage_SOC_sensor','biogas_storage')]
+
+    connections = [
+        # Domanda e accumulo di acqua calda
+        ("demand_DHW_fluid_port","hot_water_storage_hot_water_output_port",),
+        # Caldaia e accumulo termico
+        ("gas_boiler_heat_output_port","hot_water_storage_main_heat_input_port",),
+        # Digestore e accumulo di biogas
+        ("anaerobic_digester_biogas_port","biogas_storage_input",),
+        # Accumulo di biogas e caldaia
+        ("biogas_storage_output","gas_boiler_biogas_input_port",),
+        # Ingresso dell'acqua fredda
+        ("hot_water_storage_cold_water_input_port","water_grid_fluid_port",),]
+
+    env = esc.Environment(components=components,controllers=controllers,sensors=sensors,connections=connections,)
+
+    sim_config = esc.SimulationConfig(simulation_end_h=24.0 * 7,time_step_h=5/60)
+
+    sim = esc.Simulator(env, sim_config)
+
+    results = sim.run()
+
+    df_ports, df_controllers, df_sensors = results.to_dataframe()
+
+    # Verifica della temperatura dell'accumulo
+    assert math.isclose(df_sensors.loc[df_sensors.index[int(10/sim_config.time_step_h)], "storage_tank_temperature_sensor"],322,abs_tol=1,)
+
+    df_ports.to_csv(os.path.join(__HERE__,"test_1_results_ports.csv",),sep=";",)
+    
+
+
+
+def test_biogas_2():
     components = [
         esc.ElectricityGrid(name='electric_grid'),
         esc.AnaerobicDigester(name='biogas_producer', biogas_rate=15, methane_fraction=0.65),
@@ -67,7 +120,7 @@ def test_biogas_1():
         df_sensors.to_excel(writer, sheet_name='Sensors')
         df_controllers.to_excel(writer, sheet_name='Controllers')
 
-def test_biogas_2():
+def test_biogas_3():
     # Similar to test_6, but with the biogas producer fueling the biogas storage connected to the internal combustion engine.
     components = [
         esc.HotWaterDemand.from_iea(name="demand_DHW", reference_temperature=40, profile_name='L'),
